@@ -28,3 +28,8 @@ python3 scripts/github_knowledge_skill.py --repo <owner/repo> <command> [args]
 ## Workflow Reference
 
 See `references/obsidian-organizer.md` for a concrete organizing workflow that uses these commands.
+
+## Notes
+
+- `search` uses GitHub code search and may return empty results for very new repos/commits until indexing finishes.
+- Paths must match the repo exactly (including emoji and normalization). Use `list` to discover the exact directory names.
