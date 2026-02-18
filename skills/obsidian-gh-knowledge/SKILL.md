@@ -1,6 +1,6 @@
 ---
 name: obsidian-gh-knowledge
-description: Organize and maintain an Obsidian vault stored in a GitHub repo using a bundled gh-based CLI. Use for listing remote folders, reading notes, searching references, and moving/renaming notes via branch commits (create+delete).
+description: Operate an Obsidian vault stored in GitHub using a bundled gh-based CLI. Use when users ask to list folders, read notes, search content, find project tasks/plans, or move/rename notes in a remote vault.
 ---
 
 # Obsidian GitHub Knowledge
@@ -13,6 +13,17 @@ If the user does not provide `--repo`, require the user to either:
 
 - Provide `--repo <owner/repo>` explicitly, or
 - Set up the local config file described below, then use its `default_repo`.
+
+## Repo Resolution Policy
+
+Resolve the repository in this order:
+
+1. If the user provides `--repo <owner/repo>`, use it.
+2. If the user provides `--repo <key>` (no `/`), resolve it via `~/.config/obsidian-gh-knowledge/config.json` at `repos.<key>`.
+3. If `--repo` is omitted, use `default_repo` from the same config file.
+4. If none of the above is available, ask the user for the repo or ask them to set local config.
+
+Never guess repo names.
 
 ## Requirements
 
@@ -62,6 +73,13 @@ python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py
 ```
 
 If the user specifies a repo key (e.g., `work`), resolve it from `repos.<key>` instead of `default_repo`.
+
+Example (resolve repo key):
+
+```bash
+REPO="$(python3 -c 'import json,os; p=os.path.expanduser("~/.config/obsidian-gh-knowledge/config.json"); c=json.load(open(p)); print(c["repos"]["work"])')"
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "dev plan"
+```
 
 ## Workflow Reference
 
