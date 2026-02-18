@@ -81,11 +81,41 @@ REPO="$(python3 -c 'import json,os; p=os.path.expanduser("~/.config/obsidian-gh-
 python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "dev plan"
 ```
 
+## Quick Workflow Example
+
+When asked to find and read a note:
+
+1. List to discover exact paths:
+   ```bash
+   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" list --path "1️⃣-Index"
+   ```
+
+2. Search if the path is unknown:
+   ```bash
+   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "MOC"
+   ```
+
+3. Read the target file:
+   ```bash
+   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" read "1️⃣-Index/README.md"
+   ```
+
+## Search Query Tips
+
+The `search` command uses GitHub code search. Include qualifiers directly in your query string:
+
+```bash
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "TODO path:1️⃣-Index/"
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "project plan path:5️⃣-Projects/ extension:md"
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "filename:_Overview.md cmux"
+```
+
 ## Workflow Reference
 
 See `references/obsidian-organizer.md` for a concrete organizing workflow that uses these commands.
 
 ## Notes
 
-- `search` uses GitHub code search and may return empty results for very new repos/commits until indexing finishes.
+- `search` uses GitHub code search; results may be empty for new commits until GitHub indexes them (typically seconds to minutes).
+- Qualifiers like `path:`, `extension:`, `filename:` can narrow results - include them directly in the query string.
 - Paths must match the repo exactly (including emoji and normalization). Use `list` to discover the exact directory names.
