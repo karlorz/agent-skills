@@ -2,13 +2,74 @@
 import argparse
 import base64
 import json
+import os
 import subprocess
 import sys
+from typing import Optional
 from urllib.parse import quote
 
 
 def _quote_path(path: str) -> str:
     return quote(path, safe="/")
+
+
+def _load_repo_from_config(repo_arg: Optional[str]) -> Optional[str]:
+    config_path = os.path.expanduser("~/.config/obsidian-gh-knowledge/config.json")
+    if not os.path.exists(config_path):
+        return None
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    repos = config.get("repos")
+    if isinstance(repo_arg, str) and repo_arg and "/" not in repo_arg:
+        if isinstance(repos, dict) and isinstance(repos.get(repo_arg), str) and repos.get(repo_arg):
+            return repos[repo_arg]
+        return None
+
+    default_repo = config.get("default_repo")
+    if isinstance(default_repo, str) and default_repo:
+        return default_repo
+    return None
+
+
+def _resolve_repo_or_die(repo_arg: Optional[str]) -> str:
+    if isinstance(repo_arg, str) and repo_arg:
+        if "/" in repo_arg:
+            return repo_arg
+        resolved = _load_repo_from_config(repo_arg)
+        if resolved:
+            return resolved
+        print(
+            "Error: --repo looks like a repo key but was not found in ~/.config/obsidian-gh-knowledge/config.json\n"
+            "Provide --repo <owner/repo>, or add the key under repos.{key}.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    resolved = _load_repo_from_config(None)
+    if resolved:
+        return resolved
+
+    print(
+        "Error: missing --repo and no default repo configured.\n\n"
+        "Fix:\n"
+        "  - Provide --repo <owner/repo>\n"
+        "  - OR create ~/.config/obsidian-gh-knowledge/config.json with default_repo\n\n"
+        "Example:\n"
+        "  mkdir -p ~/.config/obsidian-gh-knowledge\n"
+        "  cat > ~/.config/obsidian-gh-knowledge/config.json <<'JSON'\n"
+        "  {\n"
+        "    \"default_repo\": \"<owner>/<vault-repo>\",\n"
+        "    \"repos\": { \"personal\": \"<owner>/<vault-repo>\" }\n"
+        "  }\n"
+        "  JSON\n",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 
 class GitHubKnowledgeManager:
@@ -159,7 +220,11 @@ class GitHubKnowledgeManager:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Manage GitHub repo knowledge via CLI")
-    parser.add_argument("--repo", required=True, help="Repository name (owner/repo)")
+    parser.add_argument(
+        "--repo",
+        required=False,
+        help="Repository (owner/repo) or repo key from ~/.config/obsidian-gh-knowledge/config.json",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -179,7 +244,8 @@ def main() -> None:
     move_parser.add_argument("--message", default="Organize notes via agent", help="Commit message")
 
     args = parser.parse_args()
-    manager = GitHubKnowledgeManager(args.repo)
+    repo = _resolve_repo_or_die(args.repo)
+    manager = GitHubKnowledgeManager(repo)
 
     if args.command == "list":
         print(json.dumps(manager.list_files(args.path), indent=2))
@@ -196,7 +262,7 @@ def main() -> None:
     if args.command == "move":
         branch_encoded = quote(args.branch, safe="")
         try:
-            manager.run_gh_command(["gh", "api", f"repos/{args.repo}/branches/{branch_encoded}"])
+            manager.run_gh_command(["gh", "api", f"repos/{repo}/branches/{branch_encoded}"])
         except SystemExit:
             default_branch = manager.get_default_branch()
             print(f"Creating branch {args.branch} from {default_branch}...")
