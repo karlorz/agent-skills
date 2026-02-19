@@ -119,3 +119,42 @@ See `references/obsidian-organizer.md` for a concrete organizing workflow that u
 - `search` uses GitHub code search; results may be empty for new commits until GitHub indexes them (typically seconds to minutes).
 - Qualifiers like `path:`, `extension:`, `filename:` can narrow results - include them directly in the query string.
 - Paths must match the repo exactly (including emoji and normalization). Use `list` to discover the exact directory names.
+
+## Obsidian Note Authoring Guidelines
+
+When creating or editing notes in an Obsidian vault, follow these conventions:
+
+### Markdown
+
+- Prefer a short `## TL;DR` near the top for human scanning.
+- Use Obsidian wikilinks (`[[note-title]]`) for internal references instead of raw URLs.
+- Keep headings stable; rename/move only when explicitly asked (links depend on titles/paths).
+- Use YAML frontmatter for metadata (tags, aliases, dates).
+
+### Mermaid (Obsidian Compatibility)
+
+Obsidian's Mermaid renderer has quirks. Follow these rules to avoid rendering failures:
+
+- Prefer `graph TB` / `sequenceDiagram` over newer Mermaid syntaxes.
+- Avoid `subgraph ID[Label]` style; use quoted titles: `subgraph "Title"`.
+- Avoid `\n` in node labels; use `<br/>` or keep labels single-line.
+- Avoid parentheses and slashes in node labels; Obsidian chokes on `(...)` or `a/b` inside `[...]`.
+- Keep node IDs ASCII and simple (`OC_GW`, `CMUX_DB`); avoid punctuation in IDs.
+- If a diagram fails to render, simplify first (remove subgraphs/line breaks), then add complexity back.
+
+### Vault Organization Conventions
+
+Typical Obsidian vault folder structure (emoji prefixes for sorting):
+
+| Directory          | Purpose                              |
+|--------------------|--------------------------------------|
+| `0️⃣-Inbox/`       | Uncategorized new notes              |
+| `1️⃣-Index/`       | Maps of content (MOCs), overviews    |
+| `2️⃣-Drafts/`      | Work-in-progress ideas               |
+| `assets/`          | Images and media                     |
+| `100-Templates/`   | Reusable note templates              |
+
+When creating new notes:
+- Place uncategorized notes in `Inbox` for later review.
+- Use links and tags for navigation, not deep folder nesting.
+- Check existing structure with `list` before assuming folder names.
