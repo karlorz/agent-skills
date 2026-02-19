@@ -243,6 +243,20 @@ def main() -> None:
     move_parser.add_argument("--branch", default="organize-notes", help="Branch name")
     move_parser.add_argument("--message", default="Organize notes via agent", help="Commit message")
 
+    copy_parser = subparsers.add_parser("copy", help="Copy file (creates branch/commit)")
+    copy_parser.add_argument("src", help="Source path")
+    copy_parser.add_argument("dest", help="Destination path")
+    copy_parser.add_argument("--branch", default="update-notes", help="Branch name")
+    copy_parser.add_argument("--message", default="Copy file via agent", help="Commit message")
+
+    write_parser = subparsers.add_parser("write", help="Create or update a file (creates branch/commit)")
+    write_parser.add_argument("file_path", help="Path to file")
+    write_parser.add_argument("--branch", default="update-notes", help="Branch name")
+    write_parser.add_argument("--message", default="Update file via agent", help="Commit message")
+    write_input = write_parser.add_mutually_exclusive_group(required=True)
+    write_input.add_argument("--stdin", action="store_true", help="Read content from stdin")
+    write_input.add_argument("--from-file", help="Read content from a local file path")
+
     args = parser.parse_args()
     repo = _resolve_repo_or_die(args.repo)
     manager = GitHubKnowledgeManager(repo)
@@ -278,6 +292,44 @@ def main() -> None:
         manager.delete_file(args.src, args.message, args.branch)
 
         print(f"Moved {args.src} to {args.dest} on branch {args.branch}")
+        return
+
+    if args.command == "copy":
+        branch_encoded = quote(args.branch, safe="")
+        try:
+            manager.run_gh_command(["gh", "api", f"repos/{repo}/branches/{branch_encoded}"])
+        except SystemExit:
+            default_branch = manager.get_default_branch()
+            print(f"Creating branch {args.branch} from {default_branch}...")
+            manager.create_branch(args.branch, default_branch)
+
+        print(f"Reading {args.src}...")
+        content = manager.read_file(args.src)
+
+        print(f"Creating {args.dest}...")
+        manager.commit_file(args.dest, content, args.message, args.branch)
+
+        print(f"Copied {args.src} to {args.dest} on branch {args.branch}")
+        return
+
+    if args.command == "write":
+        branch_encoded = quote(args.branch, safe="")
+        try:
+            manager.run_gh_command(["gh", "api", f"repos/{repo}/branches/{branch_encoded}"])
+        except SystemExit:
+            default_branch = manager.get_default_branch()
+            print(f"Creating branch {args.branch} from {default_branch}...")
+            manager.create_branch(args.branch, default_branch)
+
+        if args.stdin:
+            content = sys.stdin.read()
+        else:
+            with open(args.from_file, "r", encoding="utf-8") as f:
+                content = f.read()
+
+        print(f"Writing {args.file_path}...")
+        manager.commit_file(args.file_path, content, args.message, args.branch)
+        print(f"Wrote {args.file_path} on branch {args.branch}")
         return
 
 

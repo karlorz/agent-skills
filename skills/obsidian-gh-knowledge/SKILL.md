@@ -1,6 +1,6 @@
 ---
 name: obsidian-gh-knowledge
-description: Operate an Obsidian vault stored in GitHub using a bundled gh-based CLI. Use when users ask to list folders, read notes, search content, find project tasks/plans, or move/rename notes in a remote vault.
+description: Operate an Obsidian vault stored in GitHub using a bundled gh-based CLI. Use when users ask to list folders, read notes, search content, create/update notes from templates, find project tasks/plans, or move/rename notes in a remote vault.
 ---
 
 # Obsidian GitHub Knowledge
@@ -13,6 +13,67 @@ If the user does not provide `--repo`, require the user to either:
 
 - Provide `--repo <owner/repo>` explicitly, or
 - Set up the local config file described below, then use its `default_repo`.
+
+## Obsidian Note Authoring Guidelines
+
+When creating or editing notes in an Obsidian vault, follow these conventions:
+
+- If the workspace/repo has an `AGENTS.md`, read it and follow it (it overrides these defaults).
+
+### Markdown
+
+- Prefer a short `## TL;DR` near the top for human scanning.
+- Use Obsidian wikilinks (`[[note-title]]`) for internal references instead of raw URLs.
+- Keep headings stable; rename/move only when explicitly asked (links depend on titles/paths).
+- Use YAML frontmatter for metadata (tags, aliases, dates).
+
+### Mermaid (Obsidian Compatibility)
+
+Obsidian's Mermaid renderer has quirks. Follow these rules to avoid rendering failures:
+
+- Prefer `graph TB` / `sequenceDiagram` over newer Mermaid syntaxes.
+- Avoid `subgraph ID[Label]` style; use quoted titles: `subgraph "Title"`.
+- Avoid `\n` in node labels; use `<br/>` or keep labels single-line.
+- Avoid parentheses and slashes in node labels; Obsidian chokes on `(...)` or `a/b` inside `[...]`.
+- Keep node IDs ASCII and simple (`OC_GW`, `CMUX_DB`); avoid punctuation in IDs.
+- If a diagram fails to render, simplify first (remove subgraphs/line breaks), then add complexity back.
+
+### Vault Organization Conventions
+
+Typical Obsidian vault folder structure (emoji prefixes for sorting):
+
+| Directory          | Purpose                              |
+|--------------------|--------------------------------------|
+| `0️⃣-Inbox/`       | Uncategorized new notes              |
+| `1️⃣-Index/`       | Maps of content (MOCs), overviews    |
+| `2️⃣-Drafts/`      | Work-in-progress ideas               |
+| `3️⃣-Plugins/`     | Plugin docs and configs              |
+| `4️⃣-Attachments/` | Non-image assets (PDFs, sheets)      |
+| `5️⃣-Projects/`    | Project notes                        |
+| `assets/`          | Images and media                     |
+| `100-Templates/`   | Reusable note templates              |
+
+When creating new notes:
+- Place uncategorized notes in `Inbox` for later review.
+- Use links and tags for navigation, not deep folder nesting.
+- Check existing structure with `list` before assuming folder names.
+
+### Templates
+
+- For GitHub project notes, read and use `100-Templates/github-project-template.md` as the starting structure.
+- Read the template:
+  ```bash
+  python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> read \
+    "100-Templates/github-project-template.md"
+  ```
+- To scaffold a new note in the repo (placeholders preserved), you can copy the template:
+  ```bash
+  python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> copy \
+    "100-Templates/github-project-template.md" \
+    "5️⃣-Projects/<area>/<project>.md" \
+    --branch "update-notes" \
+    --message "Add project note"
+  ```
 
 ## Repo Resolution Policy
 
@@ -48,6 +109,8 @@ python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py
 - `read <file_path>`: Read file content.
 - `search <query>`: Search code/content.
 - `move <src> <dest> --branch <branch_name> --message <commit_msg>`: Move/rename a file by creating the destination file and deleting the source file on a branch.
+- `copy <src> <dest> --branch <branch_name> --message <commit_msg>`: Copy a file by creating the destination file on a branch.
+- `write <file_path> --stdin|--from-file <path> --branch <branch_name> --message <commit_msg>`: Create or update a file on a branch.
 
 ## Repo Selection (Local Config)
 
@@ -69,7 +132,7 @@ Usage (resolve repo at runtime):
 
 ```bash
 REPO="$(python3 -c 'import json,os; p=os.path.expanduser("~/.config/obsidian-gh-knowledge/config.json"); print(json.load(open(p))["default_repo"])')"
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" list --path "0-Inbox"
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" list --path "0️⃣-Inbox"
 ```
 
 If the user specifies a repo key (e.g., `work`), resolve it from `repos.<key>` instead of `default_repo`.
@@ -119,42 +182,3 @@ See `references/obsidian-organizer.md` for a concrete organizing workflow that u
 - `search` uses GitHub code search; results may be empty for new commits until GitHub indexes them (typically seconds to minutes).
 - Qualifiers like `path:`, `extension:`, `filename:` can narrow results - include them directly in the query string.
 - Paths must match the repo exactly (including emoji and normalization). Use `list` to discover the exact directory names.
-
-## Obsidian Note Authoring Guidelines
-
-When creating or editing notes in an Obsidian vault, follow these conventions:
-
-### Markdown
-
-- Prefer a short `## TL;DR` near the top for human scanning.
-- Use Obsidian wikilinks (`[[note-title]]`) for internal references instead of raw URLs.
-- Keep headings stable; rename/move only when explicitly asked (links depend on titles/paths).
-- Use YAML frontmatter for metadata (tags, aliases, dates).
-
-### Mermaid (Obsidian Compatibility)
-
-Obsidian's Mermaid renderer has quirks. Follow these rules to avoid rendering failures:
-
-- Prefer `graph TB` / `sequenceDiagram` over newer Mermaid syntaxes.
-- Avoid `subgraph ID[Label]` style; use quoted titles: `subgraph "Title"`.
-- Avoid `\n` in node labels; use `<br/>` or keep labels single-line.
-- Avoid parentheses and slashes in node labels; Obsidian chokes on `(...)` or `a/b` inside `[...]`.
-- Keep node IDs ASCII and simple (`OC_GW`, `CMUX_DB`); avoid punctuation in IDs.
-- If a diagram fails to render, simplify first (remove subgraphs/line breaks), then add complexity back.
-
-### Vault Organization Conventions
-
-Typical Obsidian vault folder structure (emoji prefixes for sorting):
-
-| Directory          | Purpose                              |
-|--------------------|--------------------------------------|
-| `0️⃣-Inbox/`       | Uncategorized new notes              |
-| `1️⃣-Index/`       | Maps of content (MOCs), overviews    |
-| `2️⃣-Drafts/`      | Work-in-progress ideas               |
-| `assets/`          | Images and media                     |
-| `100-Templates/`   | Reusable note templates              |
-
-When creating new notes:
-- Place uncategorized notes in `Inbox` for later review.
-- Use links and tags for navigation, not deep folder nesting.
-- Check existing structure with `list` before assuming folder names.
