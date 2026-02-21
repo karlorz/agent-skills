@@ -14,6 +14,13 @@ If the user does not provide `--repo`, require the user to either:
 - Provide `--repo <owner/repo>` explicitly, or
 - Set up the local config file described below, then use its `default_repo`.
 
+## Practical Tips (Paths & Emoji)
+
+- Always wrap `--path` values and file paths in quotes (emoji and spaces are common).
+- Prefer copy/pasting the exact `path` returned by `list`/`search` instead of hand-typing emoji segments.
+- Treat URL-encoded emoji in API output (e.g., `%EF%B8%8F%E2%83%A3`) as normal.
+- If you get `HTTP 404`, assume the path is wrong or the file does not exist; verify with `list` or `search`.
+
 ## SAFETY RULES (CRITICAL)
 
 These rules prevent accidental data loss. **NEVER bypass them.**
