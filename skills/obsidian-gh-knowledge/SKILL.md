@@ -14,6 +14,58 @@ If the user does not provide `--repo`, require the user to either:
 - Provide `--repo <owner/repo>` explicitly, or
 - Set up the local config file described below, then use its `default_repo`.
 
+## SAFETY RULES (CRITICAL)
+
+These rules prevent accidental data loss. **NEVER bypass them.**
+
+### 1. NEVER Force Push to Main
+
+```bash
+# FORBIDDEN - This can delete all files
+gh api -X PATCH repos/.../git/refs/heads/main -F force=true
+
+# FORBIDDEN - Direct reset
+git push --force origin main
+```
+
+### 2. ALWAYS Use Feature Branches for Writes
+
+All write operations MUST use a dedicated feature branch:
+- `write`, `move`, `copy` commands require `--branch <name>`
+- Branch name should be descriptive (e.g., `update-cmux-docs-20260222`)
+- NEVER commit directly to `main`
+
+### 3. ALWAYS Create PR for Merge
+
+After writing to a branch, create a PR and let user review:
+```bash
+gh pr create --repo <owner/repo> --head <branch> --base main \
+  --title "Update notes" --body "Changes: ..."
+```
+
+NEVER auto-merge without user confirmation.
+
+### 4. Prefer Local Vault When Available
+
+If a local vault exists at `~/Documents/obsidian_vault/`:
+1. Use local git operations instead of GitHub API
+2. Commit changes locally first
+3. Push with `git push` (not force push)
+4. This preserves git history and allows easy recovery via `git reflog`
+
+### 5. Read Before Write
+
+Before updating any file:
+1. `read` the existing file content
+2. Show diff to user if content differs significantly
+3. Only proceed with user confirmation for large changes
+
+### 6. Single-File Operations Only
+
+- Write/move/copy ONE file per commit
+- NEVER batch multiple unrelated files in one branch
+- This makes rollback easier if something goes wrong
+
 ## Obsidian Note Authoring Guidelines
 
 When creating or editing notes in an Obsidian vault, follow these conventions:
@@ -238,3 +290,40 @@ See `references/obsidian-organizer.md` for a concrete organizing workflow that u
 - Paths must match the repo exactly (including emoji and normalization). Use `list` to discover the exact directory names.
 - Every project folder under `5️⃣-Projects/` MUST have a `_Overview.md` file as its MOC index.
 - When creating new project documentation, always create `_Overview.md` first, then add related notes.
+
+## Recovery Procedures
+
+If files are accidentally deleted or corrupted:
+
+### From Local Vault (Preferred)
+```bash
+cd ~/Documents/obsidian_vault
+git reflog                          # Find good commit
+git reset --hard <commit-sha>       # Restore locally
+git push --force origin main        # Sync to remote (only if local is source of truth)
+```
+
+### From Remote (if local is lost)
+```bash
+# List commits to find pre-deletion state
+gh api repos/<owner>/<repo>/commits --jq '.[].sha' | head -10
+
+# Check file count at each commit
+gh api repos/<owner>/<repo>/git/trees/<sha>?recursive=1 --jq '.tree | length'
+
+# Reset remote to good commit (DANGEROUS - confirm with user first)
+gh api -X PATCH repos/<owner>/<repo>/git/refs/heads/main \
+  -F sha=<good-commit-sha> -F force=true
+```
+
+## Comparison: GitHub API vs Local Git
+
+| Operation | GitHub API | Local Git |
+|-----------|-----------|-----------|
+| Recovery | Hard (no reflog) | Easy (reflog) |
+| Atomic commits | Per-file only | Multi-file |
+| Speed | Slower (HTTP) | Faster |
+| Offline | No | Yes |
+| Audit trail | Limited | Full |
+
+**Recommendation**: When `~/Documents/obsidian_vault/` exists, prefer local git operations.
