@@ -49,9 +49,46 @@ Typical Obsidian vault folder structure (emoji prefixes for sorting):
 | `2️⃣-Drafts/`      | Work-in-progress ideas               |
 | `3️⃣-Plugins/`     | Plugin docs and configs              |
 | `4️⃣-Attachments/` | Non-image assets (PDFs, sheets)      |
-| `5️⃣-Projects/`    | Project notes                        |
+| `5️⃣-Projects/`    | Project documentation by category    |
 | `assets/`          | Images and media                     |
 | `100-Templates/`   | Reusable note templates              |
+
+### Project Folder Convention (`5️⃣-Projects/`)
+
+Each project folder **MUST** have a `_Overview.md` file as its Map of Content (MOC):
+
+```
+5️⃣-Projects/
+├── GitHub/
+│   ├── cmux/
+│   │   ├── _Overview.md          # MOC index (required)
+│   │   ├── cmux-tech-stack.md
+│   │   └── ...
+│   └── openclaw/
+│       ├── _Overview.md          # MOC index (required)
+│       ├── openclaw-local-status.md
+│       └── ...
+├── Infrastructure/
+│   └── k8s/
+│       └── _Overview.md
+└── Research/
+    └── _Overview.md
+```
+
+**`_Overview.md` Template Structure**:
+- Start with `# Project Name (MOC)` heading
+- Use `> [!info] Map of Content` callout with project metadata (repo, stack, updated date)
+- Include Quick Navigation table linking key documents
+- Include Documentation Index with Status column (Current, Reference, Active, etc.)
+- Add architecture diagram (Mermaid) if applicable
+- Include Cross-References section by topic
+- End with Document Status Legend and Last Updated date
+
+**When creating a new project folder**:
+1. Create the folder under appropriate category (GitHub, Infrastructure, Research)
+2. Create `_Overview.md` as the first file
+3. Follow the MOC template structure
+4. Link all related documents from the overview
 
 When creating new notes:
 - Place uncategorized notes in `Inbox` for later review.
@@ -66,12 +103,21 @@ When creating new notes:
   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> read \
     "100-Templates/github-project-template.md"
   ```
-- To scaffold a new note in the repo (placeholders preserved), you can copy the template:
+- To scaffold a new project folder with `_Overview.md`:
   ```bash
+  # Create the _Overview.md as the MOC index
   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> copy \
     "100-Templates/github-project-template.md" \
-    "5️⃣-Projects/<area>/<project>.md" \
-    --branch "update-notes" \
+    "5️⃣-Projects/GitHub/<project>/_Overview.md" \
+    --branch "add-project-docs" \
+    --message "Add project overview MOC"
+  ```
+- For additional notes in the project folder:
+  ```bash
+  python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> write \
+    "5️⃣-Projects/GitHub/<project>/<note-name>.md" \
+    --stdin \
+    --branch "add-project-docs" \
     --message "Add project note"
   ```
 
@@ -168,9 +214,17 @@ When asked to find and read a note:
 The `search` command uses GitHub code search. Include qualifiers directly in your query string:
 
 ```bash
+# Search in specific folder
 python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "TODO path:1️⃣-Index/"
+
+# Search project notes
 python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "project plan path:5️⃣-Projects/ extension:md"
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "filename:_Overview.md cmux"
+
+# Find all project overviews
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "filename:_Overview.md"
+
+# Find specific project overview
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "filename:_Overview.md path:5️⃣-Projects/GitHub/cmux"
 ```
 
 ## Workflow Reference
@@ -182,3 +236,5 @@ See `references/obsidian-organizer.md` for a concrete organizing workflow that u
 - `search` uses GitHub code search; results may be empty for new commits until GitHub indexes them (typically seconds to minutes).
 - Qualifiers like `path:`, `extension:`, `filename:` can narrow results - include them directly in the query string.
 - Paths must match the repo exactly (including emoji and normalization). Use `list` to discover the exact directory names.
+- Every project folder under `5️⃣-Projects/` MUST have a `_Overview.md` file as its MOC index.
+- When creating new project documentation, always create `_Overview.md` first, then add related notes.
