@@ -1,18 +1,53 @@
 ---
 name: obsidian-gh-knowledge
-description: Operate an Obsidian vault stored in GitHub using a bundled gh-based CLI. Use when users ask to list folders, read notes, search content, create/update notes from templates, find project tasks/plans, or move/rename notes in a remote vault.
+description: Operate an Obsidian vault locally (preferred when available) or remotely via GitHub using a bundled gh-based CLI. Use when users ask to list folders, read notes, search content, create/update notes, find project tasks/plans, or move/rename notes in an Obsidian vault.
 ---
 
 # Obsidian GitHub Knowledge
 
-Use this skill to operate on a remote Obsidian vault stored in a GitHub repository without relying on local filesystem edits.
+Use this skill to operate on an Obsidian vault that is synced to GitHub.
 
-This skill should NOT guess which repo is your vault.
+**Default behavior**:
+- If a local vault exists (path from `~/.config/obsidian-gh-knowledge/config.json` or `~/Documents/obsidian_vault/`), use local filesystem + local git.
+- Otherwise, use the GitHub-backed CLI (`gh api` / GitHub code search) via the bundled script.
 
-If the user does not provide `--repo`, require the user to either:
+> Note: in sandboxes/containers, the local vault path often does not exist; GitHub mode is expected there.
+
+## Mode selection (local vs GitHub)
+
+1. Determine local vault directory (`VAULT_DIR`):
+   - If `~/.config/obsidian-gh-knowledge/config.json` contains `"local_vault_path"`, use it.
+   - Else default to `~/Documents/obsidian_vault/`.
+2. If `VAULT_DIR` exists and config `"prefer_local"` is not `false`, operate locally.
+3. Otherwise, operate remotely (GitHub mode).
+
+In GitHub mode, this skill should NOT guess which repo is your vault.
+
+If the user does not provide `--repo` (GitHub mode), require the user to either:
 
 - Provide `--repo <owner/repo>` explicitly, or
 - Set up the local config file described below, then use its `default_repo`.
+
+## Local mode quickstart
+
+```bash
+VAULT_DIR="$HOME/Documents/obsidian_vault"
+
+ls -la "$VAULT_DIR"
+ls -la "$VAULT_DIR/0️⃣-Inbox"
+rg -n "keyword" "$VAULT_DIR"
+sed -n '1,160p' "$VAULT_DIR/5️⃣-Projects/GitHub/cmux/_Overview.md"
+```
+
+For edits, prefer a small commit (feature branch optional in local mode):
+
+```bash
+cd "$VAULT_DIR"
+git status --porcelain=v1
+git checkout -b update-notes-YYYYMMDD
+git add "path/to/note.md"
+git commit -m "Update note"
+```
 
 ## Practical Tips (Paths & Emoji)
 
@@ -35,7 +70,7 @@ gh api -X PATCH repos/.../git/refs/heads/main -F force=true
 git push --force origin main
 ```
 
-### 2. ALWAYS Use Feature Branches for Writes
+### 2. ALWAYS Use Feature Branches for GitHub Writes
 
 All write operations MUST use a dedicated feature branch:
 - `write`, `move`, `copy` commands require `--branch <name>`
@@ -198,7 +233,7 @@ Never guess repo names.
 
 ## Commands
 
-All operations are performed via the bundled script:
+GitHub mode operations are performed via the bundled script:
 
 ```bash
 python3 scripts/github_knowledge_skill.py --repo <owner/repo> <command> [args]
@@ -229,7 +264,9 @@ First-time setup: create `~/.config/obsidian-gh-knowledge/config.json`:
   "repos": {
     "personal": "<owner>/<vault-repo>",
     "work": "<org>/<work-vault-repo>"
-  }
+  },
+  "local_vault_path": "~/Documents/obsidian_vault",
+  "prefer_local": true
 }
 ```
 
