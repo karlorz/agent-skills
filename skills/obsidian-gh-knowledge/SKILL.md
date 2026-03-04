@@ -1,45 +1,117 @@
 ---
 name: obsidian-gh-knowledge
-description: Operate an Obsidian vault locally (preferred when available) or remotely via GitHub using a bundled gh-based CLI. Use when users ask to list folders, read notes, search content, create/update notes, find project tasks/plans, or move/rename notes in an Obsidian vault.
+description: Operate an Obsidian vault with official Obsidian CLI first (local), with local filesystem/git fallback, and GitHub API fallback when local access is unavailable. Use for listing, reading, searching, creating/updating, and moving notes in Obsidian vaults.
 ---
 
-# Obsidian GitHub Knowledge
+# Obsidian GH Knowledge (CLI-first)
 
-Use this skill to operate on an Obsidian vault that is synced to GitHub.
+Use this skill to manage an Obsidian vault safely and consistently.
 
-**Default behavior**:
-- If a local vault exists (path from `~/.config/obsidian-gh-knowledge/config.json` or `~/Documents/obsidian_vault/`), use local filesystem + local git.
-- Otherwise, use the GitHub-backed CLI (`gh api` / GitHub code search) via the bundled script.
+## Source of truth
 
-> Note: in sandboxes/containers, the local vault path often does not exist; GitHub mode is expected there.
+- Official CLI docs: `https://help.obsidian.md/cli`
+- Public release note introducing CLI: `https://obsidian.md/changelog/2026-02-27-desktop-v1.12.4/`
+
+Note: CLI docs may still show early-access wording in some sections. Treat the public changelog (February 27, 2026) as the release marker.
+
+## Execution modes (strict order)
+
+1. **Local Obsidian CLI mode (preferred)**
+   - Use when local vault exists and `obsidian` CLI is available and enabled.
+2. **Local filesystem/git fallback**
+   - Use when local vault exists but CLI is not enabled.
+3. **GitHub mode fallback**
+   - Use when local vault is unavailable or explicitly disabled.
 
 ## Mode selection (local vs GitHub)
 
-1. Determine local vault directory (`VAULT_DIR`):
-   - If `~/.config/obsidian-gh-knowledge/config.json` contains `"local_vault_path"`, use it.
-   - Else default to `~/Documents/obsidian_vault/`.
-2. If `VAULT_DIR` exists and config `"prefer_local"` is not `false`, operate locally.
-3. Otherwise, operate remotely (GitHub mode).
+1. Resolve `VAULT_DIR`:
+   - If `~/.config/obsidian-gh-knowledge/config.json` has `local_vault_path`, use it.
+   - Else use `~/Documents/obsidian_vault/`.
+2. If `VAULT_DIR` exists and `prefer_local` is not `false`, use local mode.
+3. In local mode, prefer official Obsidian CLI. If CLI is unavailable, fall back to local filesystem.
+4. If local mode is unavailable, use GitHub mode.
 
-In GitHub mode, this skill should NOT guess which repo is your vault.
-
-If the user does not provide `--repo` (GitHub mode), require the user to either:
-
-- Provide `--repo <owner/repo>` explicitly, or
-- Set up the local config file described below, then use its `default_repo`.
-
-## Local mode quickstart
+Quick checks:
 
 ```bash
-VAULT_DIR="$HOME/Documents/obsidian_vault"
+# Local vault path
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser('~/.config/obsidian-gh-knowledge/config.json')
+if os.path.exists(p):
+    c = json.load(open(p))
+    print(os.path.expanduser(c.get('local_vault_path', '~/Documents/obsidian_vault')))
+else:
+    print(os.path.expanduser('~/Documents/obsidian_vault'))
+PY
 
-ls -la "$VAULT_DIR"
-ls -la "$VAULT_DIR/0️⃣-Inbox"
-rg -n "keyword" "$VAULT_DIR"
-sed -n '1,160p' "$VAULT_DIR/5️⃣-Projects/GitHub/cmux/_Overview.md"
+# CLI availability
+command -v obsidian
+obsidian help
 ```
 
-For edits, prefer a small commit (feature branch optional in local mode):
+If `obsidian help` prints `Command line interface is not enabled`, use local filesystem fallback until enabled in Obsidian settings.
+
+## Local Obsidian CLI mode (preferred)
+
+### Requirements
+
+- Obsidian desktop `1.12.4+`.
+- CLI enabled in app settings: `Settings -> General -> Advanced -> Command line interface`.
+- On macOS, ensure PATH contains `/Applications/Obsidian.app/Contents/MacOS`.
+- If CLI errors show `Unable to find helper app` or `Command line interface is not enabled`, re-enable the CLI toggle in settings and restart the terminal.
+
+### Targeting vaults and files
+
+- If current directory is the vault, commands target that vault.
+- Otherwise use `vault=<name>` as the first parameter.
+- Use `file=<name>` for wikilink-style resolution, or `path=<exact/path.md>` for precise targeting.
+
+Examples:
+
+```bash
+# Prefer running inside vault root
+cd "$VAULT_DIR"
+
+# Or target by vault name explicitly
+obsidian vault="My Vault" search query="test"
+
+# Exact file targeting
+obsidian read path="5️⃣-Projects/GitHub/cmux/_Overview.md"
+```
+
+### Core command patterns
+
+```bash
+# Search and read
+obsidian search query="MOC" path="5️⃣-Projects/" format=json
+obsidian read path="5️⃣-Projects/GitHub/cmux/_Overview.md"
+
+# Create/update content
+obsidian create name="new-note" path="2️⃣-Drafts" content="# Title\n\n## TL;DR\n"
+obsidian write path="2️⃣-Drafts/new-note.md" content="# Title\n\n## TL;DR\n- [ ] Follow up"
+obsidian append path="2️⃣-Drafts/new-note.md" content="\n- [ ] Follow up"
+
+# Move/rename and delete
+obsidian move path="0️⃣-Inbox/note.md" to="5️⃣-Projects/GitHub/cmux/note.md"
+obsidian delete path="2️⃣-Drafts/tmp-note.md"
+
+# Tasks, tags, properties, templates, daily note
+obsidian tasks path="5️⃣-Projects/" todo format=json
+obsidian tags counts
+obsidian properties path="5️⃣-Projects/GitHub/cmux/_Overview.md"
+obsidian templates
+obsidian template:read name="github-project-template"
+obsidian daily
+obsidian daily:append content="- [ ] Review inbox"
+```
+
+### Local write workflow
+
+1. Read before write (`obsidian read ...`).
+2. For large edits, write to a draft note first, then merge intentionally.
+3. Commit locally with small, reviewable commits.
 
 ```bash
 cd "$VAULT_DIR"
@@ -49,214 +121,114 @@ git add "path/to/note.md"
 git commit -m "Update note"
 ```
 
-## Practical Tips (Paths & Emoji)
+## Local filesystem/git fallback (CLI unavailable)
 
-- Always wrap `--path` values and file paths in quotes (emoji and spaces are common).
-- Prefer copy/pasting the exact `path` returned by `list`/`search` instead of hand-typing emoji segments.
-- Treat URL-encoded emoji in API output (e.g., `%EF%B8%8F%E2%83%A3`) as normal.
-- If you get `HTTP 404`, assume the path is wrong or the file does not exist; verify with `list` or `search`.
-
-## SAFETY RULES (CRITICAL)
-
-These rules prevent accidental data loss. **NEVER bypass them.**
-
-### 1. NEVER Force Push to Main
+Use only when local CLI cannot be used.
 
 ```bash
-# FORBIDDEN - This can delete all files
-gh api -X PATCH repos/.../git/refs/heads/main -F force=true
+VAULT_DIR="$HOME/Documents/obsidian_vault"
 
-# FORBIDDEN - Direct reset
-git push --force origin main
+ls -la "$VAULT_DIR"
+rg -n "keyword" "$VAULT_DIR"
+sed -n '1,160p' "$VAULT_DIR/5️⃣-Projects/GitHub/cmux/_Overview.md"
 ```
 
-### 2. ALWAYS Use Feature Branches for GitHub Writes
+For edits, keep the same small-commit discipline as local CLI mode.
 
-All write operations MUST use a dedicated feature branch:
-- `write`, `move`, `copy` commands require `--branch <name>`
-- Branch name should be descriptive (e.g., `update-cmux-docs-20260222`)
-- NEVER commit directly to `main`
+## GitHub mode fallback
 
-### 3. ALWAYS Create PR for Merge
+Use when local vault is unavailable or `prefer_local` is explicitly `false`.
 
-After writing to a branch, create a PR and let user review:
-```bash
-gh pr create --repo <owner/repo> --head <branch> --base main \
-  --title "Update notes" --body "Changes: ..."
-```
+### Repo resolution policy
 
-NEVER auto-merge without user confirmation.
+Resolve repo in this order:
 
-### 4. Prefer Local Vault When Available
-
-If a local vault exists at `~/Documents/obsidian_vault/`:
-1. Use local git operations instead of GitHub API
-2. Commit changes locally first
-3. Push with `git push` (not force push)
-4. This preserves git history and allows easy recovery via `git reflog`
-
-### 5. Read Before Write
-
-Before updating any file:
-1. `read` the existing file content
-2. Show diff to user if content differs significantly
-3. Only proceed with user confirmation for large changes
-
-### 6. Single-File Operations Only
-
-- Write/move/copy ONE file per commit
-- NEVER batch multiple unrelated files in one branch
-- This makes rollback easier if something goes wrong
-
-## Obsidian Note Authoring Guidelines
-
-When creating or editing notes in an Obsidian vault, follow these conventions:
-
-- If the workspace/repo has an `AGENTS.md`, read it and follow it (it overrides these defaults).
-
-### Markdown
-
-- Prefer a short `## TL;DR` near the top for human scanning.
-- Use Obsidian wikilinks (`[[note-title]]`) for internal references instead of raw URLs.
-- Keep headings stable; rename/move only when explicitly asked (links depend on titles/paths).
-- Use YAML frontmatter for metadata (tags, aliases, dates).
-
-### Mermaid (Obsidian Compatibility)
-
-Obsidian's Mermaid renderer has quirks. Follow these rules to avoid rendering failures:
-
-- Prefer `graph TB` / `sequenceDiagram` over newer Mermaid syntaxes.
-- Avoid `subgraph ID[Label]` style; use quoted titles: `subgraph "Title"`.
-- Avoid `\n` in node labels; use `<br/>` or keep labels single-line.
-- Avoid parentheses and slashes in node labels; Obsidian chokes on `(...)` or `a/b` inside `[...]`.
-- Keep node IDs ASCII and simple (`OC_GW`, `CMUX_DB`); avoid punctuation in IDs.
-- If a diagram fails to render, simplify first (remove subgraphs/line breaks), then add complexity back.
-
-### Vault Organization Conventions
-
-Typical Obsidian vault folder structure (emoji prefixes for sorting):
-
-| Directory          | Purpose                              |
-|--------------------|--------------------------------------|
-| `0️⃣-Inbox/`       | Uncategorized new notes              |
-| `1️⃣-Index/`       | Maps of content (MOCs), overviews    |
-| `2️⃣-Drafts/`      | Work-in-progress ideas               |
-| `3️⃣-Plugins/`     | Plugin docs and configs              |
-| `4️⃣-Attachments/` | Non-image assets (PDFs, sheets)      |
-| `5️⃣-Projects/`    | Project documentation by category    |
-| `assets/`          | Images and media                     |
-| `100-Templates/`   | Reusable note templates              |
-
-### Project Folder Convention (`5️⃣-Projects/`)
-
-Each project folder **MUST** have a `_Overview.md` file as its Map of Content (MOC):
-
-```
-5️⃣-Projects/
-├── GitHub/
-│   ├── cmux/
-│   │   ├── _Overview.md          # MOC index (required)
-│   │   ├── cmux-tech-stack.md
-│   │   └── ...
-│   └── openclaw/
-│       ├── _Overview.md          # MOC index (required)
-│       ├── openclaw-local-status.md
-│       └── ...
-├── Infrastructure/
-│   └── k8s/
-│       └── _Overview.md
-└── Research/
-    └── _Overview.md
-```
-
-**`_Overview.md` Template Structure**:
-- Start with `# Project Name (MOC)` heading
-- Use `> [!info] Map of Content` callout with project metadata (repo, stack, updated date)
-- Include Quick Navigation table linking key documents
-- Include Documentation Index with Status column (Current, Reference, Active, etc.)
-- Add architecture diagram (Mermaid) if applicable
-- Include Cross-References section by topic
-- End with Document Status Legend and Last Updated date
-
-**When creating a new project folder**:
-1. Create the folder under appropriate category (GitHub, Infrastructure, Research)
-2. Create `_Overview.md` as the first file
-3. Follow the MOC template structure
-4. Link all related documents from the overview
-
-When creating new notes:
-- Place uncategorized notes in `Inbox` for later review.
-- Use links and tags for navigation, not deep folder nesting.
-- Check existing structure with `list` before assuming folder names.
-
-### Templates
-
-- For GitHub project notes, read and use `100-Templates/github-project-template.md` as the starting structure.
-- Read the template:
-  ```bash
-  python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> read \
-    "100-Templates/github-project-template.md"
-  ```
-- To scaffold a new project folder with `_Overview.md`:
-  ```bash
-  # Create the _Overview.md as the MOC index
-  python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> copy \
-    "100-Templates/github-project-template.md" \
-    "5️⃣-Projects/GitHub/<project>/_Overview.md" \
-    --branch "add-project-docs" \
-    --message "Add project overview MOC"
-  ```
-- For additional notes in the project folder:
-  ```bash
-  python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> write \
-    "5️⃣-Projects/GitHub/<project>/<note-name>.md" \
-    --stdin \
-    --branch "add-project-docs" \
-    --message "Add project note"
-  ```
-
-## Repo Resolution Policy
-
-Resolve the repository in this order:
-
-1. If the user provides `--repo <owner/repo>`, use it.
-2. If the user provides `--repo <key>` (no `/`), resolve it via `~/.config/obsidian-gh-knowledge/config.json` at `repos.<key>`.
-3. If `--repo` is omitted, use `default_repo` from the same config file.
-4. If none of the above is available, ask the user for the repo or ask them to set local config.
+1. `--repo <owner/repo>` if provided.
+2. `--repo <key>` (no `/`) resolved from `repos.<key>` in config.
+3. `default_repo` from config.
+4. If none are available, stop and ask for repo/config.
 
 Never guess repo names.
 
-## Requirements
+### Requirements
 
 - GitHub CLI installed: `gh`
 - Authenticated: `gh auth status`
 
-## Commands
-
-GitHub mode operations are performed via the bundled script:
+### Commands
 
 ```bash
-python3 scripts/github_knowledge_skill.py --repo <owner/repo> <command> [args]
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py \
+  --repo <owner/repo> <command> [args]
 ```
 
-If the skill is installed globally, the script is typically located at:
+Available commands:
+
+- `list --path <path>`
+- `read <file_path>`
+- `search <query>`
+- `move <src> <dest> --branch <branch_name> --message <commit_msg>`
+- `copy <src> <dest> --branch <branch_name> --message <commit_msg>`
+- `write <file_path> --stdin|--from-file <path> --branch <branch_name> --message <commit_msg>`
+
+## Safety rules (critical)
+
+1. Never force-push to `main`.
+2. In GitHub mode, always write on a feature branch.
+3. In GitHub mode, always open a PR for review before merge.
+4. Read before write.
+5. Keep commits small and scoped.
+6. Prefer local vault operations whenever available.
+
+## Practical tips (paths and emoji)
+
+- Always quote paths (`"..."`), especially emoji folders.
+- Prefer copying exact paths from command output instead of retyping.
+- For 404/path errors in GitHub mode, verify with `list` first.
+
+## Obsidian note authoring rules
+
+If repository-level `AGENTS.md` exists, follow it first.
+
+### Markdown
+
+- Prefer a short `## TL;DR` near the top.
+- Use Obsidian wikilinks (`[[note-title]]`) for internal notes.
+- Keep headings stable unless rename/move is requested.
+- Use YAML frontmatter for metadata when needed.
+
+### Mermaid (Obsidian compatibility)
+
+- Prefer `graph TB` / `sequenceDiagram`.
+- Use `subgraph "Title"` (avoid `subgraph ID[Label]`).
+- Avoid `\n` in labels; use `<br/>` or single-line labels.
+- Keep node IDs ASCII and simple (`CMUX_DB`, `OC_GW`).
+
+### Project folder convention
+
+Each project folder under `5️⃣-Projects/` must include `_Overview.md` as MOC.
+
+When creating a project folder:
+
+1. Create folder in the right category (`GitHub`, `Infrastructure`, `Research`).
+2. Create `_Overview.md` first.
+3. Include quick navigation and documentation index.
+4. Link related notes from `_Overview.md`.
+
+## Templates
+
+For GitHub project notes, use `100-Templates/github-project-template.md`.
+
+GitHub mode example:
 
 ```bash
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo <owner/repo> <command> [args]
+python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py \
+  --repo <owner/repo> read "100-Templates/github-project-template.md"
 ```
 
-- `list --path <path>`: List files in a directory.
-- `read <file_path>`: Read file content.
-- `search <query>`: Search code/content.
-- `move <src> <dest> --branch <branch_name> --message <commit_msg>`: Move/rename a file by creating the destination file and deleting the source file on a branch.
-- `copy <src> <dest> --branch <branch_name> --message <commit_msg>`: Copy a file by creating the destination file on a branch.
-- `write <file_path> --stdin|--from-file <path> --branch <branch_name> --message <commit_msg>`: Create or update a file on a branch.
+## Config file
 
-## Repo Selection (Local Config)
-
-To avoid hard-coding a personal repo in prompts, store your vault repo(s) locally and have the agent/tooling read it.
-
-First-time setup: create `~/.config/obsidian-gh-knowledge/config.json`:
+Create `~/.config/obsidian-gh-knowledge/config.json`:
 
 ```json
 {
@@ -266,108 +238,13 @@ First-time setup: create `~/.config/obsidian-gh-knowledge/config.json`:
     "work": "<org>/<work-vault-repo>"
   },
   "local_vault_path": "~/Documents/obsidian_vault",
-  "prefer_local": true
+  "prefer_local": true,
+  "vault_name": "My Vault"
 }
 ```
 
-Usage (resolve repo at runtime):
+`vault_name` is optional; use it when running CLI commands outside the vault directory.
 
-```bash
-REPO="$(python3 -c 'import json,os; p=os.path.expanduser("~/.config/obsidian-gh-knowledge/config.json"); print(json.load(open(p))["default_repo"])')"
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" list --path "0️⃣-Inbox"
-```
+## Workflow reference
 
-If the user specifies a repo key (e.g., `work`), resolve it from `repos.<key>` instead of `default_repo`.
-
-Example (resolve repo key):
-
-```bash
-REPO="$(python3 -c 'import json,os; p=os.path.expanduser("~/.config/obsidian-gh-knowledge/config.json"); c=json.load(open(p)); print(c["repos"]["work"])')"
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "dev plan"
-```
-
-## Quick Workflow Example
-
-When asked to find and read a note:
-
-1. List to discover exact paths:
-   ```bash
-   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" list --path "1️⃣-Index"
-   ```
-
-2. Search if the path is unknown:
-   ```bash
-   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "MOC"
-   ```
-
-3. Read the target file:
-   ```bash
-   python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" read "1️⃣-Index/README.md"
-   ```
-
-## Search Query Tips
-
-The `search` command uses GitHub code search. Include qualifiers directly in your query string:
-
-```bash
-# Search in specific folder
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "TODO path:1️⃣-Index/"
-
-# Search project notes
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "project plan path:5️⃣-Projects/ extension:md"
-
-# Find all project overviews
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "filename:_Overview.md"
-
-# Find specific project overview
-python3 ~/.agents/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py --repo "$REPO" search "filename:_Overview.md path:5️⃣-Projects/GitHub/cmux"
-```
-
-## Workflow Reference
-
-See `references/obsidian-organizer.md` for a concrete organizing workflow that uses these commands.
-
-## Notes
-
-- `search` uses GitHub code search; results may be empty for new commits until GitHub indexes them (typically seconds to minutes).
-- Qualifiers like `path:`, `extension:`, `filename:` can narrow results - include them directly in the query string.
-- Paths must match the repo exactly (including emoji and normalization). Use `list` to discover the exact directory names.
-- Every project folder under `5️⃣-Projects/` MUST have a `_Overview.md` file as its MOC index.
-- When creating new project documentation, always create `_Overview.md` first, then add related notes.
-
-## Recovery Procedures
-
-If files are accidentally deleted or corrupted:
-
-### From Local Vault (Preferred)
-```bash
-cd ~/Documents/obsidian_vault
-git reflog                          # Find good commit
-git reset --hard <commit-sha>       # Restore locally
-git push --force origin main        # Sync to remote (only if local is source of truth)
-```
-
-### From Remote (if local is lost)
-```bash
-# List commits to find pre-deletion state
-gh api repos/<owner>/<repo>/commits --jq '.[].sha' | head -10
-
-# Check file count at each commit
-gh api repos/<owner>/<repo>/git/trees/<sha>?recursive=1 --jq '.tree | length'
-
-# Reset remote to good commit (DANGEROUS - confirm with user first)
-gh api -X PATCH repos/<owner>/<repo>/git/refs/heads/main \
-  -F sha=<good-commit-sha> -F force=true
-```
-
-## Comparison: GitHub API vs Local Git
-
-| Operation | GitHub API | Local Git |
-|-----------|-----------|-----------|
-| Recovery | Hard (no reflog) | Easy (reflog) |
-| Atomic commits | Per-file only | Multi-file |
-| Speed | Slower (HTTP) | Faster |
-| Offline | No | Yes |
-| Audit trail | Limited | Full |
-
-**Recommendation**: When `~/Documents/obsidian_vault/` exists, prefer local git operations.
+See `references/obsidian-organizer.md` for concrete note-organization workflow patterns.
