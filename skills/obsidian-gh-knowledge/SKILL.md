@@ -177,7 +177,9 @@ Never guess repo names.
 Resolve script path in this order (sandbox-safe):
 
 ```bash
-if [ -f "agent-skills/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py" ]; then
+if [ -f "skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py" ]; then
+  SCRIPT_PATH="skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py"
+elif [ -f "agent-skills/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py" ]; then
   SCRIPT_PATH="agent-skills/skills/obsidian-gh-knowledge/scripts/github_knowledge_skill.py"
 elif [ -f "scripts/github_knowledge_skill.py" ]; then
   SCRIPT_PATH="scripts/github_knowledge_skill.py"
