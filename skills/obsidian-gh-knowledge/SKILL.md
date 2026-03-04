@@ -23,14 +23,19 @@ Note: CLI docs may still show early-access wording in some sections. Treat the p
 3. **GitHub mode fallback**
    - Use when local vault is unavailable or explicitly disabled.
 
+This ordering is for compatibility across desktop, server, and sandbox environments.
+
 ## Mode selection (local vs GitHub)
 
 1. Resolve `VAULT_DIR`:
    - If `~/.config/obsidian-gh-knowledge/config.json` has `local_vault_path`, use it.
    - Else use `~/Documents/obsidian_vault/`.
 2. If `VAULT_DIR` exists and `prefer_local` is not `false`, use local mode.
-3. In local mode, prefer official Obsidian CLI. If CLI is unavailable, fall back to local filesystem.
-4. If local mode is unavailable, use GitHub mode.
+3. In local mode, prefer official Obsidian CLI only if:
+   - `command -v obsidian` succeeds, and
+   - `obsidian help` succeeds (CLI is enabled and app connection works).
+4. If CLI checks fail, fall back to local filesystem/git mode.
+5. If local mode is unavailable, use GitHub mode.
 
 Quick checks:
 
@@ -52,6 +57,14 @@ obsidian help
 ```
 
 If `obsidian help` prints `Command line interface is not enabled`, use local filesystem fallback until enabled in Obsidian settings.
+
+## Environment compatibility
+
+- macOS/Windows desktop with Obsidian app running: use local Obsidian CLI mode.
+- Linux desktop with Obsidian GUI available: CLI may work, use same checks above.
+- Headless Linux/container/sandbox (no GUI app session): assume Obsidian CLI is unavailable and skip directly to local filesystem or GitHub mode.
+
+Do not block execution waiting for CLI in headless environments.
 
 ## Local Obsidian CLI mode (preferred)
 
