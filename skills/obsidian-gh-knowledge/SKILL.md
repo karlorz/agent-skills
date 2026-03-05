@@ -37,6 +37,15 @@ This ordering is for compatibility across desktop, server, and sandbox environme
 4. If CLI checks fail, fall back to local filesystem/git mode.
 5. If local mode is unavailable, use GitHub mode.
 
+## Guardrails (avoid wrong paths)
+
+- Do **not** suppress errors when checking paths (avoid `2>/dev/null`); missing paths should be obvious.
+- If local vault is "missing", print diagnostics: `pwd`, `echo "$HOME"`, and `ls -la "$(dirname "$VAULT_DIR")"` before falling back.
+- Do **not** hand-type emoji folder names. Always `ls`/`list` and copy the exact path.
+- This vault uses names like `5️⃣-Projects` (no space). `5️⃣ -Projects` will break local `ls` and GitHub reads.
+- If a `read` fails with "File not found", immediately `list` the parent folder or `search` for the filename instead of guessing.
+- If you need the emoji folder name programmatically: `ls -1 "$VAULT_DIR" | rg -m1 "Projects$"` (returns `5️⃣-Projects` in this vault).
+
 Quick checks:
 
 ```bash
@@ -125,14 +134,24 @@ obsidian daily:append content="- [ ] Review inbox"
 
 1. Read before write (`obsidian read ...`).
 2. For large edits, write to a draft note first, then merge intentionally.
-3. Commit locally with small, reviewable commits.
+3. Keep the remote in sync: pull/rebase, commit, push (no force-push).
 
+Recommended (one command):
+```bash
+python3 "$VAULT_DIR/agent-skills/skills/obsidian-gh-knowledge/scripts/local_vault_git_sync.py" \
+  --vault-dir "$VAULT_DIR" \
+  --message "Update vault notes"
+```
+
+Manual workflow:
 ```bash
 cd "$VAULT_DIR"
+git pull --rebase --autostash
 git status --porcelain=v1
-git checkout -b update-notes-YYYYMMDD
-git add "path/to/note.md"
-git commit -m "Update note"
+git add -A
+git commit -m "Update vault notes"
+git pull --rebase
+git push
 ```
 
 ## Local filesystem/git fallback (CLI unavailable)
@@ -147,11 +166,16 @@ rg -n "keyword" "$VAULT_DIR"
 sed -n '1,160p' "$VAULT_DIR/5️⃣-Projects/GitHub/cmux/_Overview.md"
 ```
 
-For edits, keep the same small-commit discipline as local CLI mode.
+For edits, use the same sync workflow as local CLI mode (commit + pull/rebase + push).
 
 ## GitHub mode fallback
 
 Use when local vault is unavailable or `prefer_local` is explicitly `false`.
+
+**GitHub read protocol** (prevents "File not found"):
+1. `list` the parent folder to copy the exact path
+2. `search` for the filename/keyword if unknown
+3. `read` using the returned exact path
 
 ### Repo resolution policy
 

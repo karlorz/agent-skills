@@ -9,8 +9,26 @@ from typing import Optional
 from urllib.parse import quote
 
 
+_KEYCAP_DIGITS = ("0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣")
+
+
+def _normalize_vault_path(path: str) -> str:
+    """
+    Normalize common human/LLM path typos for this vault.
+
+    Key fix: users/agents sometimes type a space between the keycap digit and the hyphen,
+    e.g. "5️⃣ -Projects" instead of "5️⃣-Projects". GitHub API paths must match exactly.
+    """
+    normalized = (path or "").strip()
+    for keycap_digit in _KEYCAP_DIGITS:
+        normalized = normalized.replace(f"{keycap_digit} - ", f"{keycap_digit}-")
+        normalized = normalized.replace(f"{keycap_digit} -", f"{keycap_digit}-")
+    normalized = normalized.replace(" /", "/").replace("/ ", "/")
+    return normalized
+
+
 def _quote_path(path: str) -> str:
-    return quote(path, safe="/")
+    return quote(_normalize_vault_path(path), safe="/")
 
 
 def _load_repo_from_config(repo_arg: Optional[str]) -> Optional[str]:
@@ -84,6 +102,12 @@ class GitHubKnowledgeManager:
             print(f"Error executing command: {' '.join(command)}", file=sys.stderr)
             if e.stderr:
                 print(e.stderr, file=sys.stderr)
+                if "Not Found" in e.stderr and any("/contents" in part for part in command):
+                    print(
+                        "Hint: the file/path may not exist. For emoji folders, use names like "
+                        '"5️⃣-Projects" (no space). Prefer `list`/`search` to copy the exact path.',
+                        file=sys.stderr,
+                    )
             sys.exit(1)
 
     def _contents_endpoint(self, path: str) -> str:
