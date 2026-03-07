@@ -5,6 +5,26 @@ description: Operate an Obsidian vault with official Obsidian CLI first (local),
 
 # Obsidian GH Knowledge (CLI-first)
 
+## TL;DR
+- **Goal:** Operate the Obsidian vault using the safest and most optimal method depending on the environment context.
+- **Execution Order:** 1. Local Obsidian CLI -> 2. Local fallback -> 3. GitHub API fallback.
+- **Agent Rules:** Agents **must** read before write, include a `## TL;DR`, and **must** use Mermaid diagrams for visual explanations.
+
+## Execution Mode Flowchart
+
+```mermaid
+graph TB
+    A[Start Vault Operation] --> B{Check VAULT_DIR<br/>& prefer_local}
+    B -- Local enabled --> C{Is 'obsidian' CLI<br/>available?}
+    C -- Yes --> D["Use Local Obsidian CLI mode"]
+    C -- No --> E["Use Local filesystem/git fallback"]
+    B -- Remote/Headless --> F["Use GitHub API fallback<br/>(github_knowledge_skill.py)"]
+    
+    D --> G[Execute Read/Write]
+    E --> G
+    F --> G
+```
+
 Use this skill to manage an Obsidian vault safely and consistently.
 
 ## Source of truth
@@ -266,9 +286,10 @@ Expected behavior from recent validation:
 
 If repository-level `AGENTS.md` exists, follow it first.
 
-### Markdown
+### Agent Markdown Rules
 
-- Prefer a short `## TL;DR` near the top.
+- **Mandatory:** Always include a short `## TL;DR` near the top for human scanning.
+- **Mandatory:** Always use Mermaid diagrams (`graph TB` or `sequenceDiagram`) to visually explain architectures, workflows, or complex concepts.
 - Use Obsidian wikilinks (`[[note-title]]`) for internal notes.
 - Keep headings stable unless rename/move is requested.
 - Use YAML frontmatter for metadata when needed.
