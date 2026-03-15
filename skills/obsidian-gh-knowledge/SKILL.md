@@ -10,6 +10,7 @@ description: Bootstrap and operate an Obsidian vault with official Obsidian CLI 
 - **Execution Order:** 0. Bootstrap a local clone after repo confirmation -> 1. Local Obsidian CLI -> 2. Local fallback -> 3. GitHub API fallback.
 - **Agent Rules:** Agents **must** read before write, include a `## TL;DR`, and **must** use Mermaid diagrams for visual explanations.
 - **Project Scoping:** When working on a specific project (cmux, trends, etc.), **stay within that project's folder** under `5️⃣-Projects/GitHub/<project>/`. See "Project Scoping (CRITICAL)" section below.
+- **Local Wrapper:** Use `scripts/local_obsidian_knowledge.py` for repeatable local macOS workflows that combine Obsidian CLI operations with this vault's project rules and git sync.
 
 ## Execution Mode Flowchart
 
@@ -35,8 +36,20 @@ Use this skill to bootstrap and manage an Obsidian vault safely and consistently
 - Primary live docs: Context7 Obsidian CLI index (`/websites/help_obsidian_md_cli`)
 - Official CLI docs: `https://help.obsidian.md/cli/index`
 - Public release note introducing CLI: `https://obsidian.md/changelog/2026-02-27-desktop-v1.12.4/`
+- Upstream reusable skill set: `https://github.com/kepano/obsidian-skills`
 
 Note: CLI docs may still show early-access wording in some sections. Treat the public changelog (February 27, 2026) as the release marker.
+
+## Recommended skill layering
+
+Use the generic upstream skills and the local repo-specific skill for different jobs:
+
+- `kepano/obsidian-skills/skills/obsidian-cli`: canonical command syntax and current CLI feature surface.
+- `kepano/obsidian-skills/skills/obsidian-markdown`: generic Obsidian-flavored Markdown authoring rules.
+- `kepano/obsidian-skills/skills/obsidian-bases`: `.base` dashboards and structured knowledge views.
+- `obsidian-gh-knowledge` in this repo: local vault bootstrap, project scoping, emoji-folder guardrails, git sync, and GitHub fallback.
+
+The local helper script `scripts/local_obsidian_knowledge.py` is the bridge between the upstream generic CLI patterns and this vault's repo-specific conventions.
 
 ## Execution modes (strict order)
 
@@ -206,7 +219,7 @@ Do not block execution waiting for CLI in headless environments.
 - Obsidian desktop `1.12+`.
 - CLI enabled in app settings: `Settings -> General -> Advanced -> Command line interface`.
 - On macOS, ensure PATH contains `/Applications/Obsidian.app/Contents/MacOS`.
-- If CLI errors show `Unable to find helper app` or `Command line interface is not enabled`, re-enable the CLI toggle in settings and restart the terminal.
+- If CLI commands fail and stderr shows `Unable to find helper app` or `Command line interface is not enabled`, re-enable the CLI toggle in settings and restart the terminal. If commands succeed and only emit the helper warning, treat it as noise and continue.
 
 ### Targeting vaults and files
 
@@ -244,7 +257,7 @@ obsidian move path="0️⃣-Inbox/note.md" to="5️⃣-Projects/GitHub/cmux/note
 obsidian delete path="2️⃣-Drafts/tmp-note.md"
 
 # Tasks, tags, properties, templates, daily note
-obsidian tasks path="5️⃣-Projects/" todo format=json
+obsidian tasks path="5️⃣-Projects/GitHub/cmux/_Overview.md" todo format=json
 obsidian tags counts
 obsidian properties path="5️⃣-Projects/GitHub/cmux/_Overview.md"
 obsidian templates
@@ -252,6 +265,27 @@ obsidian template:read name="github-project-template"
 obsidian daily
 obsidian daily:append content="- [ ] Review inbox"
 ```
+
+### High-level local wrapper
+
+For common macOS workflows, prefer the repo-specific helper over hand-building command sequences:
+
+```bash
+python3 agent-skills/skills/obsidian-gh-knowledge/scripts/local_obsidian_knowledge.py doctor
+python3 agent-skills/skills/obsidian-gh-knowledge/scripts/local_obsidian_knowledge.py dashboard
+python3 agent-skills/skills/obsidian-gh-knowledge/scripts/local_obsidian_knowledge.py capture "Quick note"
+python3 agent-skills/skills/obsidian-gh-knowledge/scripts/local_obsidian_knowledge.py project-note cmux "Feature review"
+python3 agent-skills/skills/obsidian-gh-knowledge/scripts/local_obsidian_knowledge.py organize "0️⃣-Inbox/feature-review.md" cmux
+python3 agent-skills/skills/obsidian-gh-knowledge/scripts/local_obsidian_knowledge.py sync --message "Update vault notes"
+```
+
+Wrapper responsibilities:
+
+- Resolves the local vault path from config.
+- Verifies the official `obsidian` CLI is available.
+- Reads `_Overview.md` before project-scoped note creation or organization.
+- Uses `obsidian move` so note moves happen inside Obsidian instead of raw shell renames.
+- Optionally finishes with `local_vault_git_sync.py`.
 
 ### Local write workflow
 
