@@ -58,6 +58,9 @@ TLDR_SKIP_FILE_NAMES = {
     "_Overview.md",
 }
 STRUCTURE_REPORT_DEFAULT = "1️⃣-Index/vault-structure-cleanup-report.md"
+STRUCTURE_ROOT_HUB = Path("1️⃣-Index/vault-operations-index.md")
+STRUCTURE_PROMPT_HUB = Path("1️⃣-Index/prompt-library.md")
+STRUCTURE_CMUX_HUB = Path("1️⃣-Index/cmux-local-workflows-index.md")
 PROJECT_DIR_SKIP_NAMES = {
     "archive",
     "_archive",
@@ -324,10 +327,14 @@ def _should_check_tldr(relative_path: Path) -> bool:
     return True
 
 
+def _is_regular_markdown_file(path: Path) -> bool:
+    return path.is_file() and not path.is_symlink() and path.suffix.lower() == ".md"
+
+
 def _iter_audit_markdown_files(vault_dir: Path) -> list[Path]:
     markdown_files: list[Path] = []
     for path in vault_dir.rglob("*.md"):
-        if not path.is_file():
+        if not _is_regular_markdown_file(path):
             continue
         relative_path = path.relative_to(vault_dir)
         if _should_skip_audit_path(relative_path):
@@ -584,11 +591,11 @@ def _folder_counts(paths: list[Path]) -> list[dict[str, object]]:
     ]
 
 
-def _structure_report_data(vault_dir: Path, *, output_relative: Path, limit: int, hotspot_limit: int) -> dict:
+def _structure_analysis(vault_dir: Path, *, exclude_relative: Path | None = None) -> dict:
     note_paths_list = [
         relative_path
         for relative_path in _iter_audit_markdown_files(vault_dir)
-        if relative_path != output_relative
+        if relative_path != exclude_relative
     ]
     note_paths = {path.as_posix() for path in note_paths_list}
     root_path_map = {path.as_posix(): path for path in note_paths_list}
@@ -622,11 +629,38 @@ def _structure_report_data(vault_dir: Path, *, output_relative: Path, limit: int
     orphans = sorted(path for path in note_paths_list if not inbound_map.get(path))
     deadends = sorted(path for path in note_paths_list if not outgoing_map.get(path))
     isolated = sorted(path for path in note_paths_list if path in orphans and path in deadends)
+    overview_map = {
+        path: _structure_overview_path(path, note_paths)
+        for path in note_paths_list
+    }
+
+    return {
+        "note_paths_list": note_paths_list,
+        "note_paths": note_paths,
+        "outgoing_map": outgoing_map,
+        "inbound_map": inbound_map,
+        "orphans": orphans,
+        "deadends": deadends,
+        "isolated": isolated,
+        "overview_map": overview_map,
+        "read_errors": read_errors,
+    }
+
+
+def _structure_report_data(vault_dir: Path, *, output_relative: Path, limit: int, hotspot_limit: int) -> dict:
+    analysis = _structure_analysis(vault_dir, exclude_relative=output_relative)
+    note_paths_list = analysis["note_paths_list"]
+    note_paths = analysis["note_paths"]
+    orphans = analysis["orphans"]
+    deadends = analysis["deadends"]
+    isolated = analysis["isolated"]
+    overview_map = analysis["overview_map"]
+    read_errors = analysis["read_errors"]
 
     def _sample_rows(paths: list[Path]) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []
         for path in paths[:limit]:
-            overview = _structure_overview_path(path, note_paths)
+            overview = overview_map.get(path)
             rows.append(
                 {
                     "path": path.as_posix(),
@@ -742,6 +776,216 @@ def _structure_report_markdown(data: dict) -> str:
     ])
 
     return "\n".join(lines)
+
+
+def _find_section_bounds(lines: list[str], heading: str) -> tuple[int, int] | None:
+    heading_pattern = re.compile(rf"^\s*##\s+{re.escape(heading)}\s*$", re.IGNORECASE)
+    start = None
+    for index, line in enumerate(lines):
+        if heading_pattern.match(line):
+            start = index
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if re.match(r"^\s*##\s+", lines[index]):
+            end = index
+            break
+    return start, end
+
+
+def _text_has_wikilink_target(text: str, target_relative: Path) -> bool:
+    target_no_ext = target_relative.with_suffix("").as_posix()
+    target_stem = target_relative.stem
+    for match in WIKILINK_PATTERN.finditer(text):
+        raw = match.group(1).split("|", 1)[0].split("#", 1)[0].strip()
+        if raw in {target_no_ext, target_relative.as_posix(), target_stem}:
+            return True
+        if raw.endswith(f"/{target_stem}") or raw.endswith(f"/{target_stem}.md"):
+            return True
+    return False
+
+
+def _ensure_related_link(text: str, target_relative: Path, *, display: str) -> tuple[str, bool]:
+    if _text_has_wikilink_target(text, target_relative):
+        return text, False
+
+    link_line = f"- {_structure_note_link(target_relative, display=display)}"
+    lines = text.splitlines()
+    bounds = _find_section_bounds(lines, "Related")
+    if bounds is not None:
+        start, end = bounds
+        body = lines[start + 1:end]
+        while body and not body[-1].strip():
+            body.pop()
+        if body and body[-1].strip():
+            body.append("")
+        body.append(link_line)
+        lines = lines[:start + 1] + [""] + body + [""] + lines[end:]
+        return "\n".join(lines).rstrip() + "\n", True
+
+    while lines and not lines[-1].strip():
+        lines.pop()
+    lines.extend(["", "## Related", "", link_line, ""])
+    return "\n".join(lines).rstrip() + "\n", True
+
+
+def _ensure_related_overview_link(text: str, overview_relative: Path) -> tuple[str, bool]:
+    return _ensure_related_link(text, overview_relative, display="Overview")
+
+
+def _structure_cleanup_anchor_index(lines: list[str]) -> int:
+    anchor_patterns = [
+        re.compile(r"^\s*##\s+Archive", re.IGNORECASE),
+        re.compile(r"^\s*##\s+Dev Log Archive", re.IGNORECASE),
+        re.compile(r"^\s*##\s+Cross-References", re.IGNORECASE),
+        re.compile(r"^\s*##\s+External Links", re.IGNORECASE),
+        re.compile(r"^\s*##\s+Document Status Legend", re.IGNORECASE),
+        re.compile(r"^\s*\*\*Last Updated\*\*", re.IGNORECASE),
+    ]
+    for index, line in enumerate(lines):
+        if any(pattern.match(line) for pattern in anchor_patterns):
+            return index
+    return len(lines)
+
+
+def _ensure_overview_cleanup_links(text: str, note_relatives: list[Path]) -> tuple[str, bool]:
+    desired_lines = [f"- {_structure_note_link(path)}" for path in sorted(note_relatives, key=lambda p: p.as_posix())]
+    if not desired_lines:
+        return text, False
+
+    lines = text.splitlines()
+    bounds = _find_section_bounds(lines, "Structure Cleanup Inbox")
+    changed = False
+
+    if bounds is not None:
+        start, end = bounds
+        section_body = lines[start + 1:end]
+        insert_body = list(section_body)
+        existing_text = "\n".join(section_body)
+        for link_line in desired_lines:
+            if link_line not in existing_text:
+                if insert_body and insert_body[-1].strip():
+                    insert_body.append("")
+                insert_body.append(link_line)
+                changed = True
+        if not changed:
+            return text, False
+        lines = lines[:start + 1] + insert_body + lines[end:]
+        return "\n".join(lines).rstrip() + "\n", True
+
+    insert_at = _structure_cleanup_anchor_index(lines)
+    section = [
+        "## Structure Cleanup Inbox",
+        "",
+        "Auto-generated candidates that still need manual placement in this MOC.",
+        "",
+        *desired_lines,
+        "",
+    ]
+    if insert_at > 0 and lines[insert_at - 1].strip():
+        section.insert(0, "")
+    lines = lines[:insert_at] + section + lines[insert_at:]
+    return "\n".join(lines).rstrip() + "\n", True
+
+
+def _fallback_hub_for_path(relative_path: Path) -> Path | None:
+    if relative_path in {
+        STRUCTURE_ROOT_HUB,
+        STRUCTURE_PROMPT_HUB,
+        STRUCTURE_CMUX_HUB,
+        Path(STRUCTURE_REPORT_DEFAULT),
+    }:
+        return None
+    if relative_path.parts and relative_path.parts[0] == "prompts":
+        return STRUCTURE_PROMPT_HUB
+    if relative_path.parts and relative_path.parts[0] == "cmux":
+        return STRUCTURE_CMUX_HUB
+    if relative_path.parts and relative_path.parts[0] in {"100-Templates", "3️⃣-Plugins", "agent-skills", "1️⃣-Index"}:
+        return STRUCTURE_ROOT_HUB
+    if len(relative_path.parts) == 1:
+        return STRUCTURE_ROOT_HUB
+    return None
+
+
+def _skip_hub_backlink(relative_path: Path) -> bool:
+    if relative_path in {
+        Path("AGENTS.md"),
+        Path("CLAUDE.md"),
+        Path("README.md"),
+        Path("agent-skills/skills/obsidian-gh-knowledge/AGENTS.md"),
+        Path("agent-skills/skills/obsidian-gh-knowledge/SKILL.md"),
+        Path("agent-skills/skills/obsidian-gh-knowledge/references/obsidian-organizer.md"),
+        Path("1️⃣-Index/CLAUDE.md"),
+    }:
+        return True
+    return False
+
+
+def _hub_title(relative_path: Path) -> str:
+    if relative_path == STRUCTURE_ROOT_HUB:
+        return "Vault Operations Index"
+    if relative_path == STRUCTURE_PROMPT_HUB:
+        return "Prompt Library"
+    if relative_path == STRUCTURE_CMUX_HUB:
+        return "cmux Local Workflows Index"
+    return relative_path.stem
+
+
+def _hub_summary(relative_path: Path) -> list[str]:
+    if relative_path == STRUCTURE_ROOT_HUB:
+        return [
+            "- Central index for root docs, local operational notes, plugins, templates, and skill references that do not belong in project MOCs.",
+            "- Generated by `structure-fix` so non-project notes have a stable navigation anchor.",
+        ]
+    if relative_path == STRUCTURE_PROMPT_HUB:
+        return [
+            "- Central index for reusable research and bootstrap prompts stored in `prompts/`.",
+            "- Use this note as the navigation anchor for prompt notes that are intentionally outside project folders.",
+        ]
+    if relative_path == STRUCTURE_CMUX_HUB:
+        return [
+            "- Central index for local `cmux/` workflow notes that are not stored under the main project MOC tree.",
+            "- Use this note to keep scratchpad and workflow-specific cmux notes linked into the vault graph.",
+        ]
+    return ["- Auto-generated structure hub."]
+
+
+def _hub_group_label(relative_path: Path) -> str:
+    if len(relative_path.parts) == 1:
+        return "Root Notes"
+    top = relative_path.parts[0]
+    mapping = {
+        "1️⃣-Index": "Index Notes",
+        "3️⃣-Plugins": "Plugin Notes",
+        "100-Templates": "Templates",
+        "agent-skills": "Local Skill Docs",
+        "prompts": "Prompt Notes",
+        "cmux": "cmux Local Notes",
+    }
+    return mapping.get(top, top)
+
+
+def _hub_note_markdown(relative_path: Path, note_paths: list[Path]) -> str:
+    title = _hub_title(relative_path)
+    grouped: dict[str, list[Path]] = defaultdict(list)
+    for note_path in sorted(note_paths, key=lambda p: p.as_posix()):
+        grouped[_hub_group_label(note_path)].append(note_path)
+
+    lines = [
+        f"# {title}",
+        "",
+        "## TL;DR",
+        *_hub_summary(relative_path),
+        "",
+    ]
+    for heading, paths in sorted(grouped.items()):
+        lines.extend([f"## {heading}", ""])
+        for path in paths:
+            lines.append(f"- {_structure_note_link(path)}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _doctor_data(vault_dir: Path) -> dict:
@@ -1198,6 +1442,102 @@ def _structure_report(
         print(f"Wrote report: {output_relative.as_posix()}")
 
 
+def _structure_fix(vault_dir: Path, *, dry_run: bool, limit: int) -> None:
+    analysis = _structure_analysis(vault_dir, exclude_relative=Path(STRUCTURE_REPORT_DEFAULT))
+    deadend_candidates = [
+        path
+        for path in analysis["deadends"]
+        if analysis["overview_map"].get(path) is not None
+    ]
+    hub_note_groups: dict[Path, list[Path]] = defaultdict(list)
+    for path in sorted(set(analysis["orphans"]) | set(analysis["deadends"])):
+        hub = _fallback_hub_for_path(path)
+        if hub is not None:
+            hub_note_groups[hub].append(path)
+    orphan_groups: dict[Path, list[Path]] = defaultdict(list)
+    for path in analysis["orphans"]:
+        overview = analysis["overview_map"].get(path)
+        if overview is not None:
+            orphan_groups[overview].append(path)
+    hub_backlink_candidates = sorted(
+        {
+            note_path.as_posix()
+            for hub_path, note_paths in hub_note_groups.items()
+            for note_path in note_paths
+            if not _skip_hub_backlink(note_path)
+        }
+    )
+
+    planned_note_updates: list[str] = []
+    planned_overview_updates: list[str] = []
+    planned_hub_updates: list[str] = []
+
+    if not dry_run:
+        for path in deadend_candidates:
+            overview = analysis["overview_map"][path]
+            note_abs = vault_dir / path
+            text = note_abs.read_text(encoding="utf-8")
+            updated_text, changed = _ensure_related_overview_link(text, overview)
+            if changed:
+                note_abs.write_text(updated_text, encoding="utf-8")
+                planned_note_updates.append(path.as_posix())
+
+        for overview, note_paths in sorted(orphan_groups.items(), key=lambda item: item[0].as_posix()):
+            overview_abs = vault_dir / overview
+            text = overview_abs.read_text(encoding="utf-8")
+            updated_text, changed = _ensure_overview_cleanup_links(text, note_paths)
+            if changed:
+                overview_abs.write_text(updated_text, encoding="utf-8")
+                planned_overview_updates.append(overview.as_posix())
+
+        for hub_path, note_paths in sorted(hub_note_groups.items(), key=lambda item: item[0].as_posix()):
+            hub_abs = vault_dir / hub_path
+            hub_abs.parent.mkdir(parents=True, exist_ok=True)
+            hub_abs.write_text(_hub_note_markdown(hub_path, note_paths), encoding="utf-8")
+            planned_hub_updates.append(hub_path.as_posix())
+
+        for hub_path, note_paths in sorted(hub_note_groups.items(), key=lambda item: item[0].as_posix()):
+            for note_path in note_paths:
+                if _skip_hub_backlink(note_path):
+                    continue
+                note_abs = vault_dir / note_path
+                text = note_abs.read_text(encoding="utf-8")
+                updated_text, changed = _ensure_related_link(text, hub_path, display=_hub_title(hub_path))
+                if changed:
+                    note_abs.write_text(updated_text, encoding="utf-8")
+                    if note_path.as_posix() not in planned_note_updates:
+                        planned_note_updates.append(note_path.as_posix())
+    else:
+        planned_note_updates = sorted({path.as_posix() for path in deadend_candidates} | set(hub_backlink_candidates))
+        planned_overview_updates = [path.as_posix() for path in sorted(orphan_groups)]
+        planned_hub_updates = [path.as_posix() for path in sorted(hub_note_groups)]
+
+    print(f"Dead-end notes with overview candidates: {len(deadend_candidates)}")
+    print(f"Overview files with orphan note candidates: {len(orphan_groups)}")
+    print(f"Fallback hub notes: {len(hub_note_groups)}")
+    action_label = "Would update note links" if dry_run else "Updated note links"
+    print(f"{action_label}: {len(planned_note_updates)}")
+    if planned_note_updates:
+        for path in planned_note_updates[:limit]:
+            print(f"  - {path}")
+        remaining = len(planned_note_updates) - limit
+        if remaining > 0:
+            print(f"  - ... {remaining} more")
+    action_label = "Would update overviews" if dry_run else "Updated overviews"
+    print(f"{action_label}: {len(planned_overview_updates)}")
+    if planned_overview_updates:
+        for path in planned_overview_updates[:limit]:
+            print(f"  - {path}")
+        remaining = len(planned_overview_updates) - limit
+        if remaining > 0:
+            print(f"  - ... {remaining} more")
+    action_label = "Would update hubs" if dry_run else "Updated hubs"
+    print(f"{action_label}: {len(planned_hub_updates)}")
+    if planned_hub_updates:
+        for path in planned_hub_updates[:limit]:
+            print(f"  - {path}")
+
+
 def _capture_note(
     vault_dir: Path,
     *,
@@ -1400,6 +1740,18 @@ def _parse_args() -> argparse.Namespace:
         help=f"Vault-relative markdown report path. Default: {STRUCTURE_REPORT_DEFAULT}",
     )
 
+    structure_fix_parser = subparsers.add_parser(
+        "structure-fix",
+        help="Apply high-confidence structure fixes using local project overviews",
+    )
+    structure_fix_parser.add_argument("--dry-run", action="store_true", help="List planned updates without editing files")
+    structure_fix_parser.add_argument(
+        "--limit",
+        type=int,
+        default=12,
+        help="Number of sample file paths to print",
+    )
+
     capture_parser = subparsers.add_parser("capture", help="Create a new note in Inbox or another folder")
     capture_parser.add_argument("title", help="Human title for the note")
     capture_parser.add_argument("--folder", default=INBOX_DIR, help=f"Target folder. Default: {INBOX_DIR}")
@@ -1495,6 +1847,14 @@ def main() -> None:
             limit=args.limit,
             hotspot_limit=args.hotspot_limit,
             output_path=args.output_path,
+        )
+        return
+
+    if args.command == "structure-fix":
+        _structure_fix(
+            vault_dir,
+            dry_run=args.dry_run,
+            limit=args.limit,
         )
         return
 
