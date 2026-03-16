@@ -493,3 +493,7 @@ Config shape:
 ## Workflow reference
 
 See `references/obsidian-organizer.md` for concrete note-organization workflow patterns.
+
+## Related
+
+- [[1️⃣-Index/vault-operations-index|Vault Operations Index]]

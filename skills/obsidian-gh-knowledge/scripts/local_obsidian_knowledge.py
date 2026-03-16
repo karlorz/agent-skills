@@ -476,6 +476,14 @@ def _structure_note_link(relative_path: Path, *, display: str | None = None) -> 
     return f"[[{target}|{label}]]"
 
 
+def _markdown_note_link(source_relative: Path, target_relative: Path, *, display: str | None = None) -> str:
+    source_parent = source_relative.parent.as_posix()
+    start = source_parent if source_parent not in {"", "."} else "."
+    target = os.path.relpath(target_relative.as_posix(), start=start).replace("\\", "/")
+    label = display or target_relative.stem
+    return f"[{label}]({target})"
+
+
 def _structure_overview_path(relative_path: Path, note_paths: set[str]) -> Path | None:
     for parent in [relative_path.parent, *relative_path.parents]:
         if str(parent) in {"", "."}:
@@ -911,12 +919,7 @@ def _fallback_hub_for_path(relative_path: Path) -> Path | None:
 
 def _skip_hub_backlink(relative_path: Path) -> bool:
     if relative_path in {
-        Path("AGENTS.md"),
         Path("CLAUDE.md"),
-        Path("README.md"),
-        Path("agent-skills/skills/obsidian-gh-knowledge/AGENTS.md"),
-        Path("agent-skills/skills/obsidian-gh-knowledge/SKILL.md"),
-        Path("agent-skills/skills/obsidian-gh-knowledge/references/obsidian-organizer.md"),
         Path("1️⃣-Index/CLAUDE.md"),
     }:
         return True
@@ -983,7 +986,10 @@ def _hub_note_markdown(relative_path: Path, note_paths: list[Path]) -> str:
     for heading, paths in sorted(grouped.items()):
         lines.extend([f"## {heading}", ""])
         for path in paths:
-            lines.append(f"- {_structure_note_link(path)}")
+            if relative_path.parent != Path(".") and path.parent == Path("."):
+                lines.append(f"- {_markdown_note_link(relative_path, path)}")
+            else:
+                lines.append(f"- {_structure_note_link(path)}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

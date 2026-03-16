@@ -61,3 +61,7 @@ This keeps the workflow inside Obsidian so file moves and renames are driven by 
 ## Remote GitHub Fallback
 
 If local Obsidian CLI access is unavailable, fall back to the GitHub workflow below.
+
+## Related
+
+- [[1️⃣-Index/vault-operations-index|Vault Operations Index]]

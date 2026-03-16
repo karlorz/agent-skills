@@ -28,3 +28,7 @@ This folder is the source for the `obsidian-gh-knowledge` skill.
 - `scripts/local_obsidian_knowledge.py`: Repo-specific local macOS wrapper around the official Obsidian CLI for health checks, one-click vault review, stricter vault audits, bulk TL;DR normalization, local structure cleanup reporting/fixes, note capture, project-scoped note creation, note organization, and git sync.
 - `scripts/github_knowledge_skill.py`: GitHub-backed single-file operations.
 - `references/obsidian-organizer.md`: Organizing workflow reference.
+
+## Related
+
+- [[1️⃣-Index/vault-operations-index|Vault Operations Index]]
