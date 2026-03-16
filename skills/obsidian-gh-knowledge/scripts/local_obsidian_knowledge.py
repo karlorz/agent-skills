@@ -8,6 +8,8 @@ import re
 import shutil
 import subprocess
 import sys
+from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -55,11 +57,14 @@ TLDR_SKIP_FILE_NAMES = {
     "CLAUDE.md",
     "_Overview.md",
 }
+STRUCTURE_REPORT_DEFAULT = "1️⃣-Index/vault-structure-cleanup-report.md"
 PROJECT_DIR_SKIP_NAMES = {
     "archive",
     "_archive",
 }
 TLDR_PATTERN = re.compile(r"^\s*##\s+TL;DR\s*$", re.IGNORECASE)
+WIKILINK_PATTERN = re.compile(r"!?\[\[([^\]]+)\]\]")
+MARKDOWN_LINK_PATTERN = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
 
 def _expand_path(path: str) -> str:
@@ -439,6 +444,304 @@ def _insert_tldr(text: str) -> str:
     before.extend(after)
     new_text = "\n".join(before).rstrip() + "\n"
     return new_text
+
+
+def _collapse_relative_link(base: Path, target: str) -> Path | None:
+    combined = base / Path(target)
+    parts: list[str] = []
+    for part in combined.parts:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not parts:
+                return None
+            parts.pop()
+            continue
+        parts.append(part)
+    if not parts:
+        return None
+    return Path(*parts)
+
+
+def _structure_note_link(relative_path: Path, *, display: str | None = None) -> str:
+    target = relative_path.with_suffix("").as_posix()
+    label = display or relative_path.stem
+    return f"[[{target}|{label}]]"
+
+
+def _structure_overview_path(relative_path: Path, note_paths: set[str]) -> Path | None:
+    for parent in [relative_path.parent, *relative_path.parents]:
+        if str(parent) in {"", "."}:
+            continue
+        candidate = parent / "_Overview.md"
+        if candidate.as_posix() in note_paths:
+            return candidate
+    return None
+
+
+def _resolve_note_target(
+    source_relative: Path,
+    target: str,
+    *,
+    note_paths: set[str],
+    root_path_map: dict[str, Path],
+    basename_map: dict[str, list[Path]],
+) -> Path | None:
+    cleaned = target.strip().replace("\\", "/")
+    if not cleaned:
+        return None
+    cleaned = cleaned.split("|", 1)[0].strip()
+    cleaned = cleaned.split("#", 1)[0].strip()
+    cleaned = cleaned.split("^", 1)[0].strip()
+    if not cleaned:
+        return None
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", cleaned):
+        return None
+    if cleaned.startswith(("mailto:", "#")):
+        return None
+
+    extension = Path(cleaned).suffix.lower()
+    if extension and extension != ".md":
+        return None
+
+    candidates: list[Path] = []
+    direct_keys: list[str] = []
+    if cleaned.startswith("/"):
+        direct_keys.append(cleaned.lstrip("/"))
+    elif cleaned.startswith(("./", "../")):
+        resolved = _collapse_relative_link(source_relative.parent, cleaned)
+        if resolved is not None:
+            direct_keys.append(resolved.as_posix())
+    elif "/" in cleaned:
+        direct_keys.append(cleaned)
+
+    for key in direct_keys:
+        normalized = key[:-3] if key.lower().endswith(".md") else key
+        if key in root_path_map:
+            candidates.append(root_path_map[key])
+        md_key = f"{normalized}.md"
+        if md_key in root_path_map:
+            candidates.append(root_path_map[md_key])
+
+    if not candidates:
+        basename = Path(cleaned).stem if extension == ".md" else cleaned
+        basename_key = basename.lower()
+        candidates = list(basename_map.get(basename_key, []))
+
+    if not candidates:
+        return None
+
+    unique_candidates = sorted({candidate.as_posix(): candidate for candidate in candidates}.values(), key=lambda p: (
+        p.parent != source_relative.parent,
+        p.parts[:2] != source_relative.parts[:2],
+        len(p.parts),
+        p.as_posix(),
+    ))
+    resolved = unique_candidates[0]
+    if resolved.as_posix() not in note_paths or resolved == source_relative:
+        return None
+    return resolved
+
+
+def _extract_note_targets(
+    text: str,
+    source_relative: Path,
+    *,
+    note_paths: set[str],
+    root_path_map: dict[str, Path],
+    basename_map: dict[str, list[Path]],
+) -> set[Path]:
+    targets: set[Path] = set()
+    for match in WIKILINK_PATTERN.finditer(text):
+        resolved = _resolve_note_target(
+            source_relative,
+            match.group(1),
+            note_paths=note_paths,
+            root_path_map=root_path_map,
+            basename_map=basename_map,
+        )
+        if resolved is not None and resolved != source_relative:
+            targets.add(resolved)
+
+    for match in MARKDOWN_LINK_PATTERN.finditer(text):
+        resolved = _resolve_note_target(
+            source_relative,
+            match.group(1),
+            note_paths=note_paths,
+            root_path_map=root_path_map,
+            basename_map=basename_map,
+        )
+        if resolved is not None and resolved != source_relative:
+            targets.add(resolved)
+    return targets
+
+
+def _folder_counts(paths: list[Path]) -> list[dict[str, object]]:
+    counts = Counter(path.parent.as_posix() for path in paths)
+    return [
+        {"folder": folder, "count": count}
+        for folder, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _structure_report_data(vault_dir: Path, *, output_relative: Path, limit: int, hotspot_limit: int) -> dict:
+    note_paths_list = [
+        relative_path
+        for relative_path in _iter_audit_markdown_files(vault_dir)
+        if relative_path != output_relative
+    ]
+    note_paths = {path.as_posix() for path in note_paths_list}
+    root_path_map = {path.as_posix(): path for path in note_paths_list}
+    basename_map: dict[str, list[Path]] = defaultdict(list)
+    for path in note_paths_list:
+        basename_map[path.stem.lower()].append(path)
+
+    outgoing_map: dict[Path, set[Path]] = {}
+    inbound_map: dict[Path, set[Path]] = {path: set() for path in note_paths_list}
+    read_errors: list[dict[str, str]] = []
+
+    for relative_path in note_paths_list:
+        path = vault_dir / relative_path
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            read_errors.append({"path": relative_path.as_posix(), "error": str(exc)})
+            outgoing_map[relative_path] = set()
+            continue
+        targets = _extract_note_targets(
+            text,
+            relative_path,
+            note_paths=note_paths,
+            root_path_map=root_path_map,
+            basename_map=basename_map,
+        )
+        outgoing_map[relative_path] = targets
+        for target in targets:
+            inbound_map.setdefault(target, set()).add(relative_path)
+
+    orphans = sorted(path for path in note_paths_list if not inbound_map.get(path))
+    deadends = sorted(path for path in note_paths_list if not outgoing_map.get(path))
+    isolated = sorted(path for path in note_paths_list if path in orphans and path in deadends)
+
+    def _sample_rows(paths: list[Path]) -> list[dict[str, str]]:
+        rows: list[dict[str, str]] = []
+        for path in paths[:limit]:
+            overview = _structure_overview_path(path, note_paths)
+            rows.append(
+                {
+                    "path": path.as_posix(),
+                    "folder": path.parent.as_posix(),
+                    "overview": overview.as_posix() if overview else "",
+                    "note_link": _structure_note_link(path),
+                    "overview_link": _structure_note_link(overview, display="Overview") if overview else "—",
+                }
+            )
+        return rows
+
+    orphan_hotspots = _folder_counts(orphans)[:hotspot_limit]
+    deadend_hotspots = _folder_counts(deadends)[:hotspot_limit]
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    return {
+        "generated_at": timestamp,
+        "scope": {
+            "notes_analyzed": len(note_paths_list),
+            "output_path": output_relative.as_posix(),
+            "limit": limit,
+            "hotspot_limit": hotspot_limit,
+        },
+        "counts": {
+            "orphans": len(orphans),
+            "deadends": len(deadends),
+            "isolated": len(isolated),
+        },
+        "read_errors": read_errors,
+        "orphans": {
+            "hotspots": orphan_hotspots,
+            "sample": _sample_rows(orphans),
+        },
+        "deadends": {
+            "hotspots": deadend_hotspots,
+            "sample": _sample_rows(deadends),
+        },
+        "isolated": {
+            "sample": _sample_rows(isolated),
+        },
+    }
+
+
+def _structure_report_markdown(data: dict) -> str:
+    counts = data["counts"]
+    scope = data["scope"]
+    orphan_hotspots = data["orphans"]["hotspots"]
+    deadend_hotspots = data["deadends"]["hotspots"]
+    isolated_sample = data["isolated"]["sample"]
+    orphan_sample = data["orphans"]["sample"]
+    deadend_sample = data["deadends"]["sample"]
+
+    lines = [
+        "# Vault Structure Cleanup Report",
+        "",
+        "## TL;DR",
+        f"- Active-scope note graph analyzed **{scope['notes_analyzed']}** markdown notes.",
+        f"- **{counts['isolated']}** notes are fully isolated, **{counts['orphans']}** have no inbound links, and **{counts['deadends']}** have no outbound links.",
+        f"- Report generated on **{data['generated_at']}** and excludes archive, attachment, hidden, and generated-report paths.",
+        "",
+        "## Scope",
+        "- Excludes `archive`, `_archive`, attachments/assets, hidden/system folders, and the generated cleanup report itself.",
+        "- Uses local Markdown link parsing for wikilinks and internal markdown paths, not the unstable live Obsidian orphan/dead-end list commands.",
+        "",
+        "## Hotspots",
+        "",
+        "### Orphan Hotspots",
+        "| Folder | Count |",
+        "| --- | ---: |",
+    ]
+    if orphan_hotspots:
+        for item in orphan_hotspots:
+            lines.append(f"| `{item['folder']}` | {item['count']} |")
+    else:
+        lines.append("| none | 0 |")
+
+    lines.extend([
+        "",
+        "### Dead-End Hotspots",
+        "| Folder | Count |",
+        "| --- | ---: |",
+    ])
+    if deadend_hotspots:
+        for item in deadend_hotspots:
+            lines.append(f"| `{item['folder']}` | {item['count']} |")
+    else:
+        lines.append("| none | 0 |")
+
+    def _append_rows(title: str, rows: list[dict[str, str]]) -> None:
+        lines.extend([
+            "",
+            f"## {title}",
+            "| Note | Folder | Suggested Overview |",
+            "| --- | --- | --- |",
+        ])
+        if rows:
+            for row in rows:
+                lines.append(f"| {row['note_link']} | `{row['folder']}` | {row['overview_link']} |")
+        else:
+            lines.append("| none | — | — |")
+
+    _append_rows("Priority Isolated Notes", isolated_sample)
+    _append_rows("Orphan Note Samples", orphan_sample)
+    _append_rows("Dead-End Note Samples", deadend_sample)
+
+    lines.extend([
+        "",
+        "## Suggested Actions",
+        "- Add isolated and orphan notes to the nearest `_Overview.md` first; that gives them an inbound anchor without restructuring the whole vault.",
+        "- Add a small `## Related` section to dead-end notes with the local `_Overview.md` and one or two sibling notes.",
+        "- Re-run `structure-report` after each cleanup batch instead of relying on vault-wide totals alone.",
+        "",
+    ])
+
+    return "\n".join(lines)
 
 
 def _doctor_data(vault_dir: Path) -> dict:
@@ -858,6 +1161,43 @@ def _fix_tldr(vault_dir: Path, *, dry_run: bool, limit: int) -> None:
             print(f"  - ... {remaining} more")
 
 
+def _structure_report(
+    vault_dir: Path,
+    *,
+    json_output: bool,
+    dry_run: bool,
+    limit: int,
+    hotspot_limit: int,
+    output_path: str,
+) -> None:
+    output_relative = _normalize_relative_path(output_path, label="Output path")
+    data = _structure_report_data(
+        vault_dir,
+        output_relative=output_relative,
+        limit=limit,
+        hotspot_limit=hotspot_limit,
+    )
+    if json_output:
+        print(json.dumps(data, indent=2))
+        return
+
+    report_text = _structure_report_markdown(data)
+    output_abs = vault_dir / output_relative
+    if not dry_run:
+        output_abs.parent.mkdir(parents=True, exist_ok=True)
+        output_abs.write_text(report_text, encoding="utf-8")
+
+    counts = data["counts"]
+    print(f"Notes analyzed: {data['scope']['notes_analyzed']}")
+    print(f"Isolated notes: {counts['isolated']}")
+    print(f"Orphans: {counts['orphans']}")
+    print(f"Dead ends: {counts['deadends']}")
+    if dry_run:
+        print(f"Would write report: {output_relative.as_posix()}")
+    else:
+        print(f"Wrote report: {output_relative.as_posix()}")
+
+
 def _capture_note(
     vault_dir: Path,
     *,
@@ -1036,6 +1376,30 @@ def _parse_args() -> argparse.Namespace:
         help="Number of sample paths to print",
     )
 
+    structure_report_parser = subparsers.add_parser(
+        "structure-report",
+        help="Build a local note-graph cleanup report for orphan and dead-end notes",
+    )
+    structure_report_parser.add_argument("--json", action="store_true", help="Output JSON instead of markdown")
+    structure_report_parser.add_argument("--dry-run", action="store_true", help="Print the summary without writing the note")
+    structure_report_parser.add_argument(
+        "--limit",
+        type=int,
+        default=25,
+        help="Number of sample notes to include per report section",
+    )
+    structure_report_parser.add_argument(
+        "--hotspot-limit",
+        type=int,
+        default=10,
+        help="Number of hotspot folders to include",
+    )
+    structure_report_parser.add_argument(
+        "--output-path",
+        default=STRUCTURE_REPORT_DEFAULT,
+        help=f"Vault-relative markdown report path. Default: {STRUCTURE_REPORT_DEFAULT}",
+    )
+
     capture_parser = subparsers.add_parser("capture", help="Create a new note in Inbox or another folder")
     capture_parser.add_argument("title", help="Human title for the note")
     capture_parser.add_argument("--folder", default=INBOX_DIR, help=f"Target folder. Default: {INBOX_DIR}")
@@ -1120,6 +1484,17 @@ def main() -> None:
             vault_dir,
             dry_run=args.dry_run,
             limit=args.limit,
+        )
+        return
+
+    if args.command == "structure-report":
+        _structure_report(
+            vault_dir,
+            json_output=args.json,
+            dry_run=args.dry_run,
+            limit=args.limit,
+            hotspot_limit=args.hotspot_limit,
+            output_path=args.output_path,
         )
         return
 
