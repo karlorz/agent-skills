@@ -388,6 +388,59 @@ def _print_samples(title: str, items: list[object], *, limit: int) -> None:
         print(f"  - ... {remaining} more")
 
 
+def _missing_tldr_paths(vault_dir: Path) -> list[str]:
+    missing_tldr: list[str] = []
+    for relative_path in _iter_audit_markdown_files(vault_dir):
+        if not _should_check_tldr(relative_path):
+            continue
+        path = vault_dir / relative_path
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        lines = text.splitlines()
+        _, content_start_index, frontmatter_error = _extract_frontmatter(lines)
+        if frontmatter_error:
+            continue
+        if _find_tldr_line(lines, start_index=content_start_index) is None:
+            missing_tldr.append(relative_path.as_posix())
+    return missing_tldr
+
+
+def _insert_tldr(text: str) -> str:
+    lines = text.splitlines()
+    _, content_start_index, _ = _extract_frontmatter(lines)
+
+    insert_at: int | None = None
+    for index in range(content_start_index, len(lines)):
+        if re.match(r"^\s*##\s+", lines[index]):
+            insert_at = index
+            break
+
+    if insert_at is None:
+        for index in range(content_start_index, len(lines)):
+            if lines[index].strip():
+                if lines[index].startswith("# "):
+                    insert_at = index + 1
+                else:
+                    insert_at = index
+                break
+
+    if insert_at is None:
+        insert_at = len(lines)
+
+    before = lines[:insert_at]
+    after = lines[insert_at:]
+    while after and not after[0].strip():
+        after = after[1:]
+    if before and before[-1].strip():
+        before.append("")
+    before.extend(["## TL;DR", "- Pending summary.", ""])
+    before.extend(after)
+    new_text = "\n".join(before).rstrip() + "\n"
+    return new_text
+
+
 def _doctor_data(vault_dir: Path) -> dict:
     config = _load_config()
     help_output, help_stderr, helper_warning = _obsidian_command(vault_dir, "help")
@@ -772,6 +825,39 @@ def _audit(vault_dir: Path, *, json_output: bool, limit: int, tldr_max_line: int
         print("Warning: Obsidian printed macOS helper-app warnings, but audit commands still completed successfully.")
 
 
+def _fix_tldr(vault_dir: Path, *, dry_run: bool, limit: int) -> None:
+    missing_tldr = _missing_tldr_paths(vault_dir)
+    if dry_run:
+        print(f"Notes missing TL;DR: {len(missing_tldr)}")
+        if missing_tldr:
+            for path in missing_tldr[:limit]:
+                print(f"  - {path}")
+            remaining = len(missing_tldr) - limit
+            if remaining > 0:
+                print(f"  - ... {remaining} more")
+        else:
+            print("  - none")
+        return
+
+    updated: list[str] = []
+    for relative_path_str in missing_tldr:
+        relative_path = Path(relative_path_str)
+        path = vault_dir / relative_path
+        text = path.read_text(encoding="utf-8")
+        updated_text = _insert_tldr(text)
+        if updated_text != text:
+            path.write_text(updated_text, encoding="utf-8")
+            updated.append(relative_path_str)
+
+    print(f"Updated notes: {len(updated)}")
+    if updated:
+        for path in updated[:limit]:
+            print(f"  - {path}")
+        remaining = len(updated) - limit
+        if remaining > 0:
+            print(f"  - ... {remaining} more")
+
+
 def _capture_note(
     vault_dir: Path,
     *,
@@ -938,6 +1024,18 @@ def _parse_args() -> argparse.Namespace:
         help="Maximum number of lines after frontmatter for the TL;DR heading to count as near the top",
     )
 
+    fix_tldr_parser = subparsers.add_parser(
+        "fix-tldr",
+        help="Insert a placeholder TL;DR section into notes that are missing one",
+    )
+    fix_tldr_parser.add_argument("--dry-run", action="store_true", help="List target notes without editing them")
+    fix_tldr_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Number of sample paths to print",
+    )
+
     capture_parser = subparsers.add_parser("capture", help="Create a new note in Inbox or another folder")
     capture_parser.add_argument("title", help="Human title for the note")
     capture_parser.add_argument("--folder", default=INBOX_DIR, help=f"Target folder. Default: {INBOX_DIR}")
@@ -1014,6 +1112,14 @@ def main() -> None:
             json_output=args.json,
             limit=args.limit,
             tldr_max_line=args.tldr_max_line,
+        )
+        return
+
+    if args.command == "fix-tldr":
+        _fix_tldr(
+            vault_dir,
+            dry_run=args.dry_run,
+            limit=args.limit,
         )
         return
 

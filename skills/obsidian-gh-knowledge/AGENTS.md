@@ -20,11 +20,11 @@ This folder is the source for the `obsidian-gh-knowledge` skill.
 - Bootstrap script: `scripts/init_local_vault.py`
 - Local CLI wrapper: `scripts/local_obsidian_knowledge.py`
 - GitHub mode script: `scripts/github_knowledge_skill.py`
-- Commands: `doctor`, `dashboard`, `review`, `audit`, `capture`, `project-note`, `organize`, `sync`, plus GitHub-mode `list`, `read`, `search`, `move`, `copy`, `write`
+- Commands: `doctor`, `dashboard`, `review`, `audit`, `fix-tldr`, `capture`, `project-note`, `organize`, `sync`, plus GitHub-mode `list`, `read`, `search`, `move`, `copy`, `write`
 
 ## Files
 
 - `scripts/init_local_vault.py`: Clone a confirmed vault repo into `~/Documents/<repo-name>` and wire local config for first-run setup.
-- `scripts/local_obsidian_knowledge.py`: Repo-specific local macOS wrapper around the official Obsidian CLI for health checks, one-click vault review, stricter vault audits, note capture, project-scoped note creation, note organization, and git sync.
+- `scripts/local_obsidian_knowledge.py`: Repo-specific local macOS wrapper around the official Obsidian CLI for health checks, one-click vault review, stricter vault audits, bulk TL;DR normalization, note capture, project-scoped note creation, note organization, and git sync.
 - `scripts/github_knowledge_skill.py`: GitHub-backed single-file operations.
 - `references/obsidian-organizer.md`: Organizing workflow reference.
