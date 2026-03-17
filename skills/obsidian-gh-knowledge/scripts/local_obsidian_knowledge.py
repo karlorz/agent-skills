@@ -611,6 +611,23 @@ def _folder_counts(paths: list[Path]) -> list[dict[str, object]]:
     ]
 
 
+def _folder_active_markdown_paths(vault_dir: Path, folder_relative: str) -> list[Path]:
+    folder_path = vault_dir / folder_relative
+    if not folder_path.is_dir():
+        return []
+
+    paths: list[Path] = []
+    for path in folder_path.rglob("*.md"):
+        if not _is_regular_markdown_file(path):
+            continue
+        relative_path = path.relative_to(vault_dir)
+        nested_parts = relative_path.parts[1:-1]
+        if any(part.startswith(".") or part in {"archive", "_archive"} for part in nested_parts):
+            continue
+        paths.append(relative_path)
+    return sorted(paths)
+
+
 def _normalize_dedupe_key(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip()).lower()
 
@@ -1254,24 +1271,22 @@ def _doctor(vault_dir: Path, *, json_output: bool) -> None:
 
 
 def _dashboard_data(vault_dir: Path, *, tags_limit: int) -> dict:
+    inbox_paths = _folder_active_markdown_paths(vault_dir, INBOX_DIR)
+    draft_paths = _folder_active_markdown_paths(vault_dir, DRAFTS_DIR)
     stats = {
         "vault": (vault_dir.name),
         "path": str(vault_dir),
         "files": _int_output(_obsidian_command(vault_dir, "files", "total")[0], label="files"),
         "folders": _int_output(_obsidian_command(vault_dir, "folders", "total")[0], label="folders"),
-        "inbox_notes": _int_output(
-            _obsidian_command(vault_dir, "files", f"folder={INBOX_DIR}", "ext=md", "total")[0],
-            label="inbox notes",
-        ),
-        "draft_notes": _int_output(
-            _obsidian_command(vault_dir, "files", f"folder={DRAFTS_DIR}", "ext=md", "total")[0],
-            label="draft notes",
-        ),
+        "inbox_notes": len(inbox_paths),
+        "draft_notes": len(draft_paths),
         "orphans": _int_output(_obsidian_command(vault_dir, "orphans", "total")[0], label="orphans"),
         "deadends": _int_output(_obsidian_command(vault_dir, "deadends", "total")[0], label="deadends"),
         "unresolved_links": _int_output(
             _obsidian_command(vault_dir, "unresolved", "total")[0], label="unresolved links"
         ),
+        "inbox_paths": [path.as_posix() for path in inbox_paths],
+        "draft_paths": [path.as_posix() for path in draft_paths],
     }
     tags, helper_warning = _json_command(vault_dir, "tags", "counts", "format=json", label="obsidian tags")
     top_tags = sorted(
@@ -1461,7 +1476,19 @@ def _simplify_review_data(
     basename_duplicates = _duplicate_basename_groups(analysis["note_paths_list"])
     alias_duplicates = _duplicate_alias_groups(vault_dir, analysis["note_paths_list"])
 
-    flags = list(review["flags"])
+    flags: list[str] = []
+    for flag in review["flags"]:
+        if (
+            "missing inbound links in the full-vault graph" in flag
+            and structure["counts"]["orphans"] == 0
+            and structure["counts"]["isolated"] == 0
+        ):
+            flags.append(
+                f"{review['dashboard']['orphans']} {_pluralize(review['dashboard']['orphans'], 'note')} {_be_verb(review['dashboard']['orphans'])} missing inbound links in Obsidian's full-vault graph, but the active simplify-review scope is clean."
+            )
+            continue
+        flags.append(flag)
+
     for flag in audit["flags"]:
         if "unresolved link" in flag.lower() and review["dashboard"]["unresolved_links"] > 0:
             continue
@@ -1498,6 +1525,10 @@ def _simplify_review_data(
             "alias_groups": len(alias_duplicates),
             "alias_scan_enabled": yaml is not None,
         },
+        "workflow": {
+            "inbox_paths": list(review["dashboard"].get("inbox_paths", [])),
+            "draft_paths": list(review["dashboard"].get("draft_paths", [])),
+        },
         "flags": deduped_flags,
         "ok": not deduped_flags,
     }
@@ -1508,6 +1539,7 @@ def _simplify_review_markdown(data: dict, *, dedupe_limit: int) -> str:
     audit = data["audit"]
     structure = data["structure"]
     dedupe = data["dedupe"]
+    workflow = data["workflow"]
     doctor = review["doctor"]
     dashboard = review["dashboard"]
 
@@ -1528,8 +1560,30 @@ def _simplify_review_markdown(data: dict, *, dedupe_limit: int) -> str:
         f"- Open tasks: **{review['tasks']['todo']}**",
         f"- Done tasks: **{review['tasks']['done']}**",
         "",
-        "## Active Flags",
+        "## Triage Queues",
+        "",
+        "### Inbox",
     ]
+    if workflow["inbox_paths"]:
+        for path in workflow["inbox_paths"]:
+            lines.append(f"- {_structure_note_link(Path(path))}")
+    else:
+        lines.append("- none")
+
+    lines.extend([
+        "",
+        "### Drafts",
+    ])
+    if workflow["draft_paths"]:
+        for path in workflow["draft_paths"]:
+            lines.append(f"- {_structure_note_link(Path(path))}")
+    else:
+        lines.append("- none")
+
+    lines.extend([
+        "",
+        "## Active Flags",
+    ])
     if data["flags"]:
         lines.append("")
         for flag in data["flags"]:
