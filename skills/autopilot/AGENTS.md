@@ -4,42 +4,30 @@ This folder is the source for the `autopilot` skill.
 
 ## Operating Rules
 
-- The source-of-truth files for repo-local installs live inside this bundle under `templates/`.
-- The installer entrypoint is `scripts/install_repo_local_autopilot.py`.
-- Keep the bundle self-contained so a fresh workspace clone can install it without any external checkout.
-- Install into a target repository's local `.claude/` directory only. Do not install into `~/.claude/`.
-- The installed hook commands must use repo-local paths: `"$CLAUDE_PROJECT_DIR"/.claude/...`.
-- The installer must be idempotent: re-running it must not duplicate hook entries or re-add duplicate files.
-- The installer should fail clearly if required runtime commands are unavailable: `jq` plus either `shasum` or `sha256sum`.
-- Preserve unrelated entries in the target repo's `.claude/settings.json`, including other hook commands and non-hook settings.
-- Keep the autopilot Stop hook first in the Stop hook chain so downstream hooks can observe the blocked flag correctly.
-- If the target settings file already defines `AUTOPILOT_KEEP_RUNNING_DISABLED` or `CLAUDE_AUTOPILOT_MAX_TURNS`, preserve the user's existing values.
-- Keep reset behavior aligned with hook state. A full reset should clear turn, stop, blocked, completed, idle, and state files for the session.
+- Treat the first-release repo-local Codex bundle in `/Users/karlchow/Desktop/code/trends/.codex` as the preferred simplicity baseline.
+- Prefer these files when updating the skill or validating current behavior:
+  - `/Users/karlchow/Desktop/code/trends/.codex/config.toml`
+  - `/Users/karlchow/Desktop/code/trends/.codex/hooks.json`
+  - `/Users/karlchow/Desktop/code/trends/.codex/hooks/autopilot-stop.sh`
+  - `/Users/karlchow/Desktop/code/trends/.codex/hooks/session-start.sh`
+  - `/Users/karlchow/Desktop/code/trends/.codex/skills/autopilot_reset/SKILL.md`
+  - `/Users/karlchow/Desktop/code/trends/scripts/hooks/cmux-autopilot-stop-core.sh`
+  - `/Users/karlchow/Desktop/code/trends/scripts/hooks/cmux-session-start-core.sh`
+  - `/Users/karlchow/Desktop/code/trends/scripts/autopilot-reset.sh`
+- Keep Codex autopilot repo-local and explicit: `.codex/config.toml` enables hooks, `.codex/hooks.json` wires repo-local shims, and `.codex/skills/autopilot_reset/SKILL.md` stays tiny.
+- Keep hook shims thin. The real behavior lives in the shared repo scripts under `scripts/hooks/` and `scripts/autopilot-reset.sh`.
+- Treat same-session continuation as a separate problem. For that, prefer `ralph-loop` instead of expanding autopilot.
+- Treat Claude Code built-in loop surfaces as better defaults for Claude. Do not present the legacy `.claude` autopilot bundle as the preferred workflow unless the user explicitly asks for Claude compatibility work.
+- Do not center the skill on managed `~/.codex/hooks.json` or a user-level installer unless the user explicitly asks for that path.
+- Treat `templates/` and `scripts/install_repo_local_autopilot.py` in this bundle as legacy Claude `.claude` support only.
 
-## Installed Files
+## Legacy Files
 
-- `.claude/hooks/autopilot-keep-running.sh`
-- `.claude/hooks/session-start.sh`
-- `.claude/commands/autopilot_reset.md`
-- `.claude/settings.json` patched in place
+These bundled files still exist for explicit Claude compatibility work only:
 
-## Settings Merge Rules
+- `templates/hooks/autopilot-keep-running.sh`
+- `templates/hooks/session-start.sh`
+- `templates/commands/autopilot_reset.md`
+- `scripts/install_repo_local_autopilot.py`
 
-- `SessionStart`: ensure one repo-local `session-start.sh` command exists; append a dedicated hook entry if missing.
-- `Stop`: ensure one repo-local `autopilot-keep-running.sh` command exists and place it first.
-- Remove duplicate autopilot hook commands before inserting the canonical repo-local entry.
-- Preserve all unrelated hook groups and hook ordering outside the autopilot-specific insertion point.
-- Set `$schema` only if missing.
-- If the target `.claude/settings.json` contains invalid JSON, fail with a clear error instead of overwriting the file.
-
-## Runtime Files
-
-The installed hooks and reset command rely on these session-scoped files under `/tmp`:
-
-- `/tmp/claude-current-session-id`
-- `/tmp/claude-autopilot-turns-<session-id>`
-- `/tmp/claude-autopilot-stop-<session-id>`
-- `/tmp/claude-autopilot-blocked-<session-id>`
-- `/tmp/claude-autopilot-completed-<session-id>`
-- `/tmp/claude-autopilot-state-<session-id>`
-- `/tmp/claude-autopilot-idle-<session-id>`
+Do not use or recommend those files for Codex autopilot unless the user explicitly asks for the legacy Claude repo-local bundle.

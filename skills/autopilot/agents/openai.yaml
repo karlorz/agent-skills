@@ -1,4 +1,4 @@
 interface:
   display_name: "Autopilot"
-  short_description: "Install repo-local Claude autopilot hooks"
-  default_prompt: "Use $autopilot to install or refresh the repo-local Claude autopilot bundle in this repository."
+  short_description: "Simple repo-local Codex autopilot"
+  default_prompt: "Use $autopilot to mirror the simple repo-local Codex autopilot bundle from trends/.codex into this repo."
