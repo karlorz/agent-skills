@@ -1,4 +1,4 @@
 interface:
   display_name: "Autopilot"
-  short_description: "Simple repo-local Codex autopilot"
-  default_prompt: "Use $autopilot to mirror the simple repo-local Codex autopilot bundle from trends/.codex into this repo."
+  short_description: "Managed Codex home-hook autopilot"
+  default_prompt: "Use $autopilot to install or refresh the generic managed Codex home-hook autopilot flow, with repo-local `.codex/hooks/*.sh` overrides only when this workspace needs custom routing."
