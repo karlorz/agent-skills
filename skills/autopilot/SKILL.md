@@ -39,10 +39,9 @@ The installer copies those bundled assets into `~/.codex` so the managed home ho
 
 1. Determine whether the user wants same-session continuation or managed home-hook autopilot. If it is same-session continuation only, keep working directly in the current session instead of routing to an archived shared skill.
 2. Run the bundled installer from the installed skill directory.
-   Project install path:
+   The `skills` CLI installs this bundle under `.agents/skills/autopilot` for both project and global scope, so the usual path is:
    `.agents/skills/autopilot/scripts/install-codex-home-hooks.sh`
-   Global install path:
-   `~/.codex/skills/autopilot/scripts/install-codex-home-hooks.sh`
+   If the bundle was copied somewhere else manually, run the same installer from that installed skill folder instead.
 3. Inspect the installed managed files in `~/.codex/hooks/`, `~/.codex/autopilot/`, and `~/.codex/skills/autopilot_reset/`.
 4. When a workspace needs custom routing, add or update only `.codex/hooks/autopilot-stop.sh` and `.codex/hooks/session-start.sh`. Do not require a full repo-local `.codex` bundle just to enable Codex autopilot.
 5. For arbitrary workspaces with no `.codex` bundle, rely on the managed home fallback. SessionStart should still record the latest session ID and workspace-root tracking files, and Stop should still block through the home autopilot fallback when the cmux enable flags are set.
