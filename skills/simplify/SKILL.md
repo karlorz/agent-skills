@@ -1,6 +1,7 @@
 ---
 name: simplify
-description: Review and simplify recently changed code for reuse, clarity, and efficiency while preserving behavior. Use when the user asks to simplify, refine, polish, clean up, or make code clearer, after finishing a logical chunk of implementation that should be tightened before commit, or when asked to review changes since a specific commit or branch.
+description: Review and simplify recently changed code for reuse, clarity, and efficiency while preserving behavior. Use when the user asks to simplify, refine, polish, clean up, or make code clearer, or after finishing a logical chunk of implementation that should be tightened before commit.
+argument-hint: "[options] [focus] [<base-ref>]"
 ---
 
 # Simplify
@@ -9,28 +10,68 @@ Use this skill to improve recently changed code without changing what it does.
 
 ## Usage
 
-Use the current uncommitted diff by default.
+```
+/simplify                              # Review current uncommitted changes
+/simplify HEAD~3                       # Review changes from 3 commits ago to HEAD
+/simplify main                         # Review changes from main branch to HEAD
+/simplify abc123                       # Review changes from commit abc123 to HEAD
+/simplify focus on error handling      # Focus review on specific concerns
+/simplify focus on memory efficiency   # Focus review on memory efficiency
+```
 
-If the caller provides a base ref, compare that ref to `HEAD` before reviewing. Typical refs:
+## Modes
 
-- `HEAD~3`
-- `main`
-- a specific commit SHA
+```
+/simplify --quick           # Single-pass quick review (commit prep)
+/simplify --staged-only     # Review only staged changes
+/simplify --json            # Output findings as JSON for tooling
+/simplify --report-only     # Report findings without making changes
+```
 
-When the runtime exposes a `/simplify` command, inputs like `/simplify HEAD~3` and `/simplify main` should map to that same workflow. Otherwise, treat the requested ref as the review base inside this portable skill.
+### Mode Descriptions
+
+| Mode | Behavior |
+|------|----------|
+| `--quick` | Single-pass review focusing on high-impact issues only. Skips parallel agents. Best for quick commit prep. |
+| `--staged-only` | Only review files in git staging area (`git diff --cached`). Ignores unstaged changes. |
+| `--json` | Output findings as JSON array for CI/tooling integration. Format: `[{file, line, category, issue, suggestion}]` |
+| `--report-only` | Generate report of findings without auto-fixing. Useful for CI comments. |
+
+### Combined Usage
+
+```
+/simplify --quick --staged-only    # Quick review of staged files only
+/simplify --json --report-only     # CI-friendly JSON report
+```
 
 ## Workflow
 
+### Mode Detection
+
+First, parse the arguments to detect active modes:
+
+- `--quick`: Set `QUICK_MODE=true`
+- `--staged-only`: Set `STAGED_ONLY=true`
+- `--json`: Set `JSON_OUTPUT=true`
+- `--report-only`: Set `REPORT_ONLY=true`
+
+Any remaining argument is treated as `<base-ref>`.
+
 ### 1. Scope the review
 
-- If a base ref was provided, use `git diff <base-ref>..HEAD` to review all changes from that reference to `HEAD`.
+- If `STAGED_ONLY=true`, use `git diff --cached` to review only staged changes.
+- If a `<base-ref>` argument is provided, use `git diff <base-ref>..HEAD` to get all changes from that reference to HEAD.
 - Otherwise, prefer the current diff first.
 - Use `git diff` for unstaged changes, or `git diff HEAD` when staged changes exist and you want the full working-tree delta.
 - If there are no git changes, review files the user named or files you edited earlier in the session.
 - Keep the scope narrow unless the user asks for a broader refactor.
 
-### 2. Run three review passes
+### 2. Run review passes
 
+**Quick Mode (`QUICK_MODE=true`):**
+Do a single-pass review yourself, combining reuse, quality, and efficiency checks. Focus only on high-impact issues. Skip spawning parallel sub-agents.
+
+**Standard Mode:**
 Use parallel sub-agents when available. Give each pass the full diff or exact changed files plus enough surrounding context to make concrete recommendations. If parallel delegation is unavailable, do the same passes yourself sequentially.
 
 #### Pass A: Reuse
@@ -53,11 +94,29 @@ Use parallel sub-agents when available. Give each pass the full diff or exact ch
 - Remove repeated work, duplicate I/O, N+1 patterns, and redundant computation.
 - Parallelize independent operations when the codebase and runtime make that safe.
 - Keep hot paths lean: startup code, request handlers, render paths, tight loops, and frequently called helpers.
+- Flag recurring no-op updates: state/store updates inside polling loops, intervals, or event handlers that fire unconditionally without change-detection guards.
 - Avoid pre-checking file or resource existence when it is cleaner to perform the operation and handle the error directly.
 - Watch for unbounded collections, missing cleanup, leaked listeners, and long-lived resources that never get released.
+- Flag overly broad operations: reading entire files when only a portion is needed, loading all items when filtering for one.
 
-### 3. Fix worthwhile issues directly
+### 3. Fix or report issues
 
+**Report-Only Mode (`REPORT_ONLY=true`):**
+Do not make any changes. Instead, compile findings into a report. If `JSON_OUTPUT=true`, format as JSON array:
+
+```json
+[
+  {
+    "file": "src/example.ts",
+    "line": 42,
+    "category": "quality",
+    "issue": "Redundant state variable",
+    "suggestion": "Remove cachedValue and derive from source"
+  }
+]
+```
+
+**Standard Mode:**
 - Aggregate the findings and fix high-confidence issues that materially improve the code.
 - Skip false positives, speculative architecture changes, and low-value nits.
 - Preserve behavior, public APIs, tests, and user-visible output unless the user explicitly asked for behavioral changes.
