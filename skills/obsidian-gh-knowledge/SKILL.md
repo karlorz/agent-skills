@@ -509,4 +509,4 @@ See `references/obsidian-organizer.md` for concrete note-organization workflow p
 
 ## Related
 
-- [[1️⃣-Index/vault-operations-index|Vault Operations Index]]
+- [[vault-operations-index|Vault Operations Index]]

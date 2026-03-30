@@ -64,4 +64,4 @@ If local Obsidian CLI access is unavailable, fall back to the GitHub workflow be
 
 ## Related
 
-- [[1️⃣-Index/vault-operations-index|Vault Operations Index]]
+- [[vault-operations-index|Vault Operations Index]]

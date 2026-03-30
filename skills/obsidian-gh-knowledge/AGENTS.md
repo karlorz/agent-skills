@@ -32,4 +32,4 @@ This folder is the source for the `obsidian-gh-knowledge` skill.
 
 ## Related
 
-- [[1️⃣-Index/vault-operations-index|Vault Operations Index]]
+- [[vault-operations-index|Vault Operations Index]]
