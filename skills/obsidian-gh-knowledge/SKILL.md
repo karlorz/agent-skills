@@ -12,6 +12,7 @@ description: Bootstrap and operate an Obsidian vault with official Obsidian CLI 
 - **Project Scoping:** When working on a specific project (cmux, trends, etc.), **stay within that project's folder** under `5️⃣-Projects/GitHub/<project>/`. See "Project Scoping (CRITICAL)" section below.
 - **Local Wrapper:** Use `scripts/local_obsidian_knowledge.py` for repeatable local macOS workflows that combine Obsidian CLI operations with this vault's project rules and git sync.
 - **Raw Materials:** If the vault mounts `raw/` as a Git submodule, treat it as source-input storage rather than curated note space.
+- **Inbox Split:** `raw/inbox` is the default intake lane for external source material. `0️⃣-Inbox` is curated staging for notes that already contain synthesis and still need routing.
 - **Health Default:** Use `simplify-review` first when the vault feels hard to read or hard to trust; it reconciles full-vault Obsidian counts with active-scope graph checks and overview readability audits.
 
 ## Execution Mode Flowchart
@@ -32,6 +33,20 @@ graph TB
 ```
 
 Use this skill to bootstrap and manage an Obsidian vault safely and consistently.
+
+## Intake lane split (critical)
+
+Keep the two inboxes semantically strict:
+
+- `raw/inbox`: clipped articles, copied posts, transcripts, imported markdown, and other preserved source material.
+- `0️⃣-Inbox`: curated notes that already contain synthesis, project framing, or structured writeup but still need routing.
+
+Decision rule:
+
+- If the user wants to preserve source material itself, use `capture-raw` into `raw/inbox`.
+- If the user wants a note that already reflects reasoning or synthesis, use `capture` into `0️⃣-Inbox` or write directly into the final project folder.
+- Do not use `0️⃣-Inbox` as a raw-material dumping ground.
+- Search curated notes first and `raw/` second.
 
 ## Source of truth
 
@@ -309,8 +324,8 @@ python3 "$LOCAL_WRAPPER" fix-tldr --dry-run
 python3 "$LOCAL_WRAPPER" structure-report --dry-run
 python3 "$LOCAL_WRAPPER" structure-fix --dry-run
 python3 "$LOCAL_WRAPPER" archive-fix --dry-run
-python3 "$LOCAL_WRAPPER" capture "Quick note"
 python3 "$LOCAL_WRAPPER" capture-raw "Clipped article" --source "https://example.com/post"
+python3 "$LOCAL_WRAPPER" capture "Curated summary note"
 python3 "$LOCAL_WRAPPER" project-note cmux "Feature review"
 python3 "$LOCAL_WRAPPER" organize "0️⃣-Inbox/feature-review.md" cmux
 python3 "$LOCAL_WRAPPER" sync --message "Update vault notes"
@@ -323,7 +338,7 @@ Wrapper responsibilities:
 - Resolves the local vault path from config.
 - Reports `raw/` submodule health in `doctor` when configured.
 - Verifies the official `obsidian` CLI is available.
-- Runs a one-click `review` summary with vault health metrics, task counts, recent files, and unresolved-link samples.
+- Runs a one-click `review` summary with vault health metrics, task counts, recent files, unresolved-link samples, and explicit raw-vs-curated intake counts.
 - Treats `dashboard` and `review` orphan/dead-end numbers as Obsidian full-vault signals, not the precise cleanup scope for active notes.
 - Runs a combined `simplify-review` that layers `review`, `audit`, active-scope structure analysis, overview readability checks, and duplicate basename/alias detection into one report note.
 - Runs a stricter `audit` for required folders, project `_Overview.md` coverage, `## TL;DR` placement, oversized MOCs, stale `Structure Cleanup Inbox` backlogs, and YAML frontmatter parsing.
@@ -332,6 +347,7 @@ Wrapper responsibilities:
 - Can apply high-confidence structure fixes by linking dead-end notes to their nearest `_Overview.md` and adding orphan notes to auto-generated cleanup sections inside project MOCs.
 - Can create missing `_Archive-Index.md` notes and backlink archived notes so archive folders stay navigable without polluting active MOCs.
 - Skips the `raw/` subtree in readability and TL;DR audits because raw materials are source input, not curated notes.
+- Treats `raw/inbox` as the default intake lane for external source material and `0️⃣-Inbox` as curated staging.
 - Reads `_Overview.md` before project-scoped note creation or organization.
 - Uses `obsidian move` so note moves happen inside Obsidian instead of raw shell renames.
 - Optionally finishes with `local_vault_git_sync.py`.

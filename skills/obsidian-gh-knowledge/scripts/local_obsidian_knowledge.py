@@ -24,6 +24,7 @@ INBOX_DIR = "0️⃣-Inbox"
 DRAFTS_DIR = "2️⃣-Drafts"
 PROJECTS_ROOT = "5️⃣-Projects"
 RAW_SUBMODULE_DIR = "raw"
+RAW_INBOX_NAME = "inbox"
 HELPER_WARNING = "Unable to find helper app"
 REQUIRED_FOLDERS = (
     INBOX_DIR,
@@ -708,6 +709,24 @@ def _folder_active_markdown_paths(vault_dir: Path, folder_relative: str) -> list
             continue
         paths.append(relative_path)
     return sorted(paths)
+
+
+def _intake_lane_snapshot(vault_dir: Path, *, raw_root_relative: str = RAW_SUBMODULE_DIR) -> dict:
+    raw_root = _normalize_relative_path(raw_root_relative, label="Raw root path").as_posix()
+    raw_inbox_relative = f"{raw_root}/{RAW_INBOX_NAME}"
+    raw_inbox_paths = _folder_active_markdown_paths(vault_dir, raw_inbox_relative)
+    curated_inbox_paths = _folder_active_markdown_paths(vault_dir, INBOX_DIR)
+    draft_paths = _folder_active_markdown_paths(vault_dir, DRAFTS_DIR)
+    return {
+        "raw_root_path": raw_root,
+        "raw_inbox_path": raw_inbox_relative,
+        "raw_inbox_items": len(raw_inbox_paths),
+        "raw_inbox_paths": [path.as_posix() for path in raw_inbox_paths],
+        "curated_inbox_notes": len(curated_inbox_paths),
+        "curated_inbox_paths": [path.as_posix() for path in curated_inbox_paths],
+        "draft_notes": len(draft_paths),
+        "draft_paths": [path.as_posix() for path in draft_paths],
+    }
 
 
 def _normalize_dedupe_key(value: str) -> str:
@@ -1398,23 +1417,29 @@ def _doctor(vault_dir: Path, *, json_output: bool) -> None:
 
 
 def _dashboard_data(vault_dir: Path, *, tags_limit: int) -> dict:
-    inbox_paths = _folder_active_markdown_paths(vault_dir, INBOX_DIR)
-    draft_paths = _folder_active_markdown_paths(vault_dir, DRAFTS_DIR)
+    config = _load_config()
+    intake = _intake_lane_snapshot(vault_dir, raw_root_relative=_raw_submodule_relative_path(config).as_posix())
     active_scope = _structure_analysis(vault_dir, exclude_relative=Path(STRUCTURE_REPORT_DEFAULT))
     stats = {
         "vault": (vault_dir.name),
         "path": str(vault_dir),
         "files": _int_output(_obsidian_command(vault_dir, "files", "total")[0], label="files"),
         "folders": _int_output(_obsidian_command(vault_dir, "folders", "total")[0], label="folders"),
-        "inbox_notes": len(inbox_paths),
-        "draft_notes": len(draft_paths),
+        "raw_root_path": intake["raw_root_path"],
+        "raw_inbox_path": intake["raw_inbox_path"],
+        "raw_inbox_items": intake["raw_inbox_items"],
+        "raw_inbox_paths": intake["raw_inbox_paths"],
+        "curated_inbox_notes": intake["curated_inbox_notes"],
+        "curated_inbox_paths": intake["curated_inbox_paths"],
+        "inbox_notes": intake["curated_inbox_notes"],
+        "inbox_paths": intake["curated_inbox_paths"],
+        "draft_notes": intake["draft_notes"],
+        "draft_paths": intake["draft_paths"],
         "orphans": _int_output(_obsidian_command(vault_dir, "orphans", "total")[0], label="orphans"),
         "deadends": _int_output(_obsidian_command(vault_dir, "deadends", "total")[0], label="deadends"),
         "unresolved_links": _int_output(
             _obsidian_command(vault_dir, "unresolved", "total")[0], label="unresolved links"
         ),
-        "inbox_paths": [path.as_posix() for path in inbox_paths],
-        "draft_paths": [path.as_posix() for path in draft_paths],
         "active_scope_notes": len(active_scope["note_paths_list"]),
         "active_scope_orphans": len(active_scope["orphans"]),
         "active_scope_deadends": len(active_scope["deadends"]),
@@ -1446,7 +1471,8 @@ def _dashboard(vault_dir: Path, *, tags_limit: int, json_output: bool) -> None:
     print(f"Path: {stats['path']}")
     print(f"Files: {stats['files']}")
     print(f"Folders: {stats['folders']}")
-    print(f"Inbox notes: {stats['inbox_notes']}")
+    print(f"Raw intake items: {stats['raw_inbox_items']}")
+    print(f"Curated inbox notes: {stats['curated_inbox_notes']}")
     print(f"Draft notes: {stats['draft_notes']}")
     print(f"Full-vault orphans: {stats['orphans']}")
     print(f"Full-vault dead ends: {stats['deadends']}")
@@ -1506,6 +1532,10 @@ def _review_data(vault_dir: Path, *, tags_limit: int, unresolved_limit: int, rec
         flags.append(
             f"{dashboard['unresolved_links']} unresolved {_pluralize(dashboard['unresolved_links'], 'link')} {_be_verb(dashboard['unresolved_links'])} still present."
         )
+    if dashboard["raw_inbox_items"] > 0:
+        flags.append(
+            f"{dashboard['raw_inbox_items']} raw intake {_pluralize(dashboard['raw_inbox_items'], 'item')} {_be_verb(dashboard['raw_inbox_items'])} waiting for promotion review."
+        )
     if dashboard["inbox_notes"] > 0:
         flags.append(
             f"{dashboard['inbox_notes']} inbox {_pluralize(dashboard['inbox_notes'], 'note')} {_be_verb(dashboard['inbox_notes'])} waiting for triage."
@@ -1555,7 +1585,8 @@ def _review(vault_dir: Path, *, json_output: bool, tags_limit: int, unresolved_l
     print("CLI ready: yes")
     print(f"Files: {dashboard['files']}")
     print(f"Folders: {dashboard['folders']}")
-    print(f"Inbox notes: {dashboard['inbox_notes']}")
+    print(f"Raw intake items: {dashboard['raw_inbox_items']}")
+    print(f"Curated inbox notes: {dashboard['inbox_notes']}")
     print(f"Draft notes: {dashboard['draft_notes']}")
     print(f"Full-vault orphans: {dashboard['orphans']}")
     print(f"Full-vault dead ends: {dashboard['deadends']}")
@@ -1672,6 +1703,7 @@ def _simplify_review_data(
             "alias_scan_enabled": yaml is not None,
         },
         "workflow": {
+            "raw_inbox_paths": list(review["dashboard"].get("raw_inbox_paths", [])),
             "inbox_paths": list(review["dashboard"].get("inbox_paths", [])),
             "draft_paths": list(review["dashboard"].get("draft_paths", [])),
         },
@@ -1694,6 +1726,7 @@ def _simplify_review_markdown(data: dict, *, dedupe_limit: int) -> str:
         "## TL;DR",
         f"- Vault review generated on **{data['generated_at']}** for **{doctor['vault_name']}**.",
         f"- Health snapshot: **{dashboard['unresolved_links']}** unresolved links, **{len(audit['issues']['missing_tldr'])}** notes missing `## TL;DR`, and **{structure['counts']['orphans']} / {structure['counts']['deadends']} / {structure['counts']['isolated']}** active-scope orphan/dead-end/isolated notes.",
+        f"- Intake snapshot: **{dashboard['raw_inbox_items']}** raw intake items in `{dashboard['raw_inbox_path']}`, **{dashboard['curated_inbox_notes']}** curated inbox notes in `{INBOX_DIR}`, and **{dashboard['draft_notes']}** drafts in `{DRAFTS_DIR}`.",
         f"- Dedupe snapshot: **{dedupe['basename_groups']}** duplicate basename groups and **{dedupe['alias_groups']}** duplicate alias groups across **{dedupe['scope_notes']}** active notes.",
         f"- Readability snapshot: **{len(audit['issues']['oversized_overviews'])}** oversized overviews and **{len(audit['issues']['cleanup_inbox_backlog'])}** project MOCs with cleanup backlog.",
         f"- Treat this as a snapshot report under {_structure_note_link(SNAPSHOT_REPORT_CONTRACT, display='Vault Snapshot Report Contract')}. Use {_structure_note_link(VAULT_EXCEPTION_DASHBOARD, display='Vault Exception Dashboard')} or {_structure_note_link(WEEKLY_REVIEW_RUNBOOK, display='Weekly Vault Review Runbook')} for the live review sequence.",
@@ -1708,7 +1741,8 @@ def _simplify_review_markdown(data: dict, *, dedupe_limit: int) -> str:
         "",
         f"- Files: **{dashboard['files']}**",
         f"- Folders: **{dashboard['folders']}**",
-        f"- Inbox notes: **{dashboard['inbox_notes']}**",
+        f"- Raw intake items: **{dashboard['raw_inbox_items']}**",
+        f"- Curated inbox notes: **{dashboard['curated_inbox_notes']}**",
         f"- Draft notes: **{dashboard['draft_notes']}**",
         f"- Open tasks: **{review['tasks']['todo']}**",
         f"- Done tasks: **{review['tasks']['done']}**",
