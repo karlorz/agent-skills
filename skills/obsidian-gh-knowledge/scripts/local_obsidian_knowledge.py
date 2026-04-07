@@ -1756,6 +1756,38 @@ def _simplify_review_markdown(data: dict, *, dedupe_limit: int) -> str:
     else:
         lines.extend(["", "- No simplify or dedupe flags detected."])
 
+    workflow = data.get("workflow", {})
+    raw_lane = list(workflow.get("raw_inbox_paths", []))
+    curated_lane = list(workflow.get("inbox_paths", []))
+    draft_lane = list(workflow.get("draft_paths", []))
+    lines.extend([
+        "",
+        "## Workflow Lanes",
+        "",
+        f"- `raw/inbox`: **{dashboard['raw_inbox_items']}** source {_pluralize(dashboard['raw_inbox_items'], 'item')}",
+    ])
+    if raw_lane:
+        for path in raw_lane[:5]:
+            lines.append(f"  - `{path}`")
+    else:
+        lines.append("  - none")
+    lines.extend([
+        f"- `{INBOX_DIR}`: **{dashboard['curated_inbox_notes']}** curated staging {_pluralize(dashboard['curated_inbox_notes'], 'note')}",
+    ])
+    if curated_lane:
+        for path in curated_lane[:5]:
+            lines.append(f"  - `{path}`")
+    else:
+        lines.append("  - none")
+    lines.extend([
+        f"- `{DRAFTS_DIR}`: **{dashboard['draft_notes']}** active draft {_pluralize(dashboard['draft_notes'], 'note')}",
+    ])
+    if draft_lane:
+        for path in draft_lane[:5]:
+            lines.append(f"  - `{path}`")
+    else:
+        lines.append("  - none")
+
     def _append_duplicate_table(title: str, groups: list[dict[str, object]], *, label: str) -> None:
         if not groups:
             return
