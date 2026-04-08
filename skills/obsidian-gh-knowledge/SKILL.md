@@ -14,6 +14,7 @@ description: Bootstrap and operate an Obsidian vault with official Obsidian CLI 
 - **Raw Materials:** If the vault mounts `raw/` as a Git submodule, treat it as source-input storage rather than curated note space.
 - **Inbox Split:** `raw/inbox` is the default intake lane for external source material. `0️⃣-Inbox` is curated staging for notes that already contain synthesis and still need routing.
 - **Health Default:** Use `simplify-review` first when the vault feels hard to read or hard to trust; it reconciles full-vault Obsidian counts with active-scope graph checks and overview readability audits.
+- **Git Sync:** For note updates, prefer pull/rebase before push, never force-push `main`, and record the sync outcome in today's daily log when the task is complete.
 
 ## Execution Mode Flowchart
 
@@ -358,6 +359,7 @@ Wrapper responsibilities:
 1. Read before write (`obsidian read ...`).
 2. For large edits, write to a draft note first, then merge intentionally.
 3. Keep the remote in sync: pull/rebase, commit, push (no force-push).
+4. After a successful note sync, append a short execution summary to `/root/lifecycle/memory/daily/<YYYY-MM-DD>.md` when the vault workflow or task context expects it.
 
 Recommended (one command):
 ```bash
@@ -378,6 +380,8 @@ git commit -m "Update vault notes"
 git pull --rebase
 git push
 ```
+
+If `git push` is rejected because the remote advanced, fetch/rebase onto the new `origin/main` tip and retry the push. Do not resolve that by force-pushing.
 
 ## Local filesystem/git fallback (CLI unavailable)
 
