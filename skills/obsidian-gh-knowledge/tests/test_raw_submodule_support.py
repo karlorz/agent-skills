@@ -61,6 +61,38 @@ class InitLocalVaultTests(unittest.TestCase):
             ).stdout.strip()
             self.assertTrue(extension_value.endswith("\ttrue"))
 
+    def test_bootstrap_repo_git_clears_stale_hooks_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "config", "--local", "core.hooksPath", ".githooks"],
+                cwd=tmpdir,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            INIT_MODULE._bootstrap_repo_git(tmpdir, dry_run=False)
+
+            hooks_value = subprocess.run(
+                ["git", "config", "--show-origin", "--get", "core.hooksPath"],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(hooks_value.returncode, 0)
+
+    def test_bootstrap_repo_git_ignores_legacy_hook_script(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True, text=True)
+            scripts_dir = Path(tmpdir) / "scripts"
+            scripts_dir.mkdir()
+            (scripts_dir / "bootstrap-git-hooks.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+
+            actions = INIT_MODULE._bootstrap_repo_git(tmpdir, dry_run=False)
+
+            self.assertNotIn("repo hook bootstrap available at scripts/bootstrap-git-hooks.sh", actions)
+
     def test_bootstrap_existing_raw_submodule_skips_missing_dry_run_dir(self):
         missing_dir = str(Path(tempfile.gettempdir()) / "obsidian-gh-missing-bootstrap")
         actions, configured_origin = INIT_MODULE._bootstrap_existing_raw_submodule(

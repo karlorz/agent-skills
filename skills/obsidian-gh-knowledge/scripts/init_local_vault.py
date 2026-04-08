@@ -217,16 +217,18 @@ def _submodule_branch(vault_dir: str, submodule_path: str) -> str:
 def _bootstrap_repo_git(vault_dir: str, *, dry_run: bool) -> list[str]:
     actions = [
         "enable worktree config",
+        "clear stale core.hooksPath config",
         "set worktree-local push.recurseSubmodules=on-demand",
     ]
-    if os.path.exists(_repo_file(vault_dir, "scripts/bootstrap-git-hooks.sh")):
-        actions.append("repo hook bootstrap available at scripts/bootstrap-git-hooks.sh")
 
     if dry_run:
         return actions
 
     _run(["git", "config", "extensions.worktreeConfig", "true"], cwd=vault_dir)
+    _run_no_fail(["git", "config", "--local", "--unset-all", "core.hooksPath"], cwd=vault_dir)
+    _run_no_fail(["git", "config", "--worktree", "--unset-all", "core.hooksPath"], cwd=vault_dir)
     _run_no_fail(["git", "config", "--local", "--unset-all", "push.recurseSubmodules"], cwd=vault_dir)
+    _run_no_fail(["git", "config", "--worktree", "--unset-all", "push.recurseSubmodules"], cwd=vault_dir)
     _run(["git", "config", "--worktree", "push.recurseSubmodules", "on-demand"], cwd=vault_dir)
     return actions
 

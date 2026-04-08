@@ -15,7 +15,7 @@ description: Bootstrap and operate an Obsidian vault with official Obsidian CLI 
 - **Inbox Split:** `raw/inbox` is the default intake lane for external source material. `0️⃣-Inbox` is curated staging for notes that already contain synthesis and still need routing.
 - **Health Default:** Use `simplify-review` first when the vault feels hard to read or hard to trust; it reconciles full-vault Obsidian counts with active-scope graph checks and overview readability audits.
 - **Git Sync:** For note updates, prefer pull/rebase before push, never force-push `main`, and record the sync outcome in today's daily log when the task is complete.
-- **Git Bootstrap:** Local bootstrap must configure Git and the `raw/` submodule even when the Obsidian CLI is unavailable. Repo hooks are optional automation, not baseline correctness.
+- **Git Bootstrap:** Local bootstrap must configure Git and the `raw/` submodule even when the Obsidian CLI is unavailable. Keep the baseline hook-free and clean up stale `core.hooksPath` config during bootstrap.
 
 ## Execution Mode Flowchart
 
@@ -150,6 +150,7 @@ What the bootstrap script does:
 - Can optionally initialize a raw-materials submodule such as `raw/` when `--raw-submodule-url` and `--init-raw-submodule` are provided.
 - Configures local Git bootstrap without requiring Obsidian CLI:
   - enables `extensions.worktreeConfig=true`
+  - clears stale `core.hooksPath` config from shared and worktree-local Git config
   - sets worktree-local `push.recurseSubmodules=on-demand`
   - initializes the configured `raw/` submodule when present
   - attaches `raw/` to its configured branch and upstream when safe to do so
@@ -176,7 +177,7 @@ After bootstrap, re-run mode selection and prefer local CLI or local git fallbac
 Notes:
 
 - This bootstrap path is designed to work in headless or remote environments where `obsidian` is not installed.
-- If the repo ships `scripts/bootstrap-git-hooks.sh`, treat it as optional repo automation unless the repo explicitly says hooks are required.
+- Obsidian Git plugin settings remain the long-running sync layer inside the desktop app; bootstrap only prepares Git and submodule state.
 
 ## Guardrails (avoid wrong paths)
 

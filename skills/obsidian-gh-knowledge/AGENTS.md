@@ -7,7 +7,7 @@ This folder is the source for the `obsidian-gh-knowledge` skill.
 - Prefer local vault operations when a local vault exists (path from `~/.config/obsidian-gh-knowledge/config.json` `local_vault_path`, else `~/Documents/obsidian_vault/`), unless config `prefer_local` is `false`.
 - If no local vault exists yet and the user confirms a vault repo URL, bootstrap local mode first with `scripts/init_local_vault.py`; prefer cloning into `~/Documents/<repo-name>` for the current user and update `~/.config/obsidian-gh-knowledge/config.json` `local_vault_path` before using GitHub-only mode.
 - Bootstrap must configure local Git readiness even when Obsidian CLI is unavailable: worktree-local `push.recurseSubmodules`, configured `raw/` submodule init, and raw branch/upstream attachment when safe.
-- Treat repo hook scripts as optional automation unless the target repo explicitly requires them for correctness.
+- Bootstrap should clear stale `core.hooksPath` config so new and existing workspaces converge on the same hook-free baseline.
 - When configured, `raw/` is a Git submodule for source materials and should be treated as source input, not curated notes.
 - Treat `raw/inbox` as the default landing zone for new external source material.
 - Treat `0️⃣-Inbox` as curated staging only. Do not use it as a raw-source dump bucket.
