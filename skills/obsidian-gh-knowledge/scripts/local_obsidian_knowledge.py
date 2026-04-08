@@ -228,6 +228,19 @@ def _git_stdout(vault_dir: Path, *args: str, check: bool = True) -> str:
     return (result.stdout or "").strip()
 
 
+def _git_config_with_origin(vault_dir: Path, key: str) -> tuple[str | None, str | None]:
+    result = _run_process(["git", "config", "--show-origin", "--get", key], cwd=vault_dir)
+    if result.returncode != 0:
+        return None, None
+    raw = (result.stdout or "").strip()
+    if not raw:
+        return None, None
+    origin, sep, value = raw.partition("\t")
+    if sep:
+        return origin.strip(), value.strip()
+    return None, raw
+
+
 def _submodule_status(vault_dir: Path, relative_path: Path) -> dict:
     info = {
         "path": relative_path.as_posix(),
@@ -237,6 +250,10 @@ def _submodule_status(vault_dir: Path, relative_path: Path) -> dict:
         "url": None,
         "head": None,
         "dirty": False,
+        "branch": None,
+        "expected_branch": None,
+        "tracking_remote": None,
+        "tracking_merge": None,
     }
     gitmodules = vault_dir / ".gitmodules"
     if gitmodules.exists():
@@ -252,6 +269,17 @@ def _submodule_status(vault_dir: Path, relative_path: Path) -> dict:
         if url:
             info["configured"] = True
             info["url"] = url
+        branch = _git_stdout(
+            vault_dir,
+            "config",
+            "--file",
+            ".gitmodules",
+            "--get",
+            f"submodule.{relative_path.as_posix()}.branch",
+            check=False,
+        )
+        if branch:
+            info["expected_branch"] = branch
 
     submodule_dir = vault_dir / relative_path
     info["exists"] = submodule_dir.exists()
@@ -273,11 +301,22 @@ def _submodule_status(vault_dir: Path, relative_path: Path) -> dict:
 
     sub_status = _run_process(["git", "status", "--porcelain=v1"], cwd=submodule_dir)
     info["dirty"] = bool((sub_status.stdout or "").strip())
+    branch = (_run_process(["git", "branch", "--show-current"], cwd=submodule_dir).stdout or "").strip()
+    if branch:
+        info["branch"] = branch
+        tracking_remote = (_run_process(["git", "config", "--get", f"branch.{branch}.remote"], cwd=submodule_dir).stdout or "").strip()
+        tracking_merge = (_run_process(["git", "config", "--get", f"branch.{branch}.merge"], cwd=submodule_dir).stdout or "").strip()
+        info["tracking_remote"] = tracking_remote or None
+        info["tracking_merge"] = tracking_merge or None
     return info
 
 
+def _obsidian_binary_optional() -> str | None:
+    return shutil.which("obsidian")
+
+
 def _obsidian_binary() -> str:
-    binary = shutil.which("obsidian")
+    binary = _obsidian_binary_optional()
     if not binary:
         _die(
             "Could not find `obsidian` in PATH.\n"
@@ -1355,25 +1394,66 @@ def _archive_index_markdown(vault_dir: Path, relative_path: Path, note_paths: li
 
 def _doctor_data(vault_dir: Path) -> dict:
     config = _load_config()
-    help_output, help_stderr, helper_warning = _obsidian_command(vault_dir, "help")
-    version_output, _, version_helper = _obsidian_command(vault_dir, "version")
-    vault_name, _, name_helper = _obsidian_command(vault_dir, "vault", "info=name")
-    vault_path, _, path_helper = _obsidian_command(vault_dir, "vault", "info=path")
-    helper_warning = helper_warning or version_helper or name_helper or path_helper
     raw_submodule = _submodule_status(vault_dir, _raw_submodule_relative_path(config))
+    obsidian_binary = "(unavailable)"
+    cli_ready = False
+    helper_warning = False
+    help_stderr: list[str] = []
+    version_output = ""
+    vault_name = config.get("vault_name") or vault_dir.name
+    vault_path = ""
+    cli_error = None
+
+    binary = _obsidian_binary_optional()
+    if not binary:
+        cli_error = (
+            "Could not find `obsidian` in PATH.\n"
+            "On macOS, enable the Obsidian CLI in Settings -> General -> Advanced -> Command line interface "
+            "and ensure /Applications/Obsidian.app/Contents/MacOS is on PATH."
+        )
+    else:
+        obsidian_binary = binary
+        try:
+            help_output, help_stderr, helper_warning = _obsidian_command(vault_dir, "help")
+            version_output, _, version_helper = _obsidian_command(vault_dir, "version")
+            vault_name_output, _, name_helper = _obsidian_command(vault_dir, "vault", "info=name")
+            vault_path_output, _, path_helper = _obsidian_command(vault_dir, "vault", "info=path")
+            helper_warning = helper_warning or version_helper or name_helper or path_helper
+            cli_ready = bool(help_output)
+            if vault_name_output.strip():
+                vault_name = vault_name_output.strip()
+            vault_path = vault_path_output.strip()
+        except SystemExit as exc:
+            cli_error = str(exc)
+
+    push_origin, push_recurse = _git_config_with_origin(vault_dir, "push.recurseSubmodules")
+    hooks_origin, hooks_path = _git_config_with_origin(vault_dir, "core.hooksPath")
+    raw_ready = not raw_submodule["configured"] or (
+        raw_submodule["initialized"]
+        and bool(raw_submodule["branch"])
+        and bool(raw_submodule["tracking_remote"])
+        and bool(raw_submodule["tracking_merge"])
+    )
+    git_ready = push_recurse == "on-demand" and raw_ready
     return {
         "vault_dir": str(vault_dir),
-        "vault_name": vault_name.strip() or config.get("vault_name") or vault_dir.name,
-        "vault_path_reported_by_cli": vault_path.strip(),
+        "vault_name": vault_name,
+        "vault_path_reported_by_cli": vault_path,
         "config_path": str(CONFIG_PATH),
         "default_repo": config.get("default_repo"),
         "prefer_local": config.get("prefer_local"),
         "raw_submodule": raw_submodule,
-        "obsidian_binary": _obsidian_binary(),
-        "cli_ready": bool(help_output),
-        "version": version_output.strip(),
+        "obsidian_binary": obsidian_binary,
+        "cli_ready": cli_ready,
+        "version": version_output.strip() or "(unavailable)",
         "helper_warning_seen": helper_warning,
         "stderr": help_stderr,
+        "cli_error": cli_error,
+        "push_recurse_submodules": push_recurse,
+        "push_recurse_submodules_origin": push_origin,
+        "core_hooks_path": hooks_path,
+        "core_hooks_path_origin": hooks_origin,
+        "git_ready": git_ready,
     }
 
 
@@ -1392,6 +1472,13 @@ def _doctor(vault_dir: Path, *, json_output: bool) -> None:
     print(f"Config: {data['config_path']}")
     print(f"Default repo: {data['default_repo'] or '(unset)'}")
     print(f"Prefer local: {data['prefer_local']!r}")
+    print(f"Git ready: {'yes' if data['git_ready'] else 'no'}")
+    print(f"push.recurseSubmodules: {data['push_recurse_submodules'] or '(unset)'}")
+    if data["push_recurse_submodules_origin"]:
+        print(f"push.recurseSubmodules origin: {data['push_recurse_submodules_origin']}")
+    print(f"Hooks path: {data['core_hooks_path'] or '(unset)'}")
+    if data["core_hooks_path_origin"]:
+        print(f"Hooks path origin: {data['core_hooks_path_origin']}")
     raw = data["raw_submodule"]
     raw_state = "missing"
     if raw["configured"] and raw["initialized"]:
@@ -1405,9 +1492,19 @@ def _doctor(vault_dir: Path, *, json_output: bool) -> None:
         print(f"Raw repo: {raw['url']}")
     if raw["head"]:
         print(f"Raw HEAD: {raw['head']}")
+    if raw["expected_branch"]:
+        print(f"Raw expected branch: {raw['expected_branch']}")
+    if raw["branch"]:
+        print(f"Raw current branch: {raw['branch']}")
+    if raw["tracking_remote"]:
+        print(f"Raw tracking remote: {raw['tracking_remote']}")
+    if raw["tracking_merge"]:
+        print(f"Raw tracking merge: {raw['tracking_merge']}")
     if raw["dirty"]:
         print("Warning: raw submodule has uncommitted changes.")
-    print("CLI ready: yes")
+    print(f"CLI ready: {'yes' if data['cli_ready'] else 'no'}")
+    if data["cli_error"]:
+        print(f"CLI error: {data['cli_error']}")
     if helper_warning:
         print("Warning: Obsidian printed macOS helper-app warnings, but CLI commands still completed successfully.")
     if help_stderr:
@@ -2514,7 +2611,7 @@ def _parse_args() -> argparse.Namespace:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    doctor_parser = subparsers.add_parser("doctor", help="Check local Obsidian CLI readiness")
+    doctor_parser = subparsers.add_parser("doctor", help="Check local Git/bootstrap readiness and Obsidian CLI availability")
     doctor_parser.add_argument("--json", action="store_true", help="Output JSON")
 
     dashboard_parser = subparsers.add_parser("dashboard", help="Show vault organization health")

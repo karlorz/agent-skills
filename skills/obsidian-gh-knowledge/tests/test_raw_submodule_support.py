@@ -1,6 +1,8 @@
 import importlib.util
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -31,6 +33,44 @@ class InitLocalVaultTests(unittest.TestCase):
     def test_relative_submodule_path_rejects_parent_traversal(self):
         with self.assertRaises(SystemExit):
             INIT_MODULE._relative_submodule_path("../raw")
+
+    def test_bootstrap_repo_git_sets_worktree_push_recurse_submodules(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True, text=True)
+
+            actions = INIT_MODULE._bootstrap_repo_git(tmpdir, dry_run=False)
+
+            self.assertIn("set worktree-local push.recurseSubmodules=on-demand", actions)
+
+            worktree_value = subprocess.run(
+                ["git", "config", "--show-origin", "--get", "push.recurseSubmodules"],
+                cwd=tmpdir,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            self.assertIn("config.worktree", worktree_value)
+            self.assertTrue(worktree_value.endswith("\ton-demand"))
+
+            extension_value = subprocess.run(
+                ["git", "config", "--show-origin", "--get", "extensions.worktreeConfig"],
+                cwd=tmpdir,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            self.assertTrue(extension_value.endswith("\ttrue"))
+
+    def test_bootstrap_existing_raw_submodule_skips_missing_dry_run_dir(self):
+        missing_dir = str(Path(tempfile.gettempdir()) / "obsidian-gh-missing-bootstrap")
+        actions, configured_origin = INIT_MODULE._bootstrap_existing_raw_submodule(
+            missing_dir,
+            raw_submodule_path="raw",
+            dry_run=True,
+        )
+
+        self.assertEqual(actions, [])
+        self.assertIsNone(configured_origin)
 
 
 class CaptureRawNoteTests(unittest.TestCase):
@@ -75,6 +115,25 @@ class CaptureRawNoteTests(unittest.TestCase):
                     overwrite=False,
                     dry_run=False,
                 )
+
+
+class DoctorFallbackTests(unittest.TestCase):
+    def test_doctor_data_reports_git_state_when_obsidian_cli_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault_dir = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True, text=True)
+            INIT_MODULE._bootstrap_repo_git(tmpdir, dry_run=False)
+
+            with mock.patch.object(LOCAL_MODULE, "_load_config", return_value={"vault_name": "Test Vault"}):
+                with mock.patch.object(LOCAL_MODULE, "_obsidian_command", side_effect=SystemExit(2)):
+                    with mock.patch.object(LOCAL_MODULE, "_obsidian_binary_optional", return_value=None):
+                        data = LOCAL_MODULE._doctor_data(vault_dir)
+
+            self.assertFalse(data["cli_ready"])
+            self.assertEqual(data["obsidian_binary"], "(unavailable)")
+            self.assertTrue(data["git_ready"])
+            self.assertEqual(data["push_recurse_submodules"], "on-demand")
+            self.assertIn("config.worktree", data["push_recurse_submodules_origin"])
 
 
 if __name__ == "__main__":

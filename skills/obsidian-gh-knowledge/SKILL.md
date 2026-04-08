@@ -15,6 +15,7 @@ description: Bootstrap and operate an Obsidian vault with official Obsidian CLI 
 - **Inbox Split:** `raw/inbox` is the default intake lane for external source material. `0️⃣-Inbox` is curated staging for notes that already contain synthesis and still need routing.
 - **Health Default:** Use `simplify-review` first when the vault feels hard to read or hard to trust; it reconciles full-vault Obsidian counts with active-scope graph checks and overview readability audits.
 - **Git Sync:** For note updates, prefer pull/rebase before push, never force-push `main`, and record the sync outcome in today's daily log when the task is complete.
+- **Git Bootstrap:** Local bootstrap must configure Git and the `raw/` submodule even when the Obsidian CLI is unavailable. Repo hooks are optional automation, not baseline correctness.
 
 ## Execution Mode Flowchart
 
@@ -147,6 +148,11 @@ What the bootstrap script does:
 - Clones the confirmed vault repo into `~/Documents/<repo-name>` unless the user provided `--vault-dir`.
 - Reuses the directory if it is already a clone of the same repo.
 - Can optionally initialize a raw-materials submodule such as `raw/` when `--raw-submodule-url` and `--init-raw-submodule` are provided.
+- Configures local Git bootstrap without requiring Obsidian CLI:
+  - enables `extensions.worktreeConfig=true`
+  - sets worktree-local `push.recurseSubmodules=on-demand`
+  - initializes the configured `raw/` submodule when present
+  - attaches `raw/` to its configured branch and upstream when safe to do so
 - Updates `~/.config/obsidian-gh-knowledge/config.json`:
   - Sets `local_vault_path`
   - Sets `prefer_local` to `true`
@@ -166,6 +172,11 @@ python3 "$INIT_SCRIPT_PATH" \
 ```
 
 After bootstrap, re-run mode selection and prefer local CLI or local git fallback from the new `local_vault_path`.
+
+Notes:
+
+- This bootstrap path is designed to work in headless or remote environments where `obsidian` is not installed.
+- If the repo ships `scripts/bootstrap-git-hooks.sh`, treat it as optional repo automation unless the repo explicitly says hooks are required.
 
 ## Guardrails (avoid wrong paths)
 
@@ -338,7 +349,9 @@ Wrapper responsibilities:
 
 - Resolves the local vault path from config.
 - Reports `raw/` submodule health in `doctor` when configured.
-- Verifies the official `obsidian` CLI is available.
+- Reports local Git/bootstrap health such as worktree-local `push.recurseSubmodules`.
+- Verifies the official `obsidian` CLI when available.
+- Does not fail hard when the CLI is missing; `doctor` still reports local Git/bootstrap readiness for remote or headless workspaces.
 - Runs a one-click `review` summary with vault health metrics, task counts, recent files, unresolved-link samples, and explicit raw-vs-curated intake counts.
 - Treats `dashboard` and `review` orphan/dead-end numbers as Obsidian full-vault signals, not the precise cleanup scope for active notes.
 - Runs a combined `simplify-review` that layers `review`, `audit`, active-scope structure analysis, overview readability checks, and duplicate basename/alias detection into one report note.

@@ -44,6 +44,10 @@ def _run(cmd: list[str], *, cwd: str | None = None) -> None:
         _die(message, exit_code=exc.returncode)
 
 
+def _run_no_fail(cmd: list[str], *, cwd: str | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+
+
 def _run_capture(cmd: list[str], *, cwd: str) -> str:
     try:
         result = subprocess.run(cmd, cwd=cwd, capture_output=True, check=True, text=True)
@@ -56,6 +60,17 @@ def _run_capture(cmd: list[str], *, cwd: str) -> str:
             message = f"{message}\n{details}"
         _die(message, exit_code=exc.returncode)
     return result.stdout.strip()
+
+
+def _repo_file(vault_dir: str, relative_path: str) -> str:
+    return os.path.join(vault_dir, *relative_path.split("/"))
+
+
+def _config_get(vault_dir: str, *args: str) -> str:
+    try:
+        return _run_capture(["git", "config", *args], cwd=vault_dir)
+    except SystemExit:
+        return ""
 
 
 def _parse_repo_url(repo_url: str) -> tuple[str, str]:
@@ -194,6 +209,69 @@ def _submodule_matches(vault_dir: str, *, submodule_path: str, repo_slug: str) -
     return os.path.exists(abs_submodule) and os.path.exists(git_dir)
 
 
+def _submodule_branch(vault_dir: str, submodule_path: str) -> str:
+    branch = _config_get(vault_dir, "--file", ".gitmodules", "--get", f"submodule.{submodule_path}.branch")
+    return branch or "main"
+
+
+def _bootstrap_repo_git(vault_dir: str, *, dry_run: bool) -> list[str]:
+    actions = [
+        "enable worktree config",
+        "set worktree-local push.recurseSubmodules=on-demand",
+    ]
+    if os.path.exists(_repo_file(vault_dir, "scripts/bootstrap-git-hooks.sh")):
+        actions.append("repo hook bootstrap available at scripts/bootstrap-git-hooks.sh")
+
+    if dry_run:
+        return actions
+
+    _run(["git", "config", "extensions.worktreeConfig", "true"], cwd=vault_dir)
+    _run_no_fail(["git", "config", "--local", "--unset-all", "push.recurseSubmodules"], cwd=vault_dir)
+    _run(["git", "config", "--worktree", "push.recurseSubmodules", "on-demand"], cwd=vault_dir)
+    return actions
+
+
+def _bootstrap_existing_raw_submodule(vault_dir: str, *, raw_submodule_path: str, dry_run: bool) -> tuple[list[str], str | None]:
+    if not os.path.isdir(vault_dir):
+        return [], None
+
+    configured_origin = _submodule_origin(vault_dir, raw_submodule_path)
+    if not configured_origin:
+        return [], None
+
+    branch = _submodule_branch(vault_dir, raw_submodule_path)
+    actions = [
+        f"initialize configured raw submodule at {raw_submodule_path}",
+        f"ensure raw submodule tracks {branch}",
+    ]
+    if dry_run:
+        return actions, configured_origin
+
+    _run(["git", "submodule", "sync", "--", raw_submodule_path], cwd=vault_dir)
+    _run(["git", "submodule", "update", "--init", "--recursive", "--", raw_submodule_path], cwd=vault_dir)
+
+    submodule_dir = os.path.join(vault_dir, raw_submodule_path)
+    _run(["git", "fetch", "origin", branch], cwd=submodule_dir)
+
+    current_head = _run_capture(["git", "rev-parse", "HEAD"], cwd=submodule_dir)
+    current_branch = _run_capture(["git", "branch", "--show-current"], cwd=submodule_dir)
+    branch_exists = _run_no_fail(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], cwd=submodule_dir).returncode == 0
+
+    if current_branch != branch:
+        if not branch_exists:
+            _run(["git", "branch", branch, current_head], cwd=submodule_dir)
+            _run(["git", "checkout", branch], cwd=submodule_dir)
+        else:
+            branch_head = _run_capture(["git", "rev-parse", branch], cwd=submodule_dir)
+            if branch_head == current_head:
+                _run(["git", "checkout", branch], cwd=submodule_dir)
+            else:
+                actions.append(f"kept existing local {branch} branch tip unchanged")
+
+    _run(["git", "branch", "--set-upstream-to", f"origin/{branch}", branch], cwd=submodule_dir)
+    return actions, configured_origin
+
+
 def _ensure_raw_submodule(
     vault_dir: str,
     *,
@@ -300,6 +378,16 @@ def main() -> None:
             dry_run=args.dry_run,
         )
 
+    git_bootstrap_actions = _bootstrap_repo_git(vault_dir, dry_run=args.dry_run)
+    raw_bootstrap_actions, configured_raw_origin = _bootstrap_existing_raw_submodule(
+        vault_dir,
+        raw_submodule_path=raw_submodule_path,
+        dry_run=args.dry_run,
+    )
+    if configured_raw_origin and not raw_repo_slug:
+        raw_owner, raw_repo = _parse_repo_url(configured_raw_origin)
+        raw_repo_slug = f"{raw_owner}/{raw_repo}"
+
     config = _load_config()
     config["local_vault_path"] = _display_path(vault_dir)
     config["prefer_local"] = True
@@ -335,6 +423,18 @@ def main() -> None:
         print(f"Raw submodule path: {raw_submodule_path}")
         print(f"Raw submodule repo: {raw_repo_slug}")
         print(f"Raw submodule action: {raw_action}")
+    elif configured_raw_origin:
+        print(f"Raw submodule path: {raw_submodule_path}")
+        print(f"Raw submodule repo: {raw_repo_slug}")
+        print("Raw submodule action: bootstrap existing config")
+    if git_bootstrap_actions:
+        print("Git bootstrap:")
+        for action in git_bootstrap_actions:
+            print(f"  - {action}")
+    if raw_bootstrap_actions:
+        print("Raw bootstrap:")
+        for action in raw_bootstrap_actions:
+            print(f"  - {action}")
     if args.dry_run:
         print("Dry run only. No files were changed.")
     else:
