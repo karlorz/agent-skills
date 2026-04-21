@@ -387,9 +387,12 @@ python3 "$LOCAL_SYNC_SCRIPT" \
 Manual workflow:
 ```bash
 cd "$VAULT_DIR"
+# If raw/ has changes: commit+push inside raw/ first, then return to parent.
+git -C raw status --porcelain=v1   # use `git -C`, not `cd raw` — Bash CWD persists
+# git -C raw add -A && git -C raw commit -m "..." && git -C raw push
 git pull --rebase --autostash
 git status --porcelain=v1
-git add -A
+git add -A                          # includes bumped raw/ submodule pointer
 git commit -m "Update vault notes"
 git pull --rebase
 git push
