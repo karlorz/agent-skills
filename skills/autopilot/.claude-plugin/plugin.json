@@ -1,0 +1,11 @@
+{
+  "name": "autopilot",
+  "version": "1.0.0",
+  "description": "Managed Codex home-hook autopilot for self-sustaining session management",
+  "author": {
+    "name": "Hermes Agent"
+  },
+  "license": "MIT",
+  "keywords": ["autopilot", "codex", "session", "hooks"],
+  "skills": "./"
+}

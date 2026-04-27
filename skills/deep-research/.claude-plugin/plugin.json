@@ -1,0 +1,11 @@
+{
+  "name": "deep-research",
+  "version": "1.0.0",
+  "description": "Multi-source research pipeline with auto-routing to Obsidian vault",
+  "author": {
+    "name": "Hermes Agent"
+  },
+  "license": "MIT",
+  "keywords": ["research", "deep-research", "obsidian", "pipeline"],
+  "skills": "./"
+}

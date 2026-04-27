@@ -1,0 +1,11 @@
+{
+  "name": "loop",
+  "version": "1.0.0",
+  "description": "Cron-like scheduler for recurring Claude prompts via OS scheduler backends",
+  "author": {
+    "name": "Hermes Agent"
+  },
+  "license": "MIT",
+  "keywords": ["loop", "schedule", "cron", "recurring", "automation"],
+  "skills": "./"
+}

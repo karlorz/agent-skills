@@ -1,0 +1,52 @@
+{
+  "name": "agent-skills",
+  "owner": {
+    "name": "Hermes Agent"
+  },
+  "metadata": {
+    "description": "Curated skills for Claude Code: deep research, scheduled loops, code simplification, Obsidian knowledge management, and autopilot session management.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "deep-research",
+      "source": "./skills/deep-research",
+      "description": "Multi-source research pipeline with auto-routing to Obsidian vault",
+      "version": "1.0.0",
+      "category": "research",
+      "keywords": ["research", "deep-research", "obsidian", "pipeline"]
+    },
+    {
+      "name": "loop",
+      "source": "./skills/loop",
+      "description": "Cron-like scheduler for recurring Claude prompts via OS scheduler backends",
+      "version": "1.0.0",
+      "category": "automation",
+      "keywords": ["loop", "schedule", "cron", "recurring", "automation"]
+    },
+    {
+      "name": "simplify",
+      "source": "./skills/simplify",
+      "description": "Code review with reuse, quality, and efficiency passes",
+      "version": "1.0.0",
+      "category": "code-quality",
+      "keywords": ["simplify", "review", "refactor", "quality"]
+    },
+    {
+      "name": "obsidian-gh-knowledge",
+      "source": "./skills/obsidian-gh-knowledge",
+      "description": "CLI-first Obsidian vault bootstrap and operation with local/GitHub fallback",
+      "version": "1.0.0",
+      "category": "knowledge",
+      "keywords": ["obsidian", "knowledge", "github", "vault", "notes"]
+    },
+    {
+      "name": "autopilot",
+      "source": "./skills/autopilot",
+      "description": "Managed Codex home-hook autopilot for self-sustaining session management",
+      "version": "1.0.0",
+      "category": "automation",
+      "keywords": ["autopilot", "codex", "session", "hooks"]
+    }
+  ]
+}

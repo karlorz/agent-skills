@@ -1,0 +1,11 @@
+{
+  "name": "obsidian-gh-knowledge",
+  "version": "1.0.0",
+  "description": "CLI-first Obsidian vault bootstrap and operation with local/GitHub fallback",
+  "author": {
+    "name": "Hermes Agent"
+  },
+  "license": "MIT",
+  "keywords": ["obsidian", "knowledge", "github", "vault", "notes"],
+  "skills": "./"
+}
