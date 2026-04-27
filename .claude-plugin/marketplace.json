@@ -1,7 +1,7 @@
 {
-  "name": "agent-skills",
+  "name": "karlorz-agent-skills",
   "owner": {
-    "name": "Hermes Agent"
+    "name": "kalrorz"
   },
   "metadata": {
     "description": "Curated skills for Claude Code: deep research, scheduled loops, code simplification, Obsidian knowledge management, and autopilot session management.",
