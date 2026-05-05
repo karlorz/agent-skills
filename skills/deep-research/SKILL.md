@@ -1,248 +1,246 @@
 ---
 name: deep-research
-description: Multi-source deep research on any topic with auto-routing to the correct Obsidian vault folder. Use Codex web search plus Context7 and DeepWiki MCP servers, then optionally chain through compaction overlap check and content simplification. Use when a user wants comprehensive research synthesized into a polished vault note.
-triggers:
-  - /deep-research
-  - $deep-research
-  - deep research on
-  - research and add to vault
-  - comprehensive research
+description: Multi-source deep research delegating vault writes to skillwiki. Resolves any configured vault, captures sources to raw/, synthesizes typed-knowledge pages via wiki-ingest pipeline. Use when user wants comprehensive research saved as first-class vault citizens.
 ---
 
 # Deep Research
 
 ## TL;DR
 
-- Query multiple sources in parallel: Codex web search, Context7, and DeepWiki.
-- Auto-route output to the correct vault folder based on topic analysis.
-- Chain through compactor overlap check and content simplification by default.
-- Use flags to skip chain steps or override routing.
+- Multi-source research (web, Context7, DeepWiki) saved to any skillwiki-configured vault
+- Sources captured in `raw/` with sha256 provenance via `wiki-ingest` pipeline
+- Synthesized pages are schema-compliant typed-knowledge (concept/comparison/query/entity)
+- All writes validated before index/log updates — no orphaned files
+- Result: verbatim structured report to stdout (no post-processing)
 
-## Scope
+## When This Skill Activates
 
-Use this skill when the user wants to:
+- User requests comprehensive research on a topic
+- User wants findings saved to a skillwiki vault (any configured vault)
+- Topic mentions libraries, frameworks, GitHub repos, or general concepts
 
-- Research a topic and save findings to the Obsidian vault
-- Get up-to-date documentation and code examples for libraries/frameworks
-- Explore GitHub repositories and understand implementation patterns
-- Create a polished note that integrates with existing vault structure
-
-Do not use this skill for:
-
+Do NOT use for:
 - Quick factual lookups (use direct web search or docs lookup)
-- Editing existing notes (use local vault tools or obsidian-gh-knowledge)
-- Vault reorganization (use obsidian-dry-run-compactor)
-- Code-focused simplification (use simplify skill)
+- Editing existing vault pages (use wiki-query or direct edits)
+- Vault reorganization (use wiki-lint, wiki-archive)
 
-## Triggers and Flags
+## Prerequisites
 
-### Invocation Patterns
+A skillwiki-configured vault must exist:
+- `skillwiki path` resolves successfully
+- `SCHEMA.md`, `index.md`, `log.md` present
+- If NO_VAULT_CONFIGURED: STOP and advise user to run `skillwiki init`
 
-```
-/deep-research <topic>
-$deep-research <topic>
-"deep research on <topic>"
-"research <topic> and add to vault"
-```
+## Output Language
 
-### Flags
+Run `skillwiki lang` at start. Generate page prose in resolved language. Frontmatter keys, file names, schema headers, citation markers, and wikilink slugs remain English.
 
-| Flag | Effect |
-|------|--------|
-| `--no-compact` | Skip compactor overlap check |
-| `--no-simplify` | Skip content simplify pass |
-| `--no-chain` | Skip both compact and simplify |
-| `--draft` | Force output to `0️⃣-Inbox/` |
-| `--folder <path>` | Override auto-routing with specific path |
+## Pre-Orientation Reads (Mandatory)
 
-### Examples
-
-```bash
-/deep-research K8s networking for cmux
-/deep-research --draft React hooks
-/deep-research --no-chain GraphQL best practices
-/deep-research --folder "5️⃣-Projects/Infrastructure/k8s/" Kubernetes CNI comparison
-```
+Before any write:
+1. `SCHEMA.md` — vault structure, taxonomy, conventions
+2. `index.md` — existing pages to cross-link
+3. Last 20 entries of `log.md` — recent vault activity
 
 ## Workflow
 
-### Phase 1: Topic Analysis + Routing
+### Phase 1: Vault Resolution + Topic Analysis
 
-1. Parse topic string to extract keywords
-2. Run in parallel:
-   - Dynamically scan `5️⃣-Projects/` to detect project folders
-   - Search vault for existing notes on the same topic (title match first, then tags/headings if needed)
-3. Match topic against project names (case-insensitive, first match wins)
-4. Apply routing rules per [routing-rules.md](references/routing-rules.md)
-5. Generate output filename (slugified topic + `-deep-research.md`)
-
-**Routing priority**:
-1. `--folder` flag (explicit override)
-2. `--draft` flag (forces Inbox)
-3. Project folder match (e.g., "cmux" in topic → `5️⃣-Projects/GitHub/cmux/`)
-4. Research keywords → `5️⃣-Projects/Research/`
-5. Fallback → `0️⃣-Inbox/` with advisory
+1. Run `skillwiki path` — fail fast with advisory if NO_VAULT_CONFIGURED
+2. Run `skillwiki lang` — resolve output language
+3. Parse topic string for keywords
+4. Search vault for existing related notes (title match first)
 
 ### Phase 2: Multi-Source Research
 
 Run these queries in parallel where possible.
 
-#### Web Search (2-3 queries)
-
+**Web Search (2-3 queries)**
 ```
 Query 1: <topic> (primary)
-Query 2: <topic> best practices OR <topic> tutorial (secondary)
+Query 2: <topic> best practices OR <topic> tutorial
 Query 3: <topic> <current-year> (optional, for freshness)
 ```
 
-For top results, open the most relevant pages and pull the specific passages needed for synthesis.
-
-#### Context7 MCP (max 3 calls)
-
-Use when topic mentions a library, framework, or API:
-
+**Context7 MCP** (max 3 calls)
 ```
-1. resolve-library-id for the library name
-2. query-docs with specific questions about usage
+1. resolve-library-id for library/framework mentioned
+2. query-docs for usage patterns
 3. query-docs for code examples if needed
 ```
 
-**Important**: Per CLAUDE.md, always use Context7 for framework/library docs instead of relying on training data.
-
-#### DeepWiki MCP
-
-Use when topic relates to a GitHub repository:
-
+**DeepWiki MCP**
 ```
-ask_question on relevant repo about architecture, patterns, or implementation
+ask_question on relevant repo about architecture, patterns, implementation
 ```
 
-Focus on codebase insights that complement official docs.
+### Phase 3: Raw Capture
 
-### Phase 3: Note Composition
+For each source, follow `wiki-ingest` pattern:
 
-Structure the note per [[agent-skills/skills/deep-research/references/note-template|note-template]]:
+1. **URL sources**: Write to `raw/articles/<slug>.md`
+   - Frontmatter per `RawSourceSchema`: title, source_url, ingested, ingested_by: "wiki-ingest", sha256
+   - Compute sha256 via `skillwiki hash <raw-file>`
 
-1. **YAML frontmatter**: tags, created date, sources, skill marker
-2. **TL;DR**: 3-5 bullet summary of key findings
-3. **Overview**: 1-2 paragraph synthesis
-4. **Mermaid diagram**: When applicable, following CLAUDE.md rules
-5. **Research Findings**: Collapsible callouts per source
+2. **Context7 results**: Write extract to `raw/articles/<library-id>-docs.md`
+   - Frontmatter: source_url: null (or Context7 library URL), ingested, sha256
+
+3. **DeepWiki results**: Write Q&A to `raw/articles/<repo>-deepwiki.md`
+   - Frontmatter: source_url: <repo-url>, ingested, sha256
+
+**Stop conditions**: If raw capture fails (hash mismatch, write error), STOP and surface error.
+
+### Phase 4: Synthesis + Composition
+
+Compose typed-knowledge page per `TypedKnowledgeSchema`:
+
+```yaml
+---
+title: "<Topic Title>"
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+type: concept  # or comparison, query, entity
+tags:
+  - research
+  - <domain-tag>
+sources:
+  - "^[raw/articles/slug.md]"
+  - "^[raw/articles/library-docs.md]"
+confidence: medium  # high if 3+ diverse sources, low if single source
+provenance: research
+---
+```
+
+**Page type selection**:
+| Research output | Type |
+|-----------------|------|
+| General topic research | concept |
+| Side-by-side comparison | comparison |
+| Question-answer focus | query |
+| Project/tool summary | entity |
+
+**Body sections**:
+1. **TL;DR** — 3-5 bullets of key findings
+2. **Overview** — 1-2 paragraph synthesis
+3. **Mermaid diagram** — when applicable (architecture, flow, relationships)
+4. **Research Findings** — collapsible callouts per source type
    - `> [!abstract]- Web Search Findings`
    - `> [!info]- Context7 Documentation`
    - `> [!tip]- DeepWiki Repository Insights`
-6. **Synthesis**: Merged analysis with patterns and recommendations
-7. **Related Notes**: Wikilinks to existing vault notes
-8. **Sources**: Numbered URL list with access dates
+5. **Synthesis** — merged analysis with patterns, recommendations, caveats
+6. **Related Notes** — wikilinks to existing vault pages
+7. **Sources** — numbered list with access dates, plus Context7/DeepWiki citations
 
-### Checkpoint: Save Raw Note
+**Citation format**: Use `^[raw/articles/slug.md]` markers at paragraph end.
 
-**Critical**: Write the composed note to disk BEFORE any chain steps.
+### Phase 5: Vault Integration (Strict Pipeline)
 
-This ensures recovery if chain steps fail.
+Follow `wiki-ingest` write order:
 
-### Phase 4: Compact Check (unless --no-compact)
+1. **Validate**: `skillwiki validate <page>` — STOP if non-zero
+2. **Write page**: Save to `concepts/<slug>.md` (or `comparisons/`, `queries/`, `entities/`)
+3. **Update index**: Add entry to `index.md`
+4. **Append log**: Add entry to `log.md`
 
-Invoke the compactor in **single-note chain mode**:
+**Forbidden**: Never update index.md or log.md before validate passes.
 
-1. Score new note against its folder neighbors
-2. Use heuristics from compactor's scoring.md
-3. Take action based on score:
-   - Score < 60: No action
-   - Score 60-79: Add cross-links to Related Notes
-   - Score >= 80: Warn user about potential merge candidate
+### Phase 6: Report (Verbatim)
 
-See compactor SKILL.md "Single-Note Chain Mode" section.
-
-### Phase 5: Content Simplify (unless --no-simplify)
-
-Two-pass simplification per [[agent-skills/skills/deep-research/references/chain-orchestration|chain-orchestration]]:
-
-**Pass A: Consolidation**
-- Remove redundancy across callout sections
-- Move repeated content into Synthesis
-- Merge similar code examples
-
-**Pass B: Tightening**
-- Reduce verbose prose
-- Verify TL;DR accuracy
-- Check Mermaid rendering
-- Trim sources to top 5-7
-
-### Phase 6: Finalize + Report
-
-Print execution summary:
+Print structured summary exactly as follows:
 
 ```
 Deep Research Complete
 ----------------------
 Topic: <topic>
-Output: <full path>
-Folder: <resolved folder>
-Sources queried:
+Vault: <resolved-vault-path>
+
+Sources Queried:
   - Web search: <count> queries
   - Context7: <library-id or "not used">
   - DeepWiki: <repo or "not used">
-Chain results:
-  - Compact: <score or "skipped">
-  - Simplify: <"applied" or "skipped">
+
+Files Written:
+  - raw/articles/<slug>.md
+  - concepts/<slug>.md
+
+Pipeline Results:
+  - Raw capture: <count> sources
+  - Validate: pass
+  - Index: updated
+  - Log: appended
+
 Related notes found: <count>
-Warnings: <any warnings>
+Warnings: <any>
 ```
+
+## Flags
+
+| Flag | Effect |
+|------|--------|
+| `--type <concept\|comparison\|query\|entity>` | Force page type |
+| `--no-raw` | Skip raw capture (quick lookup, no provenance) |
+| `--folder <path>` | Override destination within vault (rarely needed) |
+
+## Stop Conditions
+
+- `skillwiki path` returns NO_VAULT_CONFIGURED
+- Raw capture fails (hash error, write error)
+- `skillwiki validate` fails (schema violation)
+- All sources fail (web, Context7, DeepWiki all error)
 
 ## Safety Rules
 
-1. Always save raw note before chain steps
-2. Never overwrite existing notes without user confirmation
-3. Chain failures keep note as-is and warn user
-4. Respect `--draft` flag for uncertain routing
-5. Log routing decisions for transparency
-
-## Tool Usage
-
-### Primary Tools
-
-- **Codex web search**: Current web information, multiple targeted queries, then open the strongest sources
-- **Context7 MCP**: Library/framework documentation
-  - `mcp__context7__resolve_library_id`
-  - `mcp__context7__query_docs`
-- **DeepWiki MCP**: GitHub repository insights
-  - `mcp__deepwiki_mcp__ask_question`
-
-### Vault Tools
-
-- **Shell + `rg`**: Scan project folders, locate existing notes, and search note content
-- **File reads**: Check existing notes, verify `_Overview.md`, and inspect candidate related notes
-- **File writes/edits**: Create the research note first, then add any cross-links during compact phase
-
-## Mermaid Guidelines
-
-Follow the Mermaid rules in [[AGENTS#Mermaid (Obsidian Compatibility)|CLAUDE.md]].
-
-Include diagrams when explaining system architecture, data flow, comparisons, or concept relationships. Skip for simple factual lookups.
+1. Always validate before writing index/log
+2. Never overwrite existing pages without user confirmation
+3. Source failures keep other sources; note in report
+4. Respect `--no-raw` for quick lookups (no provenance chain)
+5. Log all vault resolution and routing decisions
 
 ## Failure Handling
 
 | Failure | Action |
 |---------|--------|
-| Web search fails | Continue with other sources, note in report |
-| Context7 fails | Omit that callout section, note in report |
-| DeepWiki fails | Omit that callout section, note in report |
-| ALL sources fail | Abort with error, no note created |
-| Mermaid invalid | Remove diagram, add warning |
-| Compact fails | Keep note as-is, warn in report |
-| Simplify fails | Keep note as-is, warn in report |
+| No vault configured | Abort with: "No vault configured. Run `skillwiki init` or set WIKI_PATH." |
+| Web search fails | Continue; omit web findings section |
+| Context7 fails | Continue; omit Context7 section |
+| DeepWiki fails | Continue; omit DeepWiki section |
+| Validate fails | STOP — do not write index/log; surface errors |
+| Raw hash mismatch | STOP — source content changed mid-capture |
 
-## References
+## Tool Usage
 
-- [[agent-skills/skills/deep-research/references/routing-rules|routing-rules]] - Auto-routing algorithm
-- [[agent-skills/skills/deep-research/references/note-template|note-template]] - Output note structure
-- [[agent-skills/skills/deep-research/references/chain-orchestration|chain-orchestration]] - Pipeline details
-- [[agent-skills/skills/obsidian-dry-run-compactor/SKILL|obsidian-dry-run-compactor]] - Compactor skill
-- [[AGENTS|CLAUDE.md]] - Vault conventions and Mermaid rules
+### Primary Tools
+
+- **skillwiki CLI**: Vault resolution, validation, hash computation
+  - `skillwiki path` — resolve vault root
+  - `skillwiki lang` — resolve output language
+  - `skillwiki hash <file>` — compute sha256
+  - `skillwiki validate <file>` — schema validation gate
+- **Web search**: Current information via Codex
+- **Context7 MCP**: Library/framework documentation
+- **DeepWiki MCP**: GitHub repository insights
+
+### Vault Tools
+
+- **File reads**: Read SCHEMA.md, index.md, log.md for orientation
+- **File writes**: Create raw sources, typed pages via Write tool
+- **File edits**: Update index.md, append to log.md via Edit tool
+
+## Mermaid Guidelines
+
+Follow Obsidian-compatible Mermaid rules from SCHEMA.md:
+
+- Include for: system architecture, data flow, process steps, concept relationships
+- Skip for: simple facts, single concepts, purely textual topics
 
 ## Related Skills
 
-- **obsidian-dry-run-compactor**: Used for compact check chain step
-- **obsidian-gh-knowledge**: Vault operations and project scoping
-- **simplify**: Code-focused simplification (not used here; content-simplify is inline)
+- **wiki-ingest**: Raw capture, hash, validate, write pipeline
+- **wiki-crystallize**: Alternative for session distillation (use when research comes from working session)
+- **wiki-lint**: Post-hoc quality check (orphans, broken citations, oversized pages)
+- **wiki-audit**: Citation verification
+
+## References
+
+- [[concepts/skillwiki-architecture]] — vault layers, schema, pipeline
+- [[concepts/trivial-cycle-fast-path]] — applicable pattern for vault-only edits
