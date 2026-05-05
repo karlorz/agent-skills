@@ -11,10 +11,10 @@
     {
       "name": "deep-research",
       "source": "./skills/deep-research",
-      "description": "Multi-source research pipeline with auto-routing to Obsidian vault",
-      "version": "1.0.0",
+      "description": "Multi-source research engine with flexible output: terminal, file, or skillwiki vault integration",
+      "version": "2.0.0",
       "category": "research",
-      "keywords": ["research", "deep-research", "obsidian", "pipeline"]
+      "keywords": ["research", "deep-research", "multi-source", "context7", "deepwiki"]
     },
     {
       "name": "loop",

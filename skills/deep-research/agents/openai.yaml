@@ -1,7 +1,7 @@
 interface:
   display_name: "Deep Research"
-  short_description: "Research a topic across the web, current docs, and repositories, then save a routed Obsidian note."
-  default_prompt: "Research <topic> deeply, route the note into the correct vault folder, and include sources plus related notes."
+  short_description: "Research a topic across the web, current docs, and repositories. Output to terminal, file, or vault."
+  default_prompt: "Research <topic> deeply using web search, documentation, and repository sources."
 
 policy:
   allow_implicit_invocation: true
