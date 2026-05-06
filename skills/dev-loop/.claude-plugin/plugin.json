@@ -1,0 +1,11 @@
+{
+  "name": "dev-loop",
+  "version": "1.0.0",
+  "description": "Generic single-pass PRD + skillwiki dev cycle engine. Project-agnostic; reads .claude/dev-loop.config.md from CWD.",
+  "author": {
+    "name": "kalrorz"
+  },
+  "license": "MIT",
+  "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro"],
+  "skills": "./"
+}
