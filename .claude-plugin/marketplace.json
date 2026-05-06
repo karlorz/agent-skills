@@ -47,6 +47,14 @@
       "version": "1.0.0",
       "category": "automation",
       "keywords": ["autopilot", "codex", "session", "hooks"]
+    },
+    {
+      "name": "dev-loop",
+      "source": "./skills/dev-loop",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. Project-agnostic; reads .claude/dev-loop.config.md from CWD.",
+      "version": "1.0.0",
+      "category": "automation",
+      "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro"]
     }
   ]
 }
