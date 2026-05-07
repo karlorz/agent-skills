@@ -216,6 +216,11 @@ Follow the project's documented release procedure based on
 - **`ci-tag-trigger`**: bump → commit → push → tag → CI publishes.
   Verify the tag landed on the remote
   (`git ls-remote origin refs/tags/<tag>`). If missing, push it again.
+  Then **verify CI** — run `gh run list --limit 1` and check the
+  latest run status. If the run is `in_progress`, wait up to 120s
+  (`gh run watch --exit-status`). If the run fails, inspect
+  `gh run view <id> --log-failed`, fix the workflow, and re-push
+  the tag. Do NOT proceed to RETRO while CI is failing.
 - **`local`**: project's local release script (with caution — interactive
   auth prompts on the dev host break `/loop` idempotency).
 - **`none`**: skip.
@@ -339,6 +344,8 @@ item non-trivial, escalate to the full pipeline.
   └── YES → run E2E (if applicable)
               ├── any tier fails? → fix, re-run from simplify
               └── ALL PASS        → bump → commit → push → tag (CI publishes)
+                                          └── CI green? → proceed to RETRO
+                                               └── CI red?  → fix workflow, re-push tag
 ```
 
 A push that bypasses simplify is a broken release. Treat E2E with the
