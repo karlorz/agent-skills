@@ -1,6 +1,6 @@
 interface:
   display_name: "Deep Research"
-  short_description: "Research a topic across the web, current docs, and repositories. Output to terminal, file, or vault."
+  short_description: "Deep research across web, docs, and repos with content refinement. Output to terminal, file, or vault."
   default_prompt: "Research <topic> deeply using web search, documentation, and repository sources."
 
 policy:

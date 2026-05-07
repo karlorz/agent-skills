@@ -131,23 +131,15 @@ The active PRD skill is pluggable. Default chain:
 2. **Load project config** in this order:
    - **Primary**: read `./.claude/dev-loop.config.md` (relative to CWD).
      Parse the YAML-style fields described in `templates/project-config.md`.
-   - **Fallback 1**: read `CLAUDE.md` for "Current counts" and "Where
-     things live" sections; extract slug, paths, e2e scripts. Use these
-     deterministic patterns (verified in Phase 2 verification work
-     item, T2):
-
-     | Field | Source pattern | Notes |
-     |-------|----------------|-------|
-     | `slug` | basename of CLAUDE.md's parent directory | implicit project identity |
-     | `vault` | first occurrence of `~/wiki` (or other tilde-path) in CLAUDE.md body | empty if no match → skip vault steps |
-     | `cli_src` | first match of `packages/[a-z-]+/src/commands/` or `src/commands/` | check existence before accepting |
-     | `cli_test` | first match of `packages/[a-z-]+/test/commands/` or `test/commands/` | check existence before accepting |
-     | `skills_glob` | `packages/skills/*/SKILL.md` if `packages/skills/` exists, else `skills/*/SKILL.md` | runtime discovery for count |
-     | `release_branch` | regex `default branch \(\`([^\`]+)\`\)` | falls back to `main` if no match |
-     | `e2e_scripts` | regex `e2e-[a-z]+\.sh` from CLAUDE.md, **excluding** `e2e-common.sh` (helper, not a runnable suite) | each entry prefixed `scripts/` |
-     | `manifests_count` | regex `([0-9]+) manifests` | optional sanity check field |
-     | `remote_hosts` | look for SSH host names in e2e-remote / e2e-plugin descriptions (e.g., `sg01`) | empty list if none |
-     | `cli_entry_override` | NOT recoverable from CLAUDE.md — leave empty, fall through to fallback 3 if dev-mode tsx wrapper is required |
+   - **Fallback 1**: extract from `CLAUDE.md` body where possible:
+     `slug` (parent dir basename), `vault` (first `~/wiki` tilde-path),
+     `cli_src`/`cli_test` (first `packages/*/src/commands/` or
+     `src/commands/` match), `skills_glob`
+     (`packages/skills/*/SKILL.md` if exists), `release_branch`
+     (regex `default branch`, else `main`), `e2e_scripts`
+     (regex `e2e-*.sh` excluding `e2e-common.sh`),
+     `manifests_count`/`remote_hosts` (regex/grep).
+     `cli_entry_override` is NOT recoverable → leave empty.
    - **Fallback 2**: introspect repo conventions:
      - CLI src: `packages/*/src/commands/`, `src/commands/`, or `cli/`
      - Skills glob: `packages/*/SKILL.md` or `skills/*/SKILL.md`
@@ -367,8 +359,9 @@ same discipline if the project has it.
 2. **Always start work with proj-work.** Redirect paths come from
    there, not from the PRD skill.
 3. **PRD skill is pluggable.** superpowers is the default, not required.
-4. **Never push without simplify.** Hard gate. E2E joins the gate when
-   the project has it.
+4. **Never push without simplify.** Hard gate for code changes;
+   git-only and vault-only work skip simplify (nothing to review). E2E
+   joins the gate when the project has it.
 5. **Validate before index.** `skillwiki validate` must pass before
    touching `index.md` or `log.md`.
 6. **Raw is immutable.** Never modify files in `raw/` after ingestion.
@@ -393,35 +386,6 @@ same discipline if the project has it.
 15. **Counts are not a contract.** E2E success is `exit 0`, not a magic
     number of assertions. Discover counts at cycle start; never
     hardcode them in this skill.
-
-## Self-Learning Protocol
-
-The Knowledge Tiers table above defines *where* each tier lands. This
-section defines *when* each fires.
-
-**Tier 1 — every cycle.** RETRO writes one line per cycle to the
-project work item and the vault log. The flags (`Generalize?`,
-`ClaudeMd?`, `WorkflowShift?`) are the deterministic input to Tiers 2
-and 3.
-
-**Tier 2 — every 3 cycles, or on demand.** DISTILL fires when either
-the 3-cycle cadence elapses OR any retro in the window flagged
-`Generalize?: yes`. Output: `concepts/dev-loop-<topic>.md` with
-provenance back to the source retros.
-
-**Tier 3 — on workflow shift only.** When a retro flags
-`WorkflowShift?: yes`, run `skillwiki:proj-decide` to record an ADR.
-Examples worth ADR-ing:
-- Cadence changes (e.g., AUDIT cadence is 3, not 5).
-- Hard-rule additions (e.g., no `/clear` during loops).
-- Knowledge-tier reshuffles (e.g., promoting a project pattern to
-  global).
-
-If the ADR generalizes beyond the current project, add a corresponding
-concept page in the global wiki on the same cycle.
-
-This skill itself is updated when retros flag improvements — that
-update IS a workflow shift, so record an ADR for non-trivial revisions.
 
 ## Bootstrap Mode
 

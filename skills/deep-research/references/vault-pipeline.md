@@ -1,6 +1,6 @@
 # Vault Pipeline Integration
 
-This reference documents the full skillwiki vault integration used when `--vault` flag is active.
+This reference documents the skillwiki vault integration used when `--vault` flag is active. It covers raw capture, schema validation, write pipeline, and related-pages search — not synthesis (which SKILL.md defines).
 
 ## Prerequisites
 
@@ -18,6 +18,15 @@ This reference documents the full skillwiki vault integration used when `--vault
 
 Run `skillwiki lang` at start. Generate page prose in resolved language. Frontmatter keys, file names, schema headers, citation markers, and wikilink slugs remain English.
 
+## Related-Pages Search
+
+Before writing the typed page, scan the vault for existing related content:
+
+1. Search `index.md` for pages with overlapping keywords or tags
+2. Check `concepts/` and `queries/` for related topics
+3. Add wikilinks to discovered pages in the Related Notes section
+4. This enables cross-linking that keeps the vault navigable
+
 ## Raw Capture
 
 For each source, follow the raw-capture pattern below:
@@ -34,7 +43,7 @@ For each source, follow the raw-capture pattern below:
 
 **Stop conditions**: If raw capture fails (hash mismatch, write error), STOP and surface error.
 
-## Synthesis (Typed Knowledge Page)
+## Typed Knowledge Page
 
 Compose typed-knowledge page per `TypedKnowledgeSchema`:
 
@@ -63,19 +72,11 @@ provenance: research
 | Question-answer focus | query |
 | Project/tool summary | entity |
 
-**Body sections**:
-1. **TL;DR** -- 3-5 bullets of key findings
-2. **Overview** -- 1-2 paragraph synthesis
-3. **Mermaid diagram** -- when applicable (architecture, flow, relationships)
-4. **Research Findings** -- collapsible callouts per source type
-   - `> [!abstract]- Web Search Findings`
-   - `> [!info]- Context7 Documentation`
-   - `> [!tip]- DeepWiki Repository Insights`
-5. **Synthesis** -- merged analysis with patterns, recommendations, caveats
-6. **Related Notes** -- wikilinks to existing vault pages
-7. **Sources** -- numbered list with access dates, plus Context7/DeepWiki citations
-
 **Citation format**: Use `^[raw/articles/slug.md]` markers at paragraph end.
+
+**Body sections**: Follow the synthesis structure defined in SKILL.md Phase 3.
+
+**Diagram placement in page**: If the synthesis includes a Mermaid diagram, place it immediately after the **Overview** section and before the **Findings** section. This gives the wiki reader a visual anchor before diving into source details. If no diagram, omit the section entirely — do not leave a placeholder heading.
 
 ## Write Pipeline (Strict Order)
 
@@ -85,12 +86,6 @@ provenance: research
 4. **Append log**: Add entry to `log.md`
 
 **Forbidden**: Never update index.md or log.md before validate passes.
-
-## Mermaid Guidelines
-
-Follow Obsidian-compatible Mermaid rules from SCHEMA.md:
-- Include for: system architecture, data flow, process steps, concept relationships
-- Skip for: simple facts, single concepts, purely textual topics
 
 ## Safety Rules
 

@@ -1,7 +1,7 @@
 {
   "name": "deep-research",
-  "version": "2.0.0",
-  "description": "Multi-source research engine with flexible output: terminal, file, or skillwiki vault integration",
+  "version": "2.2.0",
+  "description": "Multi-source research engine with deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration",
   "author": {
     "name": "kalrorz"
   },
