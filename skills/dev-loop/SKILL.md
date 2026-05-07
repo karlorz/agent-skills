@@ -6,9 +6,6 @@ argument-hint: "[high]"
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
 
-> **Status: ACTIVE.** Phase 3 cutover complete.
-> Spec at `~/wiki/projects/llm-wiki/work/2026-05-07-dev-loop-skill-extraction/spec.md`.
-
 A single-pass dev cycle. When invoked, runs ONE cycle: refresh context,
 load project config, pick up the next claimable work item, drive it
 through the loop, exit. The PRD skill drives the work; skillwiki
@@ -179,6 +176,10 @@ Create or open a work item under
 `{vault}/projects/{slug}/work/YYYY-MM-DD-{work-slug}/`. proj-work emits
 redirect paths for `spec.md` and `plan.md`. Pass these to steps 3–4.
 
+proj-work validates frontmatter (see its SKILL.md for required fields:
+`title`, `name`, `description`, `kind`, `status`, `priority: high|medium|low`,
+`project: "[[slug]]"` wikilink format, timestamps, provenance).
+
 ### 3. SPEC — `<PRD brainstorming/design skill>` (mandatory)
 
 Default: `superpowers:brainstorming`. Pass the redirect path so the
@@ -318,9 +319,17 @@ instead:
 
 ## Trivial Cycle Fast-Path
 
-When the work item is scoped to a small, well-defined change (single
-subcommand, config tweak, small bug fix, under ~50 LOC in normal mode
-or ~80 LOC in high mode), collapse the pipeline:
+When the work item is scoped to a small, well-defined change, collapse
+the pipeline:
+
+**Qualifying criteria (any one suffices):**
+- Single subcommand, config tweak, or small bug fix under ~50 LOC in
+  normal mode (~80 LOC in high mode)
+- **Git-only operation** (push unpushed commit, merge branch, tag
+  release) — 0 LOC changes
+- **Vault-only work** (page edits, frontmatter fixes) — no code touched
+
+**Collapsed pipeline:**
 
 1. **QUERY** — normal.
 2. **WORK** — `proj-work` as usual, but note `kind: trivial` in the
@@ -328,8 +337,8 @@ or ~80 LOC in high mode), collapse the pipeline:
 3. **SPEC** — inline spec in the work-item folder (skip brainstorming).
 4. **PLAN** — skip (spec is the plan for trivial changes).
 5. **EXECUTE** — inline (no subagent dispatch).
-6. **SIMPLIFY** — still mandatory. Self-review diff against spec
-   acceptance.
+6. **SIMPLIFY** — mandatory for code changes; **skip for git-only or
+   vault-only work** (nothing to review).
 7. **E2E / PUSH** — if applicable.
 
 Retro and consolidation steps are unchanged. The fast-path is a
@@ -417,8 +426,12 @@ update IS a workflow shift, so record an ADR for non-trivial revisions.
 ## Bootstrap Mode
 
 If the user explicitly asks to bootstrap a new project (or REFRESH
-fallback 3 fires), copy `templates/project-config.md` into
-`./.claude/dev-loop.config.md`, walk the user through filling in:
+fallback 3 fires), run the **two-step bootstrap**:
+
+### Step A: Create config file
+
+Copy `templates/project-config.md` into `./.claude/dev-loop.config.md`,
+filling in:
 
 1. `slug` — project identifier
 2. `vault` — wiki path (or empty)
@@ -428,7 +441,14 @@ fallback 3 fires), copy `templates/project-config.md` into
 6. Release config (`publish_via`, `bump_script`, `manifests_count`)
 7. Optional `notes` for project-specific gotchas
 
-After bootstrap, re-run REFRESH to load the new config.
+### Step B: Initialize vault workspace
+
+Run `skillwiki:proj-init` with the project slug to create
+`{vault}/projects/{slug}/` with README and folder structure
+(`requirements/`, `architecture/`, `work/`, `compound/`).
+
+**Both steps are required** for full vault integration. After bootstrap,
+re-run REFRESH to load the new config.
 
 ## Research Agent
 
