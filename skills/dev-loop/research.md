@@ -268,16 +268,11 @@ ${CLI_ENTRY:-skillwiki} overlap "$VAULT" 2>/dev/null || echo "TOOLING_UNAVAILABL
 
 #### B3. Page Quality
 
-**Counting rule (deterministic):** a page's *body line count* is the
-number of non-blank lines in the body region (everything after the
-second `---` frontmatter delimiter), **excluding**:
-- empty leading and trailing blank lines
-- lines that are only `## Heading` markers
-- lines containing only the `---` delimiter itself
-
-A page is **thin** when body line count is below the active threshold
-(40 in normal mode, 60 in high mode). This rule must be applied
-identically across cycles so isolated/thin counts are comparable.
+**Counting rule:** see `SCHEMA.md` → "Page Quality Metrics" in the
+target vault. The rule excludes blank lines, heading-only lines, and
+`---` delimiters. Thresholds: normal < 40 lines, high < 60 lines.
+This rule must be applied identically across all tools so counts are
+comparable across cycles.
 
 ```bash
 python3 -c "
