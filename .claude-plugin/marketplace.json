@@ -4,7 +4,7 @@
     "name": "kalrorz"
   },
   "metadata": {
-    "description": "Curated skills for Claude Code: deep research, scheduled loops, code simplification, Obsidian knowledge management, and autopilot session management.",
+    "description": "Curated skills for Claude Code: deep research, code simplification, Obsidian knowledge management, autopilot session management, and dev-loop cycles.",
     "version": "1.0.0"
   },
   "plugins": [
@@ -15,14 +15,6 @@
       "version": "2.0.0",
       "category": "research",
       "keywords": ["research", "deep-research", "multi-source", "context7", "deepwiki"]
-    },
-    {
-      "name": "loop",
-      "source": "./skills/loop",
-      "description": "Cron-like scheduler for recurring Claude prompts via OS scheduler backends",
-      "version": "1.0.0",
-      "category": "automation",
-      "keywords": ["loop", "schedule", "cron", "recurring", "automation"]
     },
     {
       "name": "simplify",
@@ -55,6 +47,14 @@
       "version": "1.1.0",
       "category": "automation",
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro"]
+    },
+    {
+      "name": "hermes-cli",
+      "source": "./skills/hermes-cli",
+      "description": "Hermes Agent CLI commands reference — full terminal command surface for hermes-agent by NousResearch",
+      "version": "1.0.0",
+      "category": "reference",
+      "keywords": ["hermes", "hermes-agent", "cli", "reference", "nousresearch", "commands"]
     }
   ]
 }
