@@ -294,7 +294,13 @@ for d in ['entities','concepts','comparisons','queries','meta']:
         parts = content.split('---', 2)
         if len(parts) < 3: print(f'MALFORMED_FRONTMATTER: {f}'); continue
         body = parts[2].strip()
-        body_lines = body.count('\n') + 1
+        # Counting rule: non-blank lines, excluding heading-only and --- lines
+        body_lines = sum(
+            1 for line in body.splitlines()
+            if line.strip()
+            and not re.match(r'^#{1,6}\s+\S', line)
+            and line.strip() != '---'
+        )
         has_overview = bool(re.search(r'^## Overview', body, re.M))
         has_related = bool(re.search(r'^## Related', body, re.M))
         flags = []
@@ -404,6 +410,22 @@ Two distinct idle states (three in high mode):
    <20%, no isolated pages, no thin pages, no empty type dirs). Skip
    synthesis, write a minimal idle log entry with vault health stats,
    exit with: `"Research idle — no new findings."`
+
+   **Pre-idle gate (mandatory):** Before declaring truly idle, the
+   agent MUST collect actual vault health metrics by running B1–B4
+   (or reading their output if already computed). If any metric
+   exceeds the thresholds below, the agent is NOT idle — it MUST
+   proceed to SYNTHESIZE with those findings:
+
+   | Metric | normal threshold | high threshold |
+   |--------|-----------------|----------------|
+   | Uncited raw | >50% | >20% |
+   | Isolated pages | any | any (<3 links) |
+   | Thin pages | any (<40L) | any (<60L) |
+   | Empty type dirs | any (entities, comparisons) | any |
+
+   Skip this gate and you will report idle while actionable vault
+   work exists (this was the idle-threshold-gap bug).
 
 2. **Steady backlog** — no NEW findings this cycle, but previously
    identified gaps still exist. Report the recurring backlog, write a
