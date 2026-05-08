@@ -162,6 +162,13 @@ Search the vault (resolved from `vault` config field) for prior specs,
 plans, concepts, decisions overlapping the task. Feed results into the
 PRD skill's exploration step. Skip if `vault` is empty.
 
+**Raw-to-page coverage check (mandatory when vault exists):** After
+wiki-query, run `skillwiki drift` and a raw-cited comparison to detect:
+1. Drifted sources that need reingest per N9 (archive old + ingest new).
+2. Uncited raw articles that have no downstream concept page citations.
+If either is found, treat them as claimable work items alongside any
+QUERY results. Prioritize: drifted sources > uncited raw > other work.
+
 ### 2. WORK — `skillwiki:proj-work` (mandatory)
 
 Create or open a work item under
@@ -296,6 +303,12 @@ instead:
    - `skillwiki:wiki-crystallize` — capture any session insights
    - `skillwiki:proj-distill` — promote compound entries to concepts
    - `skillwiki:proj-decide` — record any pending ADRs
+   - **Drift metadata cleanup** — `skillwiki drift` reports
+     `fetch_failed` entries for raw sources with non-HTTP source_urls
+     (null, file://, local:). These can never be drift-checked. In
+     idle time, either fix the source_url to a valid HTTP URL (if
+     known), or add a `refreshable: false` annotation to document
+     them as intentionally non-refreshable.
 4. Invoke research agent — see `research.md` in this skill directory.
    Pass intensity through (`normal` or `high`). If it returns ranked
    recommendations, the next dev-loop cycle picks up the top item via
@@ -337,6 +350,29 @@ Retro and consolidation steps are unchanged. The fast-path is a
 *recommendation*, not a requirement — if scope creep makes a trivial
 item non-trivial, escalate to the full pipeline.
 
+### Vault-Only Fast-Path
+
+When the work item is **purely vault edits** (no code touched, no git
+push needed), further collapse the trivial pipeline:
+
+1. **QUERY** — normal.
+2. **WORK** — skip (no code spec/plan needed for vault-only edits).
+3. **SPEC** — skip.
+4. **PLAN** — skip.
+5. **EXECUTE** — inline vault edits (page creation, frontmatter fixes,
+   citation normalization).
+6. **VALIDATE** — `skillwiki validate` on each modified page (required
+   before touching `index.md` or `log.md`).
+7. **SIMPLIFY** — skip (no code to review).
+8. **E2E / PUSH** — skip by default. Push vault changes only if the
+   vault has accumulated significant edits (git commit + push).
+
+This shorter path avoids creating work-item directories for routine
+vault maintenance (typing a query page, fixing citations, enriching a
+thin page). The standard trivial path remains available for vault work
+that benefits from work-item tracking (e.g., a multi-page enrichment
+campaign).
+
 ## Pre-Push Gate (when PUSH applies)
 
 ```
@@ -352,7 +388,26 @@ item non-trivial, escalate to the full pipeline.
 A push that bypasses simplify is a broken release. Treat E2E with the
 same discipline if the project has it.
 
-## Hard Rules
+## N9 Reingest Protocol
+
+When `skillwiki drift` reports drifted sources, the reingest must follow N9
+(raw files are immutable). The current `skillwiki archive` subcommand only
+supports typed-knowledge pages, not raw/ files. Until a raw-aware archive
+command is added, handle drift as follows:
+
+1. **Note the drift** in the vault log with stored vs current sha256.
+2. **Create a new raw file** alongside the old one with a date-stamped
+   filename (e.g., `raw/articles/<slug>-2026-05-08.md`) containing the
+   updated content and new sha256.
+3. **Update concept pages** that cite the old raw path to point to the new
+   one if the content change is significant. For minor formatting drift,
+   leave citations unchanged and add a note.
+4. **Do NOT modify the old raw file.** The original remains as
+   provenance history even without formal archiving.
+
+This is a stopgap. The canonical flow is: `skillwiki archive <raw-path>`
+→ new raw ingest → concept page update. When the CLI gains raw-archive
+support, switch to that protocol automatically.
 
 1. **Always REFRESH first.** Reload plugins, load project config, read
    CLAUDE.md and MEMORY.md fresh every cycle.
@@ -386,6 +441,17 @@ same discipline if the project has it.
 15. **Counts are not a contract.** E2E success is `exit 0`, not a magic
     number of assertions. Discover counts at cycle start; never
     hardcode them in this skill.
+16. **Fix friction in-cycle.** When a retro identifies a code-fixable
+    friction (e.g., lint --fix creating duplicates, missing schema),
+    implement the fix in the same cycle rather than filing it as
+    backlog. Backlog is for deferred decisions, not for known code
+    fixes. Filing a known fix as backlog and re-discovering it in
+    future cycles is waste.
+17. **Verify CI after push.** After PUSH (step 9), check CI status
+    with `gh run list --limit 1` and `gh run watch` if in-progress.
+    Do NOT proceed to RETRO while CI is failing. If CI fails, inspect
+    `gh run view <id> --log-failed`, fix the workflow, and re-push
+    the tag.
 
 ## Bootstrap Mode
 

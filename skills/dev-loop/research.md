@@ -196,6 +196,11 @@ exist.
 
 #### B1. Raw-to-Page Coverage
 
+**Quick method:** Use `skillwiki lint` which surfaces `wikilink_citation`
+warnings for raw sources lacking downstream concept page citations.
+
+**Manual method** (when lint is insufficient or for deeper analysis):
+
 ```bash
 # Vault existence guard
 if [ ! -d "$VAULT/raw" ]; then
