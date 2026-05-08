@@ -81,7 +81,7 @@ The active PRD skill is pluggable. Default chain:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ PRELUDE (mandatory)                                         │
-│  0. REFRESH   Load project config + CLAUDE.md + MEMORY.md  │
+│  0. REFRESH   Reload plugins + load project config          │
 │               + read CLAUDE.md + MEMORY.md                  │
 ├─────────────────────────────────────────────────────────────┤
 │ CORE (mandatory)                                            │
@@ -125,11 +125,8 @@ The active PRD skill is pluggable. Default chain:
 
 ### 0. REFRESH — context hygiene + config load (mandatory, ~15s)
 
-1. **Reload plugins** — skill and plugin changes from prior cycles are
-   picked up automatically in new sessions. Mid-session, there is no
-   slash command to force a reload — if a prior cycle edited skills or
-   CLAUDE.md, those changes take effect next session. The rest of REFRESH
-   (steps 2–6) runs every cycle regardless.
+1. **Reload plugins** — run `/reload-plugins` to pick up any skill or
+   command changes from prior cycles.
 
 2. **Load project config** in this order:
    - **Primary**: read `./.claude/dev-loop.config.md` (relative to CWD).
@@ -156,7 +153,7 @@ The active PRD skill is pluggable. Default chain:
    loaded at session start goes stale if a prior cycle edited them.
 
    First cycle in a session that hasn't edited skills or CLAUDE.md can
-   skip step 1 (plugin changes are automatic), but must always do step 2
+   skip step 1 (plugin reload) as a no-op, but must always do step 2
    (config) and step 3 (CLAUDE.md/MEMORY.md re-read).
 
 4. **CLI version alignment** — if the project has a local skillwiki
