@@ -68,6 +68,10 @@ knowledge_backends:
 | `audit_vault` | wiki-audit | verify work-item structure | varies |
 | `drift_check` | skillwiki drift | check unpushed + stale branches | varies |
 
+Steps branch on **capabilities**, not backend names. When a capability is
+absent from BACKEND_CAPS, use the documented git-based alternative or
+document why the step is intentionally skipped.
+
 Vault type directories are **discovered from SCHEMA.md** at REFRESH time,
 not hardcoded here. The REFRESH step parses the `## Layers` section of
 `{vault}/SCHEMA.md` to extract the list of typed-knowledge subdirectories

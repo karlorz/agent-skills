@@ -95,11 +95,11 @@ The active PRD skill is pluggable. Default chain:
 
 ## Knowledge Tiers
 
-| Tier | Where | When |
-|---|---|---|
-| 1 — Cycle journal | **Project wiki** (`projects/{slug}/work/.../`, vault log) | Every cycle (RETRO) |
-| 2 — Generalized concepts | **Global wiki** (`concepts/dev-loop-*.md`) | Every 3 cycles (DISTILL) |
-| 3 — Workflow ADRs | **Project wiki** ADR (+ optional global concept) | On workflow shift only |
+| Tier | skillwiki | none | When |
+|---|---|---|---|
+| 1 — Cycle journal | **Project wiki** (`projects/{slug}/work/.../`, vault log) | `.claude/dev-loop-work/{slug}/retro.md` | Every cycle (RETRO) |
+| 2 — Generalized concepts | **Global wiki** (`concepts/dev-loop-*.md`) | `.claude/dev-loop-work/compound.md` | Every 3 cycles (DISTILL) |
+| 3 — Workflow ADRs | **Project wiki** ADR (`projects/{slug}/architecture/`) | `.claude/dev-loop-work/adrs.md` | On workflow shift only |
 
 ## The Loop (Single Pass)
 
@@ -129,19 +129,16 @@ The active PRD skill is pluggable. Default chain:
 │ POSTLUDE — every-3-cycles consolidation (conditional)       │
 │ 12. DISTILL   proj-distill (concepts) / proj-decide (ADRs)  │
 │ 13. AUDIT     claude-md-improver → CLAUDE.md updates        │
-│ 14. VERIFY    skillwiki wiki-audit → provenance integrity   │
+│ 14. VERIFY    audit_vault cap → provenance integrity       │
 ├─────────────────────────────────────────────────────────────┤
 │ POSTLUDE — context hygiene (conditional)                    │
 │ 15. COMPACT   /compact if context >70% or 5+ cycles in      │
 ├─────────────────────────────────────────────────────────────┤
 │ IDLE DISCOVERY (when CORE finds no claimable work)          │
 │  Skip to POSTLUDE steps 11–15 regardless of cadence.        │
-│  Then run any applicable skillwiki maintenance skills:      │
-│  - wiki-lint     → vault health check                       │
-│  - wiki-audit    → provenance integrity                     │
-│  - wiki-crystallize → session insights (if any)             │
-│  - proj-distill  → concept page promotion                   │
-│  - proj-decide   → ADR for pending workflow shifts          │
+│  Then run maintenance based on BACKEND_CAPS:               │
+│  - lint_vault cap: wiki-lint/audit/crystallize/distill     │
+│  - no lint_vault: git gc, prune branches, project lint     │
 │  Then invoke research agent (see research.md).              │
 │  Exit with one-line summary of what was done.               │
 └─────────────────────────────────────────────────────────────┘
@@ -540,7 +537,7 @@ Retro and consolidation steps are unchanged. The fast-path is a
 *recommendation*, not a requirement — if scope creep makes a trivial
 item non-trivial, escalate to the full pipeline.
 
-### Vault-Only Fast-Path
+### Vault-Only Fast-Path (requires `query_vault` in BACKEND_CAPS)
 
 When the work item is **purely vault edits** (no code touched, no git
 push needed), further collapse the trivial pipeline:
@@ -551,8 +548,10 @@ push needed), further collapse the trivial pipeline:
 4. **PLAN** — skip.
 5. **EXECUTE** — inline vault edits (page creation, frontmatter fixes,
    citation normalization).
-6. **VALIDATE** — `skillwiki validate` on each modified page (required
-   before touching `index.md` or `log.md`).
+6. **VALIDATE** — if `audit_vault` in BACKEND_CAPS: `skillwiki validate`
+   on each modified page (required before touching `index.md` or
+   `log.md`). If `audit_vault` not in BACKEND_CAPS: verify work-item
+   directory structure (each work item has spec.md + retro.md).
 7. **SIMPLIFY** — skip (no code to review).
 8. **E2E / PUSH** — skip by default. Push vault changes only if the
    vault has accumulated significant edits (git commit + push).
@@ -561,7 +560,8 @@ This shorter path avoids creating work-item directories for routine
 vault maintenance (typing a query page, fixing citations, enriching a
 thin page). The standard trivial path remains available for vault work
 that benefits from work-item tracking (e.g., a multi-page enrichment
-campaign).
+campaign). Vault-only fast-path is only available when `query_vault` in
+BACKEND_CAPS — without a vault, there are no vault-only edits.
 
 ## Pre-Push Gate (when PUSH applies)
 
@@ -582,6 +582,7 @@ with the same discipline if the project has them.
 
 ## N9 Reingest Protocol
 
+**If `drift_check` in BACKEND_CAPS (skillwiki path):**
 When `skillwiki drift` reports drifted sources, handle according to drift
 severity:
 
@@ -607,6 +608,17 @@ The upstream source has substantively changed since ingestion.
    drift, leave citations unchanged and add a note.
 4. **Do NOT modify the old raw file** (it's now in `_archive/`).
 
+**If `drift_check` not in BACKEND_CAPS (git-local path):**
+No upstream source drift is possible without a vault. Instead, check for
+stale local state:
+
+1. **Unpushed commits** — `git log origin/$RELEASE_BRANCH..HEAD --oneline`.
+   If ≥5, flag as P2 risk (batch push recommended).
+2. **Stale local branches** — `git branch --merged | grep -v $RELEASE_BRANCH`.
+   Prune branches that have been merged upstream.
+3. **Uncommitted changes** — `git status --short`. Flag if work-in-progress
+   has been sitting uncommitted for multiple cycles.
+
 ## Hard Rules
 
 1. **Always REFRESH first.** Reload plugins, load project config, read
@@ -617,15 +629,23 @@ The upstream source has substantively changed since ingestion.
 4. **Never push without simplify.** Hard gate for code changes;
    git-only and vault-only work skip simplify (nothing to review). E2E
    joins the gate when the project has it.
-5. **Validate before index.** `skillwiki validate` must pass before
-   touching `index.md` or `log.md`.
+5. **Validate before index.** When `audit_vault` in BACKEND_CAPS:
+   `skillwiki validate` must pass before touching `index.md` or
+   `log.md`. Otherwise: verify work-item directory completeness.
 6. **Raw is immutable.** Never modify files in `raw/` after ingestion.
-7. **Trust the vault for history.** Query the wiki, not git history,
-   for past decisions.
-8. **Provenance stays project.** Pages: `provenance: project`,
-   `provenance_projects: ["[[<project-slug>]]"]`.
-9. **Fallback to wiki-ingest.** If proj-work redirect fails, use
-   `wiki-ingest` manually.
+7. **Trust the vault for history** when `query_vault` in BACKEND_CAPS.
+   Query the wiki, not git history, for past decisions. When
+   `query_vault` not in BACKEND_CAPS: trust git history and local
+   work-item files instead.
+8. **Provenance stays project** when `save_retro` in BACKEND_CAPS.
+   Pages: `provenance: project`,
+   `provenance_projects: ["[[<project-slug>]]"]`. When `save_retro`
+   not in BACKEND_CAPS: retros use local `retro.md` format (no
+   wikilink provenance).
+9. **Fallback to wiki-ingest** when `query_vault` in BACKEND_CAPS. If
+   proj-work redirect fails, use `wiki-ingest` manually. When
+   `query_vault` not in BACKEND_CAPS: create the file locally in the
+   work-item directory instead.
 10. **`/clear` is session-end only.** `/compact` is the in-loop tool.
 11. **Consolidation is every 3 cycles, not per-cycle.** DISTILL, AUDIT,
     VERIFY share the 3-cycle cadence and run as a single phase.
@@ -636,8 +656,9 @@ The upstream source has substantively changed since ingestion.
     safe default. Local `npm publish` prompts for auth and breaks
     `/loop` idempotency.
 14. **Idle cycles run maintenance.** When CORE finds no claimable work,
-    run consolidation and skillwiki maintenance skills instead of
-    exiting idle. Never waste a cycle.
+    run consolidation and maintenance instead of exiting idle. Never
+    waste a cycle. When `lint_vault` in BACKEND_CAPS: run skillwiki
+    maintenance skills. Otherwise: run git-based housekeeping.
 15. **Counts are not a contract.** E2E success is `exit 0`, not a magic
     number of assertions. Discover counts at cycle start; never
     hardcode them in this skill.
@@ -652,11 +673,13 @@ The upstream source has substantively changed since ingestion.
     Do NOT proceed to RETRO while CI is failing. If CI fails, inspect
     `gh run view <id> --log-failed`, fix the workflow, and re-push
     the tag.
-18. **Use local CLI, not global.** When the project has a local build
-    of skillwiki (or a `cli_entry_override` in config), prefer it over
-    the globally installed `skillwiki` binary. A stale global version
-    produces false lint warnings and missing schema detections. Use
-    `npx skillwiki` or the config override, not `skillwiki` directly.
+18. **Use local CLI, not global** when `lint_vault` in BACKEND_CAPS.
+    When the project has a local build of skillwiki (or a
+    `cli_entry_override` in config), prefer it over the globally
+    installed `skillwiki` binary. A stale global version produces false
+    lint warnings and missing schema detections. Use `npx skillwiki` or
+    the config override, not `skillwiki` directly. When `lint_vault`
+    not in BACKEND_CAPS: not applicable (no skillwiki binary needed).
 19. **Respect `BACKEND_CAPS`.** Each step checks capability membership
     before invoking backend-specific operations. When a capability is
     absent, use the documented git-based alternative or document why
@@ -669,7 +692,7 @@ The upstream source has substantively changed since ingestion.
     plugins, block the cycle. Running stale skill logic silently is
     worse than stopping and asking the user to `/reload-plugins`.
 
-## Obsidian Integration
+## Obsidian Integration (requires `query_vault` in BACKEND_CAPS)
 
 When `skillwiki init` creates a vault, it writes:
 
@@ -686,6 +709,10 @@ The ad-hoc capture flow works in both directions:
    next REFRESH step 6.
 2. **From Claude** — `/wiki-add-task <text>` appends to
    `raw/transcripts/YYYY-MM-DD-ad-hoc-captures.md`.
+
+When `query_vault` not in BACKEND_CAPS, Obsidian integration is
+unavailable — no vault exists for captures to land in. Ad-hoc captures
+from Claude append to `.claude/dev-loop-work/captures.md` instead.
 
 ## Bootstrap Mode
 
