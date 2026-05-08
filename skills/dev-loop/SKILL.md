@@ -60,9 +60,34 @@ claimable work regardless of P-score. Specifically:
 | Layer | Tool | Role |
 |-------|------|------|
 | PRD | Any compatible skill (superpowers, CodeStable, custom) | Brainstorm, spec, plan, execute, review |
-| Knowledge | `skillwiki` (CLI + skills) | Ingest, validate, query, crystallize, distill, decide, lint, audit |
+| Knowledge | Pluggable via `knowledge_layer` config — default `skillwiki`, also `none` | Ingest, validate, query, crystallize, distill, decide, lint, audit |
 | Quality | `/simplify` (or equivalent reviewer) | Pre-push code review gate |
 | Hygiene | `claude-md-management:claude-md-improver`, `/compact` | Long-session context maintenance |
+
+The knowledge layer is pluggable via `knowledge_layer` in the project config.
+Steps branch on **capabilities**, not backend names — check `if <capability> in
+BACKEND_CAPS` rather than `if knowledge_layer == "skillwiki"`. This lets new
+backends slot in by declaring which capabilities they provide.
+
+### Capability Matrix
+
+| Capability | skillwiki | none | (future) |
+|---|---|---|---|
+| `query_vault` | yes | no | varies |
+| `create_work_item` | proj-work | local mkdir | varies |
+| `save_retro` | vault log.md | local retro.md | varies |
+| `crystallize` | wiki-crystallize | write insights.md | varies |
+| `distill` | proj-distill | grep retros → compound.md | varies |
+| `lint_vault` | wiki-lint | project lint (if available) | varies |
+| `audit_vault` | wiki-audit | verify work-item structure | varies |
+| `drift_check` | skillwiki drift | check unpushed + stale branches | varies |
+
+At REFRESH, `BACKEND_CAPS` is resolved: read `knowledge_layer` from config,
+look up the backend in `knowledge_backends` (or derive defaults), and store
+the set of capabilities this backend provides. Steps then check membership
+in `BACKEND_CAPS` instead of testing the backend name directly.
+
+See config template for `knowledge_backends` registry details.
 
 The active PRD skill is pluggable. Default chain:
 `superpowers:brainstorming` → `superpowers:writing-plans` →
@@ -126,14 +151,43 @@ The active PRD skill is pluggable. Default chain:
 
 ### 0. REFRESH — context hygiene + config load (mandatory, ~15s)
 
-1. **Reload plugins** — run `/reload-plugins` to pick up any skill or
-   command changes from prior cycles.
+1. **Hot-reload drift guard** — before any other step, detect whether the
+   skill source has drifted from the cached version:
+   - Hash the cached SKILL.md from `~/.claude/plugins/cache/<plugin>/dev-loop/<version>/SKILL.md`
+   - Hash the source SKILL.md at the skill repo (known from plugin manifest or CWD)
+   - Compare to `LAST_SKILL_HASH` from the previous cycle (absent on first cycle)
+   - **Three states:**
+     - `in_sync`: cache hash == source hash → proceed normally
+     - `drifted_reloaded`: cache hash changed from LAST_SKILL_HASH (user ran
+       `/reload-plugins`) → warn: "SKILL.md updated — running new version",
+       update LAST_SKILL_HASH, proceed
+     - `drifted_stale`: source hash != cache hash AND cache hash == LAST_SKILL_HASH
+       → **block the cycle**: "Source SKILL.md has edits not yet loaded.
+       Run `/reload-plugins` before continuing this cycle."
+   - Store cache hash as `LAST_SKILL_HASH` after check.
 
-2. **Load project config** in this order:
+2. **Reload plugins** — run `/reload-plugins` to pick up any skill or
+   command changes from prior cycles. Skip on first cycle if no edits.
+
+3. **Load project config** in this order:
    - **Primary**: read `./.claude/dev-loop.config.md` (relative to CWD).
      Parse the YAML-style fields described in `templates/project-config.md`.
+     Parse `knowledge_layer` (default: `skillwiki`). Then resolve
+     `BACKEND_CAPS` — read the `knowledge_backends` map if present in
+     config (see templates/project-config.md for schema); otherwise derive
+     defaults from `knowledge_layer` + `vault` fields. If `query_vault` in
+     BACKEND_CAPS, discover vault type directories by
+     reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
+     lines like `- entities/, concepts/, ...` ending in `/`. Store as
+     `VAULT_TYPES` session variable.
+     If SCHEMA.md is missing or unparseable, fall back to listing
+     subdirectories of `{vault}/` that contain `.md` files.
+     Store these as session variables for conditional step logic.
    - **Fallback 1**: extract from `CLAUDE.md` body where possible:
-     `slug` (parent dir basename), `vault` (first `~/wiki` tilde-path),
+     `slug` (parent dir basename), `vault` (first `~/wiki` tilde-path
+     or run `skillwiki path` if available), `knowledge_layer` (default
+     `skillwiki` if vault exists, `none` otherwise — then derive
+     BACKEND_CAPS from it),
      `cli_src`/`cli_test` (first `packages/*/src/commands/` or
      `src/commands/` match), `skills_glob`
      (`packages/skills/*/SKILL.md` if exists), `release_branch`
@@ -145,10 +199,16 @@ The active PRD skill is pluggable. Default chain:
      - CLI src: `packages/*/src/commands/`, `src/commands/`, or `cli/`
      - Skills glob: `packages/*/SKILL.md` or `skills/*/SKILL.md`
      - E2E scripts: `scripts/e2e-*.sh` or `test/e2e/*.sh`
-     - Vault: `~/wiki` if it exists, else skip vault-dependent steps
-   - **Fallback 3**: if critical fields (slug, vault) cannot be
-     resolved, prompt user with: *"No dev-loop config found. Run
-     `bootstrap` to scaffold `.claude/dev-loop.config.md`?"*
+     - Vault: run `skillwiki path` if available; else `~/wiki` if it
+       exists; else skip vault-dependent steps
+     - Knowledge layer: `skillwiki` if vault exists AND `skillwiki doctor`
+       passes; else `none` — then derive BACKEND_CAPS from the resolved
+       knowledge layer
+   - **Fallback 3**: if critical fields (slug) cannot be resolved,
+     prompt user with: *"No dev-loop config found. Run `bootstrap` to
+     scaffold `.claude/dev-loop.config.md`?"* If the user declines or
+     `knowledge_layer` cannot be determined, default to `none` and
+     proceed with git-based alternatives.
 
 3. **Read CLAUDE.md and MEMORY.md fresh** — the system-prompt copy
    loaded at session start goes stale if a prior cycle edited them.
@@ -157,40 +217,66 @@ The active PRD skill is pluggable. Default chain:
    skip step 1 (plugin reload) as a no-op, but must always do step 2
    (config) and step 3 (CLAUDE.md/MEMORY.md re-read).
 
-4. **CLI version alignment** — if the project has a local skillwiki
-   build (detected by `cli_entry_override` in config or
-   `packages/cli/package.json` existing), compare the local version
-   with the globally installed `skillwiki --version`. If they differ,
-   use `npx skillwiki` (or the `cli_entry_override`) for all
+3b. **Discover vault types from SCHEMA.md** (only if `query_vault`
+   in BACKEND_CAPS). Read `{vault}/SCHEMA.md` and parse the `## Layers`
+   section. Extract backtick-wrapped directory names ending in `/`
+   (regex: `` `(\w+)/` ``), then exclude `raw` and `projects`
+   (Layer 1 and Layer 3). Store the remaining names as `VAULT_TYPES`
+   (space-separated). This replaces any hardcoded list — different
+   vault schemas (Hermes v2.1 has 4 types, skillwiki has 5) are
+   handled automatically.
+   If SCHEMA.md is missing, fall back to listing vault-root
+   subdirectories (excluding `raw`, `projects`, `_archive`, hidden
+   dirs) — these are likely type dirs.
+   If `query_vault` not in BACKEND_CAPS, skip (no vault to discover).
+
+4. **CLI version alignment** — if `query_vault` in BACKEND_CAPS and the
+   project has a local skillwiki build (detected by `cli_entry_override`
+   in config or `packages/cli/package.json` existing), compare the local
+   version with the globally installed `skillwiki --version`. If they
+   differ, use `npx skillwiki` (or the `cli_entry_override`) for all
    skillwiki invocations in this cycle. A stale global binary can
    produce false lint warnings and miss new schema detections.
+   Skip if `query_vault` not in BACKEND_CAPS.
 
-5. **Quick health check** — run `skillwiki doctor` to catch environment
-   issues early (missing vault, stale plugin, config errors). If doctor
-   reports errors, fix them before proceeding — they will block later
-   steps.
+5. **Quick health check** — if `query_vault` in BACKEND_CAPS, run
+   `skillwiki doctor` to catch environment issues early (missing vault,
+   stale plugin, config errors). If doctor reports errors, fix them
+   before proceeding — they will block later steps.
+   Skip if `query_vault` not in BACKEND_CAPS.
 
-6. **Scan for ad-hoc captures** — check `raw/transcripts/` for new files
-   since the last cycle. These are unprocessed captures from Obsidian or
-   `/wiki-add-task`. If found, treat them as claimable work items alongside
-   QUERY results.
+6. **Scan for ad-hoc captures** — if `query_vault` in BACKEND_CAPS,
+   check `raw/transcripts/` for new files since the last cycle. These
+   are unprocessed captures from Obsidian or `/wiki-add-task`. If found,
+   treat them as claimable work items alongside QUERY results.
+   If `query_vault` not in BACKEND_CAPS, skip (no vault transcripts
+   directory to scan).
 
-### 1. QUERY — `skillwiki:wiki-query` (mandatory)
+### 1. QUERY — context check (mandatory)
 
+**If `query_vault` in BACKEND_CAPS:**
 Search the vault (resolved from `vault` config field) for prior specs,
 plans, concepts, decisions overlapping the task. Feed results into the
 PRD skill's exploration step. Skip if `vault` is empty.
 
-**Uncited raw check (mandatory when vault exists):** After wiki-query,
+**Uncited raw check (mandatory when `query_vault` in BACKEND_CAPS):** After wiki-query,
 scan for uncited raw articles that have no downstream concept page
 citations. If found, treat them as claimable work items alongside any
 QUERY results. Prioritize: uncited raw > other work.
 
+**If `query_vault` not in BACKEND_CAPS:**
+Use git-based context: `git log --oneline -20` for recent activity,
+`git diff --stat HEAD~5` for recent changes, and `grep -r` across the
+codebase for terms related to the current task. Feed results into the
+PRD skill's exploration step. No vault context available — the PRD
+skill works from code and git history alone.
+
 Note: `skillwiki drift` is deferred to IDLE DISCOVERY (step 3) because
 it makes network calls and is expensive for the QUERY step.
 
-### 2. WORK — `skillwiki:proj-work` (mandatory)
+### 2. WORK — create work item (mandatory)
 
+**If `create_work_item` in BACKEND_CAPS (skillwiki path):**
 Create or open a work item under
 `{vault}/projects/{slug}/work/YYYY-MM-DD-{work-slug}/`. proj-work emits
 redirect paths for `spec.md` and `plan.md`. Pass these to steps 3–4.
@@ -198,6 +284,12 @@ redirect paths for `spec.md` and `plan.md`. Pass these to steps 3–4.
 proj-work validates frontmatter (see its SKILL.md for required fields:
 `title`, `name`, `description`, `kind`, `status`, `priority: high|medium|low`,
 `project: "[[slug]]"` wikilink format, timestamps, provenance).
+
+**If `create_work_item` not in BACKEND_CAPS (git-local path):**
+Create a local work item under `.claude/dev-loop-work/YYYY-MM-DD-{work-slug}/`
+in the project repo. Create `spec.md` and `plan.md` in that directory.
+Pass these local paths to steps 3–4. No vault frontmatter needed — use
+a simple YAML header with `title`, `status`, `kind`, and `created` date.
 
 ### 3. SPEC — `<PRD brainstorming/design skill>` (mandatory)
 
@@ -219,10 +311,17 @@ Run on all modified/new files. Fix every issue raised before any
 further step. No bypass. (`/simplify` is provided by the superpowers
 skill suite; if not installed, do a manual code review instead.)
 
-### 7. SAVE — `skillwiki:wiki-crystallize` (optional)
+### 7. SAVE — crystallize session insights (optional)
 
+**If `crystallize` in BACKEND_CAPS:**
 At natural breakpoints, crystallize insights not captured in spec/plan.
 Skip if `vault` is empty.
+
+**If `crystallize` not in BACKEND_CAPS:**
+Write session insights to the work-item folder as `insights.md` — a
+free-form markdown file with key learnings, blocked items, and
+discoveries. Not as rich as a vault concept page, but ensures insights
+aren't lost when no knowledge backend is available.
 
 ### 8. E2E (optional — run if `e2e_scripts` config field is non-empty)
 
@@ -279,6 +378,7 @@ hosts); some do both.
 
 ### 11. RETRO — Tier 1 cycle journal (mandatory)
 
+**If `save_retro` in BACKEND_CAPS (skillwiki path):**
 Append a one-line retro to the project work item and the vault log
 (`{vault}/log.md`):
 
@@ -295,7 +395,14 @@ Append a one-line retro to the project work item and the vault log
 The three flags drive the consolidation steps below. If `vault` is
 empty, write the retro to the work item only.
 
-### 12. DISTILL — `skillwiki:proj-distill` / `proj-decide` (conditional, every 3 cycles)
+**If `save_retro` not in BACKEND_CAPS (git-local path):**
+Append the same retro format to `.claude/dev-loop-work/{work-slug}/retro.md`.
+No vault log exists. If a git commit was made this cycle, include a
+one-line summary of the commit in the retro.
+
+### 12. DISTILL — concept promotion / ADRs (conditional, every 3 cycles)
+
+**If `distill` in BACKEND_CAPS (skillwiki path):**
 
 DISTILL (concept pages) — run if either:
 - Three cycles have completed since the last DISTILL run, OR
@@ -311,6 +418,15 @@ cycle flagged `WorkflowShift?: yes`. Writes an ADR under
 `projects/{slug}/architecture/decisions/`. ADRs that generalize also
 get a corresponding concept page in the global wiki.
 
+**If `distill` not in BACKEND_CAPS (git-local path):**
+Grep local retro files in `.claude/dev-loop-work/` for recurring
+patterns (same ≥2 occurrence threshold). Append findings to
+`.claude/dev-loop-work/compound.md` — a persistent file that
+accumulates cross-cycle patterns. Not as rich as a vault concept page,
+but preserves the distillation intent.
+If a retro flagged `WorkflowShift?: yes`, note it in
+`compound.md` for future reference when a vault becomes available.
+
 ### 13. AUDIT — `claude-md-management:claude-md-improver` (conditional, every 3 cycles)
 
 Run ONLY if any of:
@@ -321,12 +437,19 @@ Skip otherwise. Running every cycle creates churn-y diffs and noise.
 The 3-cycle cadence aligns with DISTILL so consolidation happens in one
 phase.
 
-### 14. VERIFY — `skillwiki:wiki-audit` (conditional, every 3 cycles)
+### 14. VERIFY — provenance integrity (conditional, every 3 cycles)
 
+**If `audit_vault` in BACKEND_CAPS (skillwiki path):**
 Run after DISTILL/AUDIT to verify per-page that every `^[raw/...]`
 reference resolves and source frontmatter matches the body. Catches
 broken provenance from rotated raw files or moved concept pages. Quick
 read-only check — should report zero issues in healthy cycles.
+
+**If `audit_vault` not in BACKEND_CAPS (git-local path):**
+Verify work-item directory structure completeness: each work item has
+spec.md, plan.md (or inline-justified skip), and retro.md. Flag
+incomplete work items. Quick structural check — no provenance to verify
+without a vault.
 
 ### 15. COMPACT — `/compact` (conditional, context-driven)
 
@@ -347,7 +470,9 @@ instead:
    note that this was an idle cycle.
 2. Run consolidation steps 12–14 regardless of their normal 3-cycle
    cadence (idle time is free — use it).
-3. Run any applicable skillwiki maintenance skills:
+3. Run maintenance based on BACKEND_CAPS:
+
+   **If `lint_vault` in BACKEND_CAPS (skillwiki maintenance):**
    - `skillwiki:wiki-lint` — vault health, fix issues found
    - `skillwiki:wiki-audit` — provenance integrity check
    - `skillwiki:wiki-crystallize` — capture any session insights
@@ -362,10 +487,22 @@ instead:
      idle time, either fix the source_url to a valid HTTP URL (if
      known), or add a `refreshable: false` annotation to document
      them as intentionally non-refreshable.
+
+   **If `lint_vault` not in BACKEND_CAPS (git-local maintenance):**
+   - Run `git gc --auto` if the repo is large
+   - Prune stale local branches: `git branch --merged | grep -v main`
+   - Run project lint/format if available (e.g., `npm run lint`)
+   - Check for outdated dependencies if lockfile exists
+   - Check for unpushed commits: `git log origin/$RELEASE_BRANCH..HEAD --oneline`
+   - Verify work-item directories are complete (spec + retro present)
+
 4. Invoke research agent — see `research.md` in this skill directory.
-   Pass intensity through (`normal` or `high`). If it returns ranked
-   recommendations, the next dev-loop cycle picks up the top item via
-   the WORK step.
+   Pass intensity through (`normal` or `high`). Also pass
+   `BACKEND_CAPS` and `VAULT_TYPES` (derived from config at REFRESH)
+   so the research agent can skip Track B when `query_vault` not in
+   BACKEND_CAPS.
+   If it returns ranked recommendations, the next dev-loop cycle picks
+   up the top item via the WORK step.
 5. **Pick up P3 work if no P2+ items exist** (normal mode). After
    research completes, if the backlog contains only P3 items, pick the
    top P3 item and execute it using the trivial cycle fast-path. In
@@ -520,6 +657,17 @@ The upstream source has substantively changed since ingestion.
     the globally installed `skillwiki` binary. A stale global version
     produces false lint warnings and missing schema detections. Use
     `npx skillwiki` or the config override, not `skillwiki` directly.
+19. **Respect `BACKEND_CAPS`.** Each step checks capability membership
+    before invoking backend-specific operations. When a capability is
+    absent, use the documented git-based alternative or document why
+    the step is intentionally skipped. Never silently fail — the user
+    must see which steps were skipped and why. When new backends are
+    added, they declare capabilities in the config; steps pick them
+    up automatically.
+20. **Block on skill-source drift.** If REFRESH detects that the cached
+    SKILL.md differs from the source but the user hasn't reloaded
+    plugins, block the cycle. Running stale skill logic silently is
+    worse than stopping and asking the user to `/reload-plugins`.
 
 ## Obsidian Integration
 
@@ -551,17 +699,21 @@ filling in:
 
 1. `slug` — project identifier
 2. `vault` — wiki path (or empty)
-3. `release_branch` — e.g., `main`, `dev`
-4. Code layout fields (auto-detect candidates from repo structure)
-5. E2E scripts (auto-detect from `scripts/`)
-6. Release config (`publish_via`, `bump_script`, `manifests_count`)
-7. Optional `notes` for project-specific gotchas
+3. `knowledge_layer` — `skillwiki` if vault exists and skillwiki is
+   installed; `none` otherwise. Derive BACKEND_CAPS from this.
+4. `release_branch` — e.g., `main`, `dev`
+5. Code layout fields (auto-detect candidates from repo structure)
+6. E2E scripts (auto-detect from `scripts/`)
+7. Release config (`publish_via`, `bump_script`, `manifests_count`)
+8. Optional `notes` for project-specific gotchas
 
-### Step B: Initialize vault workspace
+### Step B: Initialize vault workspace (only if `query_vault` in BACKEND_CAPS)
 
 Run `skillwiki:proj-init` with the project slug to create
 `{vault}/projects/{slug}/` with README and folder structure
 (`requirements/`, `architecture/`, `work/`, `compound/`).
+
+Skip Step B when `query_vault` not in BACKEND_CAPS — no vault to initialize.
 
 **Both steps are required** for full vault integration. After bootstrap,
 re-run REFRESH to load the new config.

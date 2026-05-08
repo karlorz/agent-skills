@@ -19,6 +19,22 @@ specifics come from `./.claude/dev-loop.config.md` (loaded via the
 parent skill's REFRESH step). Do not hardcode project-specific values
 in this file.
 
+## Variables (set by parent REFRESH)
+
+The parent dev-loop skill passes these variables from the project config:
+
+| Variable | Source | Default |
+|----------|--------|---------|
+| `$VAULT` | `vault` config field | (empty — Track B skipped) |
+| `$SLUG` | `slug` config field | (required) |
+| `$INTENSITY` | `high` or `normal` | `normal` |
+| `$KNOWLEDGE_LAYER` | `knowledge_layer` config field | `skillwiki` |
+| `$BACKEND_CAPS` | Resolved from `knowledge_layer` at REFRESH | varies |
+| `$VAULT_TYPES` | Parsed from `{vault}/SCHEMA.md` `## Layers` section | discovered at REFRESH |
+
+When `query_vault` not in `BACKEND_CAPS`, skip Track B (vault health) entirely —
+no vault exists to analyze. Track A (code health) runs regardless.
+
 ## Intensity Level
 
 Parse arguments for `high` (case-insensitive). If present,
@@ -117,8 +133,9 @@ Aggressive mode — **every finding is actionable, priority gates removed.**
 
 Confirm project config is loaded. Required fields for this agent:
 `slug`, `vault`, `cli_src`, `cli_test`, `skills_glob` (optional). If
-`vault` is empty, skip Track B entirely and run Track A only. If
-`cli_src` is empty, skip Track A and run Track B only.
+`query_vault` not in `BACKEND_CAPS` or `vault` is empty, skip Track B entirely
+and run Track A only. If `cli_src` is empty, skip Track A and run
+Track B only.
 
 Read `CLAUDE.md` and the user MEMORY.md fresh.
 
@@ -191,8 +208,8 @@ fi
 
 ### Track B: Vault Health
 
-Skip this track entirely if `vault` is empty or `{vault}` does not
-exist.
+Skip this track entirely if `query_vault` not in `BACKEND_CAPS`, `vault` is
+empty, or `{vault}` does not exist.
 
 #### B1. Raw-to-Page Coverage
 
@@ -203,8 +220,12 @@ warnings for raw sources lacking downstream concept page citations.
 
 ```bash
 # Vault existence guard
-if [ ! -d "$VAULT/raw" ]; then
-  echo "VAULT_NOT_INITIALIZED: $VAULT/raw not found — skipping Track B"
+if [ "$KNOWLEDGE_LAYER" = "none" ] || ! echo "$BACKEND_CAPS" | grep -q "query_vault" || [ ! -d "$VAULT/raw" ]; then
+  if [ "$KNOWLEDGE_LAYER" = "none" ] || ! echo "$BACKEND_CAPS" | grep -q "query_vault"; then
+    echo "KNOWLEDGE_NONE: no vault configured — skipping Track B"
+  else
+    echo "VAULT_NOT_INITIALIZED: $VAULT/raw not found — skipping Track B"
+  fi
   SKIP_TRACK_B=1
 fi
 
@@ -212,9 +233,11 @@ if [ -z "$SKIP_TRACK_B" ]; then
 
 # Total raw vs typed pages
 RAW_COUNT=$(find "$VAULT/raw" -name "*.md" | wc -l | tr -d ' ')
-PAGE_COUNT=$(find "$VAULT"/{entities,concepts,comparisons,queries,meta} -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+PAGE_COUNT=0; for d in $VAULT_TYPES; do PAGE_COUNT=$((PAGE_COUNT + $(find "$VAULT/$d" -name "*.md" 2>/dev/null | wc -l | tr -d ' '))); done
 if [ "$RAW_COUNT" -gt 0 ]; then
-  CITED=$(grep -rh '\^\[raw/' "$VAULT"/{entities,concepts,comparisons,queries,meta}/ 2>/dev/null | sed -n 's/.*\^\[raw\/\([^]]*\)\].*/\1/gp' | sort -u | wc -l | tr -d ' ')
+  CITED=0; for d in $VAULT_TYPES; do CITED=$((CITED + $(grep -rh '\^\[raw/' "$VAULT/$d/" 2>/dev/null | sed -n 's/.*\^\[raw\/\([^]]*\)\].*/\1/gp' | sort -u | wc -l | tr -d ' '))); done
+  # Deduplicate across type dirs
+  CITED=$(for d in $VAULT_TYPES; do grep -rh '\^\[raw/' "$VAULT/$d/" 2>/dev/null; done | sed -n 's/.*\^\[raw\/\([^]]*\)\].*/\1/gp' | sort -u | wc -l | tr -d ' ')
   UNCITED=$((RAW_COUNT - CITED))
   echo "Raw: $RAW_COUNT, Pages: $PAGE_COUNT, Cited: $CITED, Uncited: $UNCITED ($((UNCITED * 100 / RAW_COUNT))%)"
 else
@@ -222,7 +245,7 @@ else
 fi
 
 # Pages citing only 1 source (low confidence flag)
-find "$VAULT"/{entities,concepts,comparisons,queries,meta} -name "*.md" -print0 2>/dev/null | while IFS= read -r -d '' f; do
+for d in $VAULT_TYPES; do find "$VAULT/$d" -name "*.md" -print0 2>/dev/null; done | while IFS= read -r -d '' f; do
   cites=$(grep -c '\^\[raw/' "$f" 2>/dev/null || true)
   cites=${cites:-0}
   if [ "$cites" -le 1 ]; then
@@ -247,7 +270,8 @@ excluded. Duplicates of the same target within one page count as one.
 python3 -c "
 import os, re
 base = '$VAULT'
-for d in ['entities','concepts','comparisons','queries','meta']:
+vault_types = '$VAULT_TYPES'.split()
+for d in vault_types:
     dp = os.path.join(base, d)
     if not os.path.isdir(dp): continue
     for f in sorted(os.listdir(dp)):
@@ -284,7 +308,8 @@ python3 -c "
 import os, re
 base = '$VAULT'
 threshold = 60 if '$INTENSITY' == 'high' else 40
-for d in ['entities','concepts','comparisons','queries','meta']:
+vault_types = '$VAULT_TYPES'.split()
+for d in vault_types:
     dp = os.path.join(base, d)
     if not os.path.isdir(dp): continue
     for f in sorted(os.listdir(dp)):
@@ -318,7 +343,7 @@ for d in ['entities','concepts','comparisons','queries','meta']:
 #### B4. Type Coverage
 
 ```bash
-for d in entities concepts comparisons queries meta; do
+for d in $VAULT_TYPES; do
   count=$(find "$VAULT/$d" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
   echo "$d: $count pages"
 done

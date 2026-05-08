@@ -11,6 +11,13 @@ type: template
 > Empty fields disable the corresponding step (e.g., empty `vault` skips
 > wiki-* steps; empty `e2e_scripts` skips step 8; empty `publish_via`
 > skips step 9).
+>
+> Set `knowledge_layer: none` to run the loop without a vault or wiki —
+> all knowledge steps use git-based alternatives.
+>
+> The knowledge layer is pluggable. Steps branch on **capabilities**, not
+> backend names — adding a new backend means declaring which capabilities
+> it supports in the `knowledge_backends` registry.
 
 ## Identity
 
@@ -19,6 +26,57 @@ slug: <project-slug>
 vault: <vault-path>            # e.g., ~/wiki, or empty to skip vault steps
 release_branch: <branch-name>  # e.g., main, dev, master
 ```
+
+## Knowledge layer
+
+Controls how the loop captures, queries, and maintains project knowledge.
+The `knowledge_layer` field names the primary backend; its capabilities
+are resolved at REFRESH into `BACKEND_CAPS`. Steps check capability
+membership instead of the backend name directly.
+
+When `knowledge_layer: none`, the loop uses git-based alternatives
+for work items, retros, distillation, and lint. No vault is required.
+
+```yaml
+knowledge_layer: skillwiki       # skillwiki | none
+```
+
+### Knowledge backends registry (optional)
+
+Override backend-specific config or add future backends. If absent,
+defaults are derived from `knowledge_layer` + `vault`.
+
+```yaml
+knowledge_backends:
+  skillwiki:
+    vault: ~/wiki
+    cli_entry: skillwiki         # or npx tsx packages/cli/src/cli.ts for local dev
+  none:
+    work_dir: .claude/dev-loop-work/
+```
+
+**Capabilities by backend:**
+
+| Capability | skillwiki | none | (future) |
+|---|---|---|---|
+| `query_vault` | yes | no | varies |
+| `create_work_item` | proj-work | local mkdir | varies |
+| `save_retro` | vault log.md | local retro.md | varies |
+| `crystallize` | wiki-crystallize | write insights.md | varies |
+| `distill` | proj-distill | grep retros → compound.md | varies |
+| `lint_vault` | wiki-lint | project lint (if available) | varies |
+| `audit_vault` | wiki-audit | verify work-item structure | varies |
+| `drift_check` | skillwiki drift | check unpushed + stale branches | varies |
+
+Vault type directories are **discovered from SCHEMA.md** at REFRESH time,
+not hardcoded here. The REFRESH step parses the `## Layers` section of
+`{vault}/SCHEMA.md` to extract the list of typed-knowledge subdirectories
+(e.g., `entities/`, `concepts/`, `comparisons/`, `queries/`, `meta/`).
+If SCHEMA.md doesn't exist or can't be parsed, the REFRESH step falls back
+to listing directories in the vault root that contain `.md` files.
+
+When `query_vault` not in BACKEND_CAPS, `vault` is ignored — the loop uses
+git history and local work items instead of a vault.
 
 ## Code layout
 
@@ -91,6 +149,8 @@ notes:
 slug: llm-wiki
 vault: ~/wiki
 release_branch: dev
+
+knowledge_layer: skillwiki
 
 cli_src: packages/cli/src/commands/
 cli_test: packages/cli/test/commands/
