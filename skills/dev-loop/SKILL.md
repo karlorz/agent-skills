@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-description: "Generic single-pass PRD + skillwiki dev cycle. Project-agnostic engine that reads `.claude/dev-loop.config.md` from CWD for project specifics, falling back to CLAUDE.md introspection then repo autodiscover. Pass `high` for aggressive mode."
+description: "Generic single-pass PRD + skillwiki dev cycle. Project-agnostic engine with auto-capture, pluggable knowledge backends, drift guard. Pass `high` for aggressive mode."
 argument-hint: "[high]"
 ---
 
@@ -124,7 +124,7 @@ The active PRD skill is pluggable. Default chain:
 │ 10. PUSH      release per project config (CI publishes)     │
 ├─────────────────────────────────────────────────────────────┤
 │ POSTLUDE — single-cycle (mandatory)                         │
-│ 11. RETRO     append one-line retro to vault log (Tier 1)   │
+│ 11. RETRO     append retro to log + auto-capture findings   │
 ├─────────────────────────────────────────────────────────────┤
 │ POSTLUDE — every-3-cycles consolidation (conditional)       │
 │ 12. DISTILL   proj-distill (concepts) / proj-decide (ADRs)  │
@@ -405,6 +405,35 @@ empty, write the retro to the work item only.
 Append the same retro format to `.claude/dev-loop-work/{work-slug}/retro.md`.
 No vault log exists. If a git commit was made this cycle, include a
 one-line summary of the commit in the retro.
+
+#### Auto-capture (sub-step of RETRO, only when `query_vault` in BACKEND_CAPS)
+
+After logging the retro, auto-capture key findings from the cycle as a
+raw transcript. This ensures insights aren't trapped in the one-line
+retro format and become discoverable by `wiki-query` and future cycles.
+
+Write to `{vault}/raw/transcripts/YYYY-MM-DD-loop-cycle-{work-slug}.md`:
+
+```yaml
+---
+source_url:
+ingested: YYYY-MM-DD
+sha256:          # computed over body bytes after closing ---
+---
+```
+
+Body should contain:
+- **Finding summary** — what was learned, decided, or changed this cycle
+- **Key references** — files touched, concepts created, decisions made
+- **Unresolved items** — anything deferred, blocked, or flagged for
+  future cycles
+
+Skip auto-capture for:
+- Idle/maintenance cycles (no work-slug)
+- Cycles where the only change is a retro (nothing new to capture)
+
+Do NOT modify existing raw files (N9 compliance). Always create a new
+file. If a file with the same name exists, append a `-2` suffix.
 
 ### 12. DISTILL — concept promotion / ADRs (conditional, every 3 cycles)
 
