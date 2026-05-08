@@ -53,6 +53,7 @@ Set to empty list `[]` to skip step 8 entirely.
 ```yaml
 bump_script: <path-or-empty>      # e.g., ./scripts/bump-version.sh
 publish_via: <mode>                # ci-tag-trigger | local | none
+deploy_script: <path-or-empty>     # e.g., bash apps/hub/deploy/update-msi1.sh, or empty
 manifests_count: <N>               # how many manifests bump_script touches (sanity check)
 remote_hosts: [<host>, ...]        # e.g., [sg01], or [] if not applicable
 ```
@@ -63,7 +64,11 @@ remote_hosts: [<host>, ...]        # e.g., [sg01], or [] if not applicable
 |------|----------|
 | `ci-tag-trigger` | Bump → commit → push → tag → CI publishes. Verify tag landed on remote after push. |
 | `local` | Project's local release script runs on dev host (caution: interactive auth breaks /loop idempotency). |
-| `none` | Skip step 9. Loop exits after E2E. |
+| `none` | Skip step 10 (PUSH). Deploy may still run if `remote_hosts` or `deploy_script` is set. |
+
+`deploy_script` is the command line to execute for step 9 (DEPLOY).
+It should be idempotent and handle its own rollback on failure.
+Leave empty to skip DEPLOY entirely.
 
 ## Notes (optional)
 

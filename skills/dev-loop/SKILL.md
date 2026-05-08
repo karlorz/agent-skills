@@ -95,18 +95,19 @@ The active PRD skill is pluggable. Default chain:
 │ OPTIONAL (run if config declares)                           │
 │  7. SAVE      wiki-crystallize → session insights           │
 │  8. E2E       project test suites → all must exit 0         │
-│  9. PUSH      release per project config (CI publishes)     │
+│  9. DEPLOY    deploy artifacts to remote hosts (if any)     │
+│ 10. PUSH      release per project config (CI publishes)     │
 ├─────────────────────────────────────────────────────────────┤
 │ POSTLUDE — single-cycle (mandatory)                         │
-│ 10. RETRO     append one-line retro to vault log (Tier 1)   │
+│ 11. RETRO     append one-line retro to vault log (Tier 1)   │
 ├─────────────────────────────────────────────────────────────┤
 │ POSTLUDE — every-3-cycles consolidation (conditional)       │
-│ 11. DISTILL   proj-distill (concepts) / proj-decide (ADRs)  │
-│ 12. AUDIT     claude-md-improver → CLAUDE.md updates        │
-│ 13. VERIFY    skillwiki wiki-audit → provenance integrity   │
+│ 12. DISTILL   proj-distill (concepts) / proj-decide (ADRs)  │
+│ 13. AUDIT     claude-md-improver → CLAUDE.md updates        │
+│ 14. VERIFY    skillwiki wiki-audit → provenance integrity   │
 ├─────────────────────────────────────────────────────────────┤
 │ POSTLUDE — context hygiene (conditional)                    │
-│ 14. COMPACT   /compact if context >70% or 5+ cycles in      │
+│ 15. COMPACT   /compact if context >70% or 5+ cycles in      │
 ├─────────────────────────────────────────────────────────────┤
 │ IDLE DISCOVERY (when CORE finds no claimable work)          │
 │  Skip to POSTLUDE steps 10–14 regardless of cadence.        │
@@ -228,7 +229,31 @@ Skip if `vault` is empty.
 Run each script from `e2e_scripts` in declared order. Each must exit 0
 before the next starts. Counts are NOT a contract — only the exit code is.
 
-### 9. PUSH (optional — run if `publish_via` config field is non-empty)
+### 9. DEPLOY (optional — run if `remote_hosts` is non-empty or `deploy_script` is set)
+
+Deploy built artifacts to remote hosts. This step is separate from PUSH
+(publishing packages) — many projects deploy without publishing to a
+package registry.
+
+Execution:
+- If `deploy_script` is set in config, run it. Exit code must be 0.
+- If `remote_hosts` is set but no `deploy_script`, check CLAUDE.md or
+  the project's documented deployment procedure for the deploy command.
+- If neither is set, skip.
+
+**SSH/auth prerequisite:** The deploy script may require SSH
+authentication to remote hosts. If the script fails with auth errors,
+report the failure and do not retry — the user must resolve SSH access
+outside the loop. The deploy script itself handles rollback on failure
+(e.g., the zzapi-mes `update-msi1.sh` auto-rollbacks on ERR).
+
+**Pre-deploy checks:**
+- Build must pass (verified in EXECUTE)
+- Tests must pass (verified by SIMPLIFY gate or E2E)
+- For trivial/git-only/vault-only changes, skip DEPLOY unless the
+  change affects the deployed artifact.
+
+### 10. PUSH (optional — run if `publish_via` config field is non-empty)
 
 Follow the project's documented release procedure based on
 `publish_via`:
@@ -247,7 +272,12 @@ Follow the project's documented release procedure based on
 
 **Prefer CI-driven publishing over local `npm publish`** wherever possible.
 
-### 10. RETRO — Tier 1 cycle journal (mandatory)
+**Order matters:** DEPLOY (step 9) runs before PUSH (step 10) because
+deploying to a host and publishing a package are independent operations.
+Some projects only deploy (no npm publish); some only publish (no remote
+hosts); some do both.
+
+### 11. RETRO — Tier 1 cycle journal (mandatory)
 
 Append a one-line retro to the project work item and the vault log
 (`{vault}/log.md`):
@@ -265,7 +295,7 @@ Append a one-line retro to the project work item and the vault log
 The three flags drive the consolidation steps below. If `vault` is
 empty, write the retro to the work item only.
 
-### 11. DISTILL — `skillwiki:proj-distill` / `proj-decide` (conditional, every 3 cycles)
+### 12. DISTILL — `skillwiki:proj-distill` / `proj-decide` (conditional, every 3 cycles)
 
 DISTILL (concept pages) — run if either:
 - Three cycles have completed since the last DISTILL run, OR
@@ -281,7 +311,7 @@ cycle flagged `WorkflowShift?: yes`. Writes an ADR under
 `projects/{slug}/architecture/decisions/`. ADRs that generalize also
 get a corresponding concept page in the global wiki.
 
-### 12. AUDIT — `claude-md-management:claude-md-improver` (conditional, every 3 cycles)
+### 13. AUDIT — `claude-md-management:claude-md-improver` (conditional, every 3 cycles)
 
 Run ONLY if any of:
 - Three cycles have completed since the last AUDIT run.
@@ -291,14 +321,14 @@ Skip otherwise. Running every cycle creates churn-y diffs and noise.
 The 3-cycle cadence aligns with DISTILL so consolidation happens in one
 phase.
 
-### 13. VERIFY — `skillwiki:wiki-audit` (conditional, every 3 cycles)
+### 14. VERIFY — `skillwiki:wiki-audit` (conditional, every 3 cycles)
 
 Run after DISTILL/AUDIT to verify per-page that every `^[raw/...]`
 reference resolves and source frontmatter matches the body. Catches
 broken provenance from rotated raw files or moved concept pages. Quick
 read-only check — should report zero issues in healthy cycles.
 
-### 14. COMPACT — `/compact` (conditional, context-driven)
+### 15. COMPACT — `/compact` (conditional, context-driven)
 
 Run ONLY if any of:
 - Context window utilization is above ~70%.
@@ -313,9 +343,9 @@ When QUERY returns no claimable work and nothing is in progress, the
 cycle doesn't end empty. Skip CORE steps 2–9 and run maintenance
 instead:
 
-1. Run RETRO (step 10) as a maintenance retro — no work-slug, just
+1. Run RETRO (step 11) as a maintenance retro — no work-slug, just
    note that this was an idle cycle.
-2. Run consolidation steps 11–13 regardless of their normal 3-cycle
+2. Run consolidation steps 12–14 regardless of their normal 3-cycle
    cadence (idle time is free — use it).
 3. Run any applicable skillwiki maintenance skills:
    - `skillwiki:wiki-lint` — vault health, fix issues found
@@ -403,13 +433,15 @@ campaign).
   ├── NO  → fix issues, re-run simplify
   └── YES → run E2E (if applicable)
               ├── any tier fails? → fix, re-run from simplify
-              └── ALL PASS        → bump → commit → push → tag (CI publishes)
-                                          └── CI green? → proceed to RETRO
-                                               └── CI red?  → fix workflow, re-push tag
+              └── ALL PASS        → DEPLOY (if applicable)
+                                     ├── deploy fails? → report, do not retry auth
+                                     └── deploy OK     → PUSH: bump → commit → push → tag (CI publishes)
+                                                              └── CI green? → proceed to RETRO
+                                                                   └── CI red?  → fix workflow, re-push tag
 ```
 
-A push that bypasses simplify is a broken release. Treat E2E with the
-same discipline if the project has it.
+A push that bypasses simplify is a broken release. Treat E2E and DEPLOY
+with the same discipline if the project has them.
 
 ## N9 Reingest Protocol
 
