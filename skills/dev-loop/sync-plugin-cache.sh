@@ -20,10 +20,11 @@ VERSION="${1:-$(grep -o '"version": *"[^"]*"' "$PLUGIN_JSON" | head -1 | sed 's/
 
 CACHE_DIR="${HOME}/.claude/plugins/cache/karlorz-agent-skills/dev-loop/${VERSION}"
 
+# Auto-create the version directory if it doesn't exist yet (e.g., after a
+# version bump before the plugin has been reinstalled from marketplace).
 if [[ ! -d "$CACHE_DIR" ]]; then
-  echo "ERROR: Cache directory not found: ${CACHE_DIR}" >&2
-  echo "  Install the plugin first: claude plugin install dev-loop@agent-skills" >&2
-  exit 1
+  echo " Cache directory not found — creating ${CACHE_DIR}"
+  mkdir -p "$CACHE_DIR"
 fi
 
 echo "Syncing dev-loop v${VERSION}..."

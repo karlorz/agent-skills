@@ -162,6 +162,11 @@ The active PRD skill is pluggable. Default chain:
        → **block the cycle**: "Source SKILL.md has edits not yet loaded.
        Run `/reload-plugins` before continuing this cycle."
    - Store cache hash as `LAST_SKILL_HASH` after check.
+   - **Session-start warning**: on the first cycle of a new session, if the
+     cache hash differs from what `LAST_SKILL_HASH` would be (i.e., the
+     skill was reloaded between sessions), emit a one-line note:
+     "Skill version changed since last session — running updated SKILL.md."
+     This surfaces drift that occurs between sessions, not just mid-session.
 
 2. **Reload plugins** — run `/reload-plugins` to pick up any skill or
    command changes from prior cycles. Skip on first cycle if no edits.
@@ -287,6 +292,10 @@ Create a local work item under `.claude/dev-loop-work/YYYY-MM-DD-{work-slug}/`
 in the project repo. Create `spec.md` and `plan.md` in that directory.
 Pass these local paths to steps 3–4. No vault frontmatter needed — use
 a simple YAML header with `title`, `status`, `kind`, and `created` date.
+
+**Gitignore:** `.claude/dev-loop-work/` contains session artifacts, not
+repo content. Ensure it's listed in `.gitignore` when running in `none`
+mode. The project-config template includes a Gitignore section for this.
 
 ### 3. SPEC — `<PRD brainstorming/design skill>` (mandatory)
 
@@ -484,6 +493,9 @@ instead:
      idle time, either fix the source_url to a valid HTTP URL (if
      known), or add a `refreshable: false` annotation to document
      them as intentionally non-refreshable.
+   - **Unretro'd commits check** — compare recent git commits against
+     vault log entries. If ≥3 commits lack corresponding retros,
+     batch-write a summary retro covering the gap.
 
    **If `lint_vault` not in BACKEND_CAPS (git-local maintenance):**
    - Run `git gc --auto` if the repo is large
@@ -492,6 +504,10 @@ instead:
    - Check for outdated dependencies if lockfile exists
    - Check for unpushed commits: `git log origin/$RELEASE_BRANCH..HEAD --oneline`
    - Verify work-item directories are complete (spec + retro present)
+   - **Unretro'd commits check** — compare recent git commits against
+     vault log / local retro files. If ≥3 commits lack corresponding
+     retros, batch-write a summary retro covering the gap. This prevents
+     retro gaps from accumulating silently during intensive sprints.
 
 4. Invoke research agent — see `research.md` in this skill directory.
    Pass intensity through (`normal` or `high`). Also pass
@@ -508,6 +524,13 @@ instead:
 6. Exit with a one-line summary: `"Idle cycle — ran [skills executed],
    research: [findings summary]."` or `"P3 pickup — [work-slug]:
    [result]."`.
+7. **Auto-cancel after consecutive idle cycles.** If 3+ consecutive
+   cycles produce no claimable work (idle with no P3 pickup), emit a
+   recommendation: "3+ consecutive idle cycles — consider cancelling
+   the loop. Re-enable when new work arrives or new raw sources are
+   ingested." This does NOT auto-cancel — the user decides — but
+   surfacing the signal prevents wasting context budget on stable
+   projects.
 
 ## Trivial Cycle Fast-Path
 
@@ -562,6 +585,25 @@ thin page). The standard trivial path remains available for vault work
 that benefits from work-item tracking (e.g., a multi-page enrichment
 campaign). Vault-only fast-path is only available when `query_vault` in
 BACKEND_CAPS — without a vault, there are no vault-only edits.
+
+## Bootstrap Cycle (setup-only work)
+
+When the work item is a setup or bootstrap operation (proj-init, vault
+repair, dependency bump, config scaffolding), the full pipeline is
+overkill. Collapse to:
+
+1. **QUERY** — normal context check.
+2. **EXECUTE** — inline (no spec/plan — the action is self-defining).
+3. **RETRO** — normal retro format.
+
+Skip SPEC, PLAN, SIMPLIFY, E2E, PUSH. Setup operations don't produce
+reviewable code — they create scaffolding that future full cycles build
+on. If the setup involves a code change (e.g., adding a script), use
+the trivial cycle fast-path instead.
+
+Typical bootstrap items: `proj-init`, config file creation, vault
+directory repair, `npm install` after dependency addition, git branch
+setup.
 
 ## Pre-Push Gate (when PUSH applies)
 

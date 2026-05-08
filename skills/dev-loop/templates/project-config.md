@@ -145,6 +145,19 @@ notes:
   conventions: <free-form>
 ```
 
+## Gitignore
+
+When `knowledge_layer: none`, the loop creates local work items under
+`.claude/dev-loop-work/`. These are session artifacts — add to
+`.gitignore`:
+
+```
+.claude/dev-loop-work/
+```
+
+When `knowledge_layer: skillwiki`, no gitignore entry is needed — work
+items live in the vault, not the repo.
+
 ---
 
 ## Worked example (commented — do not activate)
