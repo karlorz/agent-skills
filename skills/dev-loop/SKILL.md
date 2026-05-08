@@ -778,12 +778,14 @@ The ad-hoc capture flow works in both directions:
 1. **From Obsidian** — user creates a note in `raw/transcripts/` using the
    template, or drops any `.md` file there. Dev-loop discovers it on the
    next REFRESH step 6.
-2. **From Claude** — `/wiki-add-task <text>` appends to
-   `raw/transcripts/YYYY-MM-DD-ad-hoc-captures.md`.
+2. **From Claude** — `/wiki-add-task <text>` creates a dedicated capture
+   file at `raw/transcripts/YYYY-MM-DD-{type}-{slug}.md` with ad-hoc
+   capture frontmatter (`kind`, `project`, `ingested`). Each capture gets
+   its own file — never appended to an existing daily log.
 
 When `query_vault` not in BACKEND_CAPS, Obsidian integration is
 unavailable — no vault exists for captures to land in. Ad-hoc captures
-from Claude append to `.claude/dev-loop-work/captures.md` instead.
+from Claude go to `.claude/dev-loop-work/captures.md` instead.
 
 ## Bootstrap Mode
 

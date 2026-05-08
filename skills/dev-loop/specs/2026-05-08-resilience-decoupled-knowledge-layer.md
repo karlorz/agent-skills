@@ -3,7 +3,7 @@ name: Dev-loop resilience spec
 description: Design for decoupling dev-loop from skillwiki and making it work across projects with different knowledge tooling
 type: spec
 created: 2026-05-08
-status: draft
+status: implemented
 ---
 
 # Dev-loop Resilience: Decoupled Knowledge Layer
