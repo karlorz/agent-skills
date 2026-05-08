@@ -110,7 +110,7 @@ The active PRD skill is pluggable. Default chain:
 │ 15. COMPACT   /compact if context >70% or 5+ cycles in      │
 ├─────────────────────────────────────────────────────────────┤
 │ IDLE DISCOVERY (when CORE finds no claimable work)          │
-│  Skip to POSTLUDE steps 10–14 regardless of cadence.        │
+│  Skip to POSTLUDE steps 11–15 regardless of cadence.        │
 │  Then run any applicable skillwiki maintenance skills:      │
 │  - wiki-lint     → vault health check                       │
 │  - wiki-audit    → provenance integrity                     │
@@ -510,7 +510,7 @@ The upstream source has substantively changed since ingestion.
     backlog. Backlog is for deferred decisions, not for known code
     fixes. Filing a known fix as backlog and re-discovering it in
     future cycles is waste.
-17. **Verify CI after push.** After PUSH (step 9), check CI status
+17. **Verify CI after push.** After PUSH (step 10), check CI status
     with `gh run list --limit 1` and `gh run watch` if in-progress.
     Do NOT proceed to RETRO while CI is failing. If CI fails, inspect
     `gh run view <id> --log-failed`, fix the workflow, and re-push
