@@ -452,6 +452,11 @@ support, switch to that protocol automatically.
     Do NOT proceed to RETRO while CI is failing. If CI fails, inspect
     `gh run view <id> --log-failed`, fix the workflow, and re-push
     the tag.
+18. **Use local CLI, not global.** When the project has a local build
+    of skillwiki (or a `cli_entry_override` in config), prefer it over
+    the globally installed `skillwiki` binary. A stale global version
+    produces false lint warnings and missing schema detections. Use
+    `npx skillwiki` or the config override, not `skillwiki` directly.
 
 ## Bootstrap Mode
 
