@@ -156,6 +156,14 @@ The active PRD skill is pluggable. Default chain:
    skip step 1 (plugin reload) as a no-op, but must always do step 2
    (config) and step 3 (CLAUDE.md/MEMORY.md re-read).
 
+4. **CLI version alignment** — if the project has a local skillwiki
+   build (detected by `cli_entry_override` in config or
+   `packages/cli/package.json` existing), compare the local version
+   with the globally installed `skillwiki --version`. If they differ,
+   use `npx skillwiki` (or the `cli_entry_override`) for all
+   skillwiki invocations in this cycle. A stale global binary can
+   produce false lint warnings and miss new schema detections.
+
 ### 1. QUERY — `skillwiki:wiki-query` (mandatory)
 
 Search the vault (resolved from `vault` config field) for prior specs,
@@ -408,6 +416,8 @@ command is added, handle drift as follows:
 This is a stopgap. The canonical flow is: `skillwiki archive <raw-path>`
 → new raw ingest → concept page update. When the CLI gains raw-archive
 support, switch to that protocol automatically.
+
+## Hard Rules
 
 1. **Always REFRESH first.** Reload plugins, load project config, read
    CLAUDE.md and MEMORY.md fresh every cycle.
