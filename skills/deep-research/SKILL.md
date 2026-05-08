@@ -28,9 +28,9 @@ flowchart LR
     B --- B3[Context7 MCP x3]
     B --- B4[DeepWiki MCP]
 
-    F --- F1[stdout: print]
+    F --- F1[--ephemeral: stdout only]
     F --- F2[--save: write file]
-    F --- F3[--vault: vault pipeline]
+    F --- F3[vault: default when available]
 ```
 
 ## When to Use
@@ -46,23 +46,25 @@ Do NOT use for:
 
 ## Output Modes
 
-The skill supports three output modes, controlled by flags:
+The skill auto-detects the best output mode based on vault availability:
 
 | Flag | Mode | Behavior |
 |------|------|----------|
-| *(default)* | **stdout** | Print structured report to terminal, no file writes |
+| *(auto, default)* | **vault** when `skillwiki path` succeeds, else **stdout** | Research persists as a query page when a vault exists |
+| `--ephemeral` | **stdout** | Explicitly skip vault saving — print to terminal only |
 | `--save <path>` | **file** | Write markdown report to specified path |
-| `--vault` | **vault** | Integrate with skillwiki vault (requires configured vault) |
+| `--vault` | **vault** | Force vault mode (error if no vault configured) |
 
-Vault mode is optional. The research engine works without any knowledge base.
+**Why vault by default?** Deep research is expensive (multiple web searches, fetches, synthesis rounds). When a user has invested in a skillwiki vault, they've opted into knowledge persistence. Defaulting to vault ensures research survives context compression and becomes queryable by future sessions. The marginal cost of validate + index + log is trivial compared to the research itself.
 
 ## Workflow
 
 ### Phase 1: Topic Analysis
 
 1. Parse topic string for keywords, libraries, frameworks
-2. If `--vault` flag present: resolve vault via `skillwiki path`, run `skillwiki lang` for output language, search existing pages for cross-linking
-3. If no `--vault`: proceed with research in user's language
+2. **Auto-detect output mode**: run `skillwiki path` — if it returns a valid vault, default to vault mode. If `NO_VAULT_CONFIGURED`, use stdout.
+3. If vault mode active: run `skillwiki lang` for output language, search existing pages for cross-linking
+4. If no vault: proceed with research in user's language
 
 ### Phase 2: Multi-Source Research
 
@@ -102,23 +104,27 @@ Compose research report with these sections:
 2. **Overview** -- 1-2 paragraph synthesis
 3. **Mermaid diagram** -- select type based on topic (see mapping table below). Skip for simple factual topics with no structural relationships
 
-**Topic → Diagram Type Mapping**
+**Topic -> Diagram Type Mapping**
 
 | Research topic type | Diagram type | Example |
 |---|---|---|
-| System architecture / APIs | `sequenceDiagram` or component `flowchart` | How /goal's app-server handles thread/goal/set → emit event |
-| Process / workflow | `flowchart LR` with decision nodes | Ralph Loop: plan→act→test→review→iterate |
+| System architecture / APIs | `sequenceDiagram` or component `flowchart` | How /goal's app-server handles thread/goal/set -> emit event |
+| Process / workflow | `flowchart LR` with decision nodes | Ralph Loop: plan->act->test->review->iterate |
 | Comparison | Side-by-side `flowchart` | Codex /goal vs manual Ralph Loop |
 | Concept relationships | `flowchart TD` with subgraphs | How /goal relates to config.toml, app-server, TUI |
 | Data model / schema | `classDiagram` or `erDiagram` | Goal object: threadId, objective, status, tokenBudget |
-| Timeline / changelog | `gantt` or timeline `flowchart` | v0.125 → v0.128 feature rollout |
+| Timeline / changelog | `gantt` or timeline `flowchart` | v0.125 -> v0.128 feature rollout |
 | Simple factual | Skip diagram | "API accepts these 5 parameters" |
 4. **Findings** -- organized by source type with collapsible callouts
    - `> [!abstract]- Web Search Findings`
    - `> [!info]- Documentation (Context7)`
    - `> [!tip]- Repository Insights (DeepWiki)`
-5. **Analysis** -- merged patterns, recommendations, caveats
-6. **Sources** -- numbered list with access dates
+5. **Verification Methods** -- how to verify or reproduce the findings. This is critical: research that documents WHAT was found but not HOW to verify it creates fragile knowledge. Include:
+   - The correct tools or commands to confirm the finding
+   - Common wrong verification methods and why they fail (e.g., "checking `claude --help` for slash commands" vs "type `/` in session")
+   - Links to canonical reference pages
+6. **Analysis** -- merged patterns, recommendations, caveats
+7. **Sources** -- numbered list with access dates
 
 ### Phase 4: Content Refinement (unless --no-refine)
 
@@ -134,6 +140,7 @@ Two-pass refinement to tighten the report before output:
 - Verify TL;DR accuracy against full findings
 - Check Mermaid rendering (if diagram present)
 - Trim sources to top 5-7 most authoritative
+- Verify Verification Methods section is actionable (not just "check the docs")
 
 **Skip refinement** when:
 - `--no-refine` flag is set
@@ -143,11 +150,13 @@ Two-pass refinement to tighten the report before output:
 
 Route output based on active mode:
 
-**stdout (default)**: Print the full structured report directly to terminal.
+**`--ephemeral` / stdout (when no vault)**: Print the full structured report directly to terminal.
 
 **`--save <path>`**: Write the report as a markdown file to the specified path. Create parent directories if needed. Save a checkpoint draft before refinement so the raw synthesis is recoverable if refinement introduces errors.
 
-**`--vault`**: Delegate to skillwiki vault pipeline. See `references/vault-pipeline.md` for the full integration workflow (raw capture, schema validation, index/log updates). Also scan vault index for existing related pages and add wikilinks in the Related Notes section.
+**Vault (default when vault available)**: Delegate to skillwiki vault pipeline. See `references/vault-pipeline.md` for the full integration workflow (raw capture, schema validation, index/log updates). Also scan vault index for existing related pages and add wikilinks in the Related Notes section.
+
+**Vault page type**: Default to `queries/` (research results are filed queries). If the research reveals a generalized, reusable pattern (not specific to one investigation), also create a companion `concepts/` page capturing the transferable knowledge. The query captures the specific investigation; the concept captures the reusable insight.
 
 ### Phase 6: Report
 
@@ -157,7 +166,7 @@ Print a summary block:
 Deep Research Complete
 ----------------------
 Topic: <topic>
-Mode: stdout | file | vault
+Mode: vault | stdout | file
 
 Sources Queried:
   - Web search: <count> queries
@@ -166,7 +175,8 @@ Sources Queried:
   - DeepWiki: <repo or "not used">
 
 Refinement: <"applied" or "skipped (--no-refine)">
-Output: <path or "terminal">
+Output: <vault page path, file path, or "terminal">
+Pages created: <list of vault pages, if any>
 Warnings: <any>
 ```
 
@@ -174,17 +184,18 @@ Warnings: <any>
 
 | Flag | Effect |
 |------|--------|
+| `--ephemeral` | Skip vault saving — print to terminal only. Use when research is truly one-off. |
 | `--save <path>` | Write markdown report to file |
-| `--vault` | Integrate with skillwiki vault (raw capture, typed pages, index/log) |
-| `--type <concept\|comparison\|query\|entity>` | Force page type (vault mode only) |
+| `--vault` | Force vault mode (error if no vault configured) |
+| `--type <concept\|comparison\|query\|entity>` | Force page type (vault mode only, default: query) |
 | `--no-raw` | Skip raw source capture (vault mode: no provenance chain) |
 | `--no-refine` | Skip content refinement phase |
 
 ## Stop Conditions
 
 - All three source types fail (web, Context7, DeepWiki)
-- `--vault` mode: `skillwiki path` returns NO_VAULT_CONFIGURED
-- `--vault` mode: validation fails (do not write index/log)
+- `--vault` flag explicitly set but `skillwiki path` returns NO_VAULT_CONFIGURED
+- Vault mode: validation fails (do not write index/log)
 
 ## Failure Handling
 
@@ -196,8 +207,9 @@ Warnings: <any>
 | DeepWiki fails | Continue; omit DeepWiki section |
 | All sources fail | STOP; report total failure |
 | Refinement fails | Keep pre-refinement version; warn in report |
-| Vault not configured (`--vault`) | Abort with advisory to run `skillwiki init` |
-| Vault validate fails (`--vault`) | STOP; surface errors; do not write index/log |
+| Vault not configured (auto mode) | Fall back to stdout; note in report |
+| Vault not configured (`--vault` flag) | Abort with advisory to run `skillwiki init` |
+| Vault validate fails | STOP; surface errors; do not write index/log |
 
 ## Tool Usage
 
@@ -205,7 +217,7 @@ Warnings: <any>
 - **Web fetch**: Deep-fetch top sources for richer content extraction
 - **Context7 MCP**: Library/framework documentation
 - **DeepWiki MCP**: GitHub repository insights
-- **skillwiki CLI** (vault mode only): `skillwiki path`, `skillwiki lang`, `skillwiki hash`, `skillwiki validate`
+- **skillwiki CLI**: `skillwiki path` (auto-detect vault), `skillwiki lang` (output language), `skillwiki hash`, `skillwiki validate`
 
 ## Related Reference
 
