@@ -429,20 +429,14 @@ change. No new raw file or concept page update needed.
 
 The upstream source has substantively changed since ingestion.
 
-1. **Note the drift** in the vault log with stored vs current sha256.
-2. **Create a new raw file** alongside the old one with a date-stamped
-   filename (e.g., `raw/articles/<slug>-2026-05-08.md`) containing the
-   updated content and new sha256.
-3. **Update concept pages** that cite the old raw path to point to the new
-   one if the content change is significant. For minor formatting drift,
-   leave citations unchanged and add a note.
-4. **Do NOT modify the old raw file.** The original remains as
-   provenance history even without formal archiving.
-
-The current `skillwiki archive` subcommand only supports typed-knowledge
-pages, not raw/ files. When the CLI gains raw-archive support, the
-content-drift flow becomes: `skillwiki archive <raw-path>` → new raw
-ingest → concept page update.
+1. **Archive the old raw file** — `skillwiki archive <slug>` moves it to
+   `_archive/raw/...` preserving the original as provenance history.
+2. **Ingest the new content** — use `wiki-ingest` to create a new raw
+   file with updated content and sha256.
+3. **Update concept pages** that cite the old raw path to point to the
+   new one if the content change is significant. For minor formatting
+   drift, leave citations unchanged and add a note.
+4. **Do NOT modify the old raw file** (it's now in `_archive/`).
 
 ## Hard Rules
 
