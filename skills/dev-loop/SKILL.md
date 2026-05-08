@@ -125,8 +125,8 @@ The active PRD skill is pluggable. Default chain:
 
 ### 0. REFRESH — context hygiene + config load (mandatory, ~15s)
 
-1. **Reload plugins** — run `/reload-plugins` to pick up any skill or
-   command changes from prior cycles.
+1. **Reload plugins** — run `/reload` to pick up any skill or command
+   changes from prior cycles.
 
 2. **Load project config** in this order:
    - **Primary**: read `./.claude/dev-loop.config.md` (relative to CWD).
@@ -164,18 +164,29 @@ The active PRD skill is pluggable. Default chain:
    skillwiki invocations in this cycle. A stale global binary can
    produce false lint warnings and miss new schema detections.
 
+5. **Quick health check** — run `skillwiki doctor` to catch environment
+   issues early (missing vault, stale plugin, config errors). If doctor
+   reports errors, fix them before proceeding — they will block later
+   steps.
+
+6. **Scan for ad-hoc captures** — check `raw/transcripts/` for new files
+   since the last cycle. These are unprocessed captures from Obsidian or
+   `/wiki-add-task`. If found, treat them as claimable work items alongside
+   QUERY results.
+
 ### 1. QUERY — `skillwiki:wiki-query` (mandatory)
 
 Search the vault (resolved from `vault` config field) for prior specs,
 plans, concepts, decisions overlapping the task. Feed results into the
 PRD skill's exploration step. Skip if `vault` is empty.
 
-**Raw-to-page coverage check (mandatory when vault exists):** After
-wiki-query, run `skillwiki drift` and a raw-cited comparison to detect:
-1. Drifted sources that need reingest per N9 (archive old + ingest new).
-2. Uncited raw articles that have no downstream concept page citations.
-If either is found, treat them as claimable work items alongside any
-QUERY results. Prioritize: drifted sources > uncited raw > other work.
+**Uncited raw check (mandatory when vault exists):** After wiki-query,
+scan for uncited raw articles that have no downstream concept page
+citations. If found, treat them as claimable work items alongside any
+QUERY results. Prioritize: uncited raw > other work.
+
+Note: `skillwiki drift` is deferred to IDLE DISCOVERY (step 3) because
+it makes network calls and is expensive for the QUERY step.
 
 ### 2. WORK — `skillwiki:proj-work` (mandatory)
 
@@ -204,7 +215,8 @@ Preferred: `superpowers:subagent-driven-development`. Fallback:
 ### 6. SIMPLIFY — `/simplify` review (mandatory, hard gate)
 
 Run on all modified/new files. Fix every issue raised before any
-further step. No bypass.
+further step. No bypass. (`/simplify` is provided by the superpowers
+skill suite; if not installed, do a manual code review instead.)
 
 ### 7. SAVE — `skillwiki:wiki-crystallize` (optional)
 
@@ -311,6 +323,9 @@ instead:
    - `skillwiki:wiki-crystallize` — capture any session insights
    - `skillwiki:proj-distill` — promote compound entries to concepts
    - `skillwiki:proj-decide` — record any pending ADRs
+   - **Drift check** — run `skillwiki drift` to detect changed upstream
+     sources. Handle per N9 Reingest Protocol (metadata-only vs content
+     drift).
    - **Drift metadata cleanup** — `skillwiki drift` reports
      `fetch_failed` entries for raw sources with non-HTTP source_urls
      (null, file://, local:). These can never be drift-checked. In
@@ -398,10 +413,21 @@ same discipline if the project has it.
 
 ## N9 Reingest Protocol
 
-When `skillwiki drift` reports drifted sources, the reingest must follow N9
-(raw files are immutable). The current `skillwiki archive` subcommand only
-supports typed-knowledge pages, not raw/ files. Until a raw-aware archive
-command is added, handle drift as follows:
+When `skillwiki drift` reports drifted sources, handle according to drift
+severity:
+
+### Metadata-only drift (sha256 changed, content substantively same)
+
+Common with GitHub repo URLs which return non-deterministic HTML on each
+fetch. The content hasn't meaningfully changed — only the rendering differs.
+
+**Action:** run `skillwiki drift --apply` to update the stored sha256 in
+the raw file's frontmatter. This is a metadata correction, not a content
+change. No new raw file or concept page update needed.
+
+### Content drift (source actually changed)
+
+The upstream source has substantively changed since ingestion.
 
 1. **Note the drift** in the vault log with stored vs current sha256.
 2. **Create a new raw file** alongside the old one with a date-stamped
@@ -413,9 +439,10 @@ command is added, handle drift as follows:
 4. **Do NOT modify the old raw file.** The original remains as
    provenance history even without formal archiving.
 
-This is a stopgap. The canonical flow is: `skillwiki archive <raw-path>`
-→ new raw ingest → concept page update. When the CLI gains raw-archive
-support, switch to that protocol automatically.
+The current `skillwiki archive` subcommand only supports typed-knowledge
+pages, not raw/ files. When the CLI gains raw-archive support, the
+content-drift flow becomes: `skillwiki archive <raw-path>` → new raw
+ingest → concept page update.
 
 ## Hard Rules
 
@@ -467,6 +494,24 @@ support, switch to that protocol automatically.
     the globally installed `skillwiki` binary. A stale global version
     produces false lint warnings and missing schema detections. Use
     `npx skillwiki` or the config override, not `skillwiki` directly.
+
+## Obsidian Integration
+
+When `skillwiki init` creates a vault, it writes:
+
+- `.obsidian/app.json` — `attachmentFolderPath`, `newFileLocation`,
+  `newFileFolderPath` for consistent file placement
+- `.obsidian/templates.json` — points to `_Templates/` folder
+- `_Templates/tpl-ad-hoc-capture.md` — minimal capture template with
+  `created: {{date:YYYY-MM-DD}}T{{time:HH:mm}}` (Obsidian auto-fills)
+  and `ingested:` (empty — agent fills when processing the transcript)
+
+The ad-hoc capture flow works in both directions:
+1. **From Obsidian** — user creates a note in `raw/transcripts/` using the
+   template, or drops any `.md` file there. Dev-loop discovers it on the
+   next REFRESH step 6.
+2. **From Claude** — `/wiki-add-task <text>` appends to
+   `raw/transcripts/YYYY-MM-DD-ad-hoc-captures.md`.
 
 ## Bootstrap Mode
 
