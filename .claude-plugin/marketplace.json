@@ -12,7 +12,7 @@
       "name": "deep-research",
       "source": "./skills/deep-research",
       "description": "Multi-source research engine with flexible output: terminal, file, or skillwiki vault integration",
-      "version": "2.0.0",
+      "version": "2.2.0",
       "category": "research",
       "keywords": ["research", "deep-research", "multi-source", "context7", "deepwiki"]
     },
@@ -44,7 +44,7 @@
       "name": "dev-loop",
       "source": "./skills/dev-loop",
       "description": "Generic single-pass PRD + skillwiki dev cycle engine. Pluggable knowledge backends via capability model, drift guard, project-agnostic.",
-      "version": "1.4.0",
+      "version": "1.5.1",
       "category": "automation",
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability"]
     },
@@ -55,6 +55,14 @@
       "version": "1.0.0",
       "category": "reference",
       "keywords": ["hermes", "hermes-agent", "cli", "reference", "nousresearch", "commands"]
+    },
+    {
+      "name": "dev-loop-research",
+      "source": "./skills/dev-loop-research",
+      "description": "Standalone research agent — scans repo and vault health, outputs prioritized work-item recommendations",
+      "version": "1.0.0",
+      "category": "automation",
+      "keywords": ["research", "dev-loop", "vault-health", "code-health", "work-items", "agentic"]
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "name": "dev-loop-research",
+  "version": "1.0.0",
+  "description": "Standalone research agent — scans repo and vault health, outputs prioritized work-item recommendations. Pass 'high' for aggressive mode.",
+  "author": {
+    "name": "kalrorz"
+  },
+  "license": "MIT",
+  "keywords": ["research", "dev-loop", "vault-health", "code-health", "work-items", "agentic"],
+  "skills": "./"
+}
