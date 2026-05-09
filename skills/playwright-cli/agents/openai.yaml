@@ -1,0 +1,3 @@
+display_name: Playwright CLI
+short_description: Automate browser workflows via playwright-cli with CDP attach and headed Chrome defaults.
+default_prompt: Use the playwright-cli workflow. Prefer attaching to the CDP endpoint configured in .playwright/cli.config.json, validate key UI state with deterministic selector checks, and keep browser automation commands runnable from the repository root.

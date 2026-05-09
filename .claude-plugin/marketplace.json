@@ -63,6 +63,17 @@
       "version": "1.0.0",
       "category": "automation",
       "keywords": ["research", "dev-loop", "vault-health", "code-health", "work-items", "agentic"]
+    },
+    {
+      "name": "playwright-cli",
+      "source": "./skills/playwright-cli",
+      "description": "Browser automation via playwright-cli — fork of microsoft/playwright-cli with attach+headed defaults and project config overrides",
+      "version": "0.1.13-0",
+      "category": "automation",
+      "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "testing", "chrome"],
+      "upstream": "microsoft/playwright-cli",
+      "upstreamVersion": "0.1.13",
+      "forkScheme": "upstreamVersion-forkPatch"
     }
   ]
 }

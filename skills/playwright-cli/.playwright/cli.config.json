@@ -1,0 +1,10 @@
+{
+  "browser": {
+    "cdpEndpoint": "http://localhost:9222",
+    "launchOptions": {
+      "headless": false,
+      "channel": "chrome"
+    }
+  },
+  "outputDir": ".playwright-cli"
+}
