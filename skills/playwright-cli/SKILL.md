@@ -16,7 +16,7 @@ This project layers its own defaults on top of the upstream playwright-cli skill
 - **Preferred mode:** attach via CDP (headed, real Chrome profile, logged-in sessions)
 - **Attach shortcut:** `playwright-cli attach` (reads `cdpEndpoint` from config)
 - **Standalone fallback:** `playwright-cli open` (headed + Chrome channel via config; override with `--headless`)
-- **Typical flow:** `chrome-debug.sh` → `playwright-cli attach` → interact → `playwright-cli detach`
+- **Typical flow:** `chrome-debug.sh` → `playwright-cli attach` → interact → (Chrome stays running; re-attach anytime with `playwright-cli attach`). Only use `playwright-cli close` to shut the browser down.
 
 ---
 
