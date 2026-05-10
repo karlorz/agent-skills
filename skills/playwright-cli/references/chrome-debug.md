@@ -4,11 +4,13 @@ Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
 The bundled `scripts/chrome-debug.sh` script handles Chrome detection, profile management, port health checks, and detached launch. It is the recommended way to start Chrome before using `playwright-cli attach`.
 
+**Always run this script via `bash scripts/chrome-debug.sh` (not `make`, not `./scripts/` which may lack execute permission).**
+
 ## Quick Start
 
 ```bash
 # Start Chrome with debug port 9222 (default)
-./scripts/chrome-debug.sh
+bash scripts/chrome-debug.sh
 
 # Then attach playwright-cli
 playwright-cli attach
@@ -18,19 +20,19 @@ playwright-cli attach
 
 ```bash
 # Check if debug port is already in use
-./scripts/chrome-debug.sh --check-port
+bash scripts/chrome-debug.sh --check-port
 
 # Diagnose issues without launching
-./scripts/chrome-debug.sh --explain
+bash scripts/chrome-debug.sh --explain
 
 # Print resolved config as JSON
-./scripts/chrome-debug.sh --dry-run --json
+bash scripts/chrome-debug.sh --dry-run --json
 
 # Start with a specific URL
-./scripts/chrome-debug.sh https://example.com
+bash scripts/chrome-debug.sh https://example.com
 
 # Launch with diagnosis first
-./scripts/chrome-debug.sh --launch-and-explain
+bash scripts/chrome-debug.sh --launch-and-explain
 ```
 
 ## Profile Modes
@@ -45,10 +47,10 @@ The script supports three profile modes, controlled by flags or `CHROME_DEBUG_PR
 
 ```bash
 # Use a clean profile (no cookies/history from personal Chrome)
-./scripts/chrome-debug.sh --repo-local-profile
+bash scripts/chrome-debug.sh --repo-local-profile
 
 # Refresh cloned profile from real Chrome (must close Chrome first)
-./scripts/chrome-debug.sh --refresh-from-default
+bash scripts/chrome-debug.sh --refresh-from-default
 ```
 
 ## Environment Variables
@@ -67,7 +69,7 @@ The script supports three profile modes, controlled by flags or `CHROME_DEBUG_PR
 
 ```bash
 # 1. Ensure Chrome is running with debugging
-./scripts/chrome-debug.sh
+bash scripts/chrome-debug.sh
 
 # 2. Attach playwright-cli to the running Chrome
 playwright-cli attach
@@ -76,10 +78,8 @@ playwright-cli attach
 playwright-cli goto https://example.com
 playwright-cli snapshot
 
-# 4. When done, detach (leaves Chrome running)
-playwright-cli detach
-
-# Or close everything
+# 4. Chrome stays running — re-attach anytime
+# Only use close to shut Chrome down
 playwright-cli close
 ```
 
