@@ -328,8 +328,10 @@ for d in vault_types:
         )
         has_overview = bool(re.search(r'^## Overview', body, re.M))
         has_related = bool(re.search(r'^## Related', body, re.M))
+        section_count = len(re.findall(r'^## ', body, re.M))
+        is_structurally_complete = has_overview and has_related and section_count >= 3
         flags = []
-        if body_lines < threshold: flags.append(f'THIN({body_lines}L)')
+        if body_lines < threshold and not is_structurally_complete: flags.append(f'THIN({body_lines}L)')
         if not has_overview: flags.append('NO_OVERVIEW')
         if not has_related: flags.append('NO_RELATED')
         if flags: print(f'{f}: {\" \".join(flags)}')
@@ -337,8 +339,9 @@ for d in vault_types:
 ```
 
 **Work items to flag:**
-- Pages under threshold body lines → stubs needing enrichment
+- Pages under threshold body lines AND missing structural quality (Overview, Related, or <3 sections) → stubs needing enrichment
 - Pages missing Overview or Related sections → quality gap
+- Dense short pages with Overview + Related + ≥3 sections are NOT flagged — they are complete at current scope
 
 #### B4. Type Coverage
 
