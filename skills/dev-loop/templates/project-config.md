@@ -27,6 +27,86 @@ vault: <vault-path>            # e.g., ~/wiki, or empty to skip vault steps
 release_branch: <branch-name>  # e.g., main, dev, master
 ```
 
+## PRD layer
+
+Controls which skill suite drives the brainstorm → spec → plan → execute →
+review pipeline. The `prd_layer` field names the primary backend; its
+capabilities are resolved at REFRESH into `PRD_CAPS`. Steps 3–6 check
+capability membership instead of naming specific skills.
+
+Pipeline templates (`prd_pipeline`) control which steps run. `PRD_CAPS`
+controls which skill to invoke per step. These are two separate concerns.
+
+```yaml
+prd_layer: superpowers             # superpowers | codestable | tdd | manual | none
+prd_pipeline: full                 # full | tdd-first | single-pass | debug-only | manual
+                                    # (default per prd_layer; override from config)
+```
+
+### PRD backends registry (optional)
+
+Override skill mappings or add future backends. If absent, defaults are
+derived from `prd_layer` + installed skills.
+
+```yaml
+prd_backends:
+  superpowers:
+    capabilities: [brainstorm, spec, plan, execute, review, subagent_dispatch]
+    skills:
+      brainstorm: superpowers:brainstorming
+      plan: superpowers:writing-plans
+      execute: superpowers:subagent-driven-development
+      execute_fallback: superpowers:executing-plans
+      review: simplify
+  codestable:
+    capabilities: [spec, execute, review]
+    skills:
+      spec_execute: codestable:generate
+      review: codestable:validate
+  tdd:
+    capabilities: [spec, plan, execute, review]
+    skills:
+      spec: inline
+      plan: superpowers:writing-plans
+      execute: superpowers:test-driven-development
+      review: superpowers:requesting-code-review
+  manual:
+    capabilities: [execute]
+    skills:
+      execute: inline
+  none:
+    capabilities: []
+```
+
+**Capabilities by backend:**
+
+| Capability | superpowers | codestable | tdd | manual | none |
+|---|---|---|---|---|---|
+| `brainstorm` | yes | no | no | no | no |
+| `spec` | yes (via brainstorm) | yes | inline | no | no |
+| `plan` | yes | no | yes | no | no |
+| `execute` | yes | yes | yes | inline | no |
+| `review` | yes | yes | yes | manual | no |
+| `subagent_dispatch` | yes | no | no | no | no |
+
+### Cross-cutting disciplines (optional)
+
+Disciplines are advisory overlays, not pipeline stages. They declare
+when they apply and whether they are advisory, mandatory, or reactive.
+
+```yaml
+prd_disciplines:
+  - skill: superpowers:test-driven-development
+    when: execute       # apply during EXECUTE step
+    mode: advisory      # the execute skill decides how to use it
+  - skill: superpowers:systematic-debugging
+    when: failure       # invoke when EXECUTE encounters errors
+    mode: reactive      # interrupt EXECUTE, invoke debugging, resume
+```
+
+`when` values: `execute`, `review`, `failure`, `always`
+`mode` values: `advisory` (skill decides), `mandatory` (hard gate), `reactive` (interrupt on trigger)
+
 ## Knowledge layer
 
 Controls how the loop captures, queries, and maintains project knowledge.

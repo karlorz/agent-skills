@@ -59,7 +59,7 @@ claimable work regardless of P-score. Specifically:
 
 | Layer | Tool | Role |
 |-------|------|------|
-| PRD | Any compatible skill (superpowers, CodeStable, custom) | Brainstorm, spec, plan, execute, review |
+| PRD | Pluggable via `prd_layer` config — default `superpowers`, also `codestable`, `tdd`, `manual`, `none` | Brainstorm, spec, plan, execute, review |
 | Knowledge | Pluggable via `knowledge_layer` config — default `skillwiki`, also `none` | Ingest, validate, query, crystallize, distill, decide, lint, audit |
 | Quality | `/simplify` (or equivalent reviewer) | Pre-push code review gate |
 | Hygiene | `claude-md-management:claude-md-improver`, `/compact` | Long-session context maintenance |
@@ -68,6 +68,11 @@ The knowledge layer is pluggable via `knowledge_layer` in the project config.
 Steps branch on **capabilities**, not backend names — check `if <capability> in
 BACKEND_CAPS` rather than `if knowledge_layer == "skillwiki"`. This lets new
 backends slot in by declaring which capabilities they provide.
+
+The PRD layer follows the same pattern via `prd_layer` in the project config.
+Steps 3–6 branch on `PRD_CAPS` instead of naming specific skills. Pipeline
+templates (`prd_pipeline`) control which steps run; `PRD_CAPS` controls which
+skill to invoke per step. These are two separate concerns.
 
 ### Capability Matrix
 
@@ -89,9 +94,61 @@ in `BACKEND_CAPS` instead of testing the backend name directly.
 
 See config template for `knowledge_backends` registry details.
 
-The active PRD skill is pluggable. Default chain:
-`superpowers:brainstorming` → `superpowers:writing-plans` →
-`superpowers:subagent-driven-development` (fallback `executing-plans`).
+### PRD Capability Matrix
+
+| Capability | superpowers | codestable | tdd | manual | none |
+|---|---|---|---|---|---|
+| `brainstorm` | superpowers:brainstorming | — | — | — | — |
+| `spec` | (from brainstorm) | codestable:generate | inline | — | — |
+| `plan` | superpowers:writing-plans | — | superpowers:writing-plans | — | — |
+| `execute` | superpowers:subagent-driven-development | codestable:generate | superpowers:test-driven-development | inline | — |
+| `review` | simplify | codestable:validate | superpowers:requesting-code-review | manual | — |
+| `subagent_dispatch` | yes | no | no | no | no |
+
+At REFRESH, `PRD_CAPS` is resolved alongside `BACKEND_CAPS`: read `prd_layer`
+from config (default: auto-discover), look up the backend in `prd_backends`
+(or derive defaults), and store the set of PRD capabilities + registered skill
+names. Steps 3–6 check `PRD_CAPS` membership instead of naming specific skills.
+
+### Pipeline Templates
+
+Pipeline templates control which steps run. `PRD_CAPS` controls which skill
+to invoke per step. These are two separate concerns.
+
+| Template | Steps | Use case |
+|---|---|---|
+| `full` | spec → plan → execute → review | Default for superpowers. New features, refactors. |
+| `tdd-first` | plan → execute → review | Plan IS the test suite. TDD discipline during execute. |
+| `single-pass` | execute → review | Spec is inline from QUERY. Small features, fixes. |
+| `debug-only` | execute | No spec/plan. Root cause → fix → verify. |
+| `manual` | (none) | User drives everything. Dev-loop is orchestrator only. |
+
+Default pipeline per `prd_layer`:
+- `superpowers` → `full`
+- `codestable` → `single-pass`
+- `tdd` → `tdd-first`
+- `manual` → `manual`
+- `none` → `manual`
+
+Config can override: `prd_pipeline: tdd-first` even with `prd_layer: superpowers`.
+
+### Cross-Cutting Disciplines
+
+Cross-cutting concerns (TDD, debugging) are advisory overlays, not pipeline
+stages. They are declared in `prd_disciplines` config with `when` and `mode`:
+
+```yaml
+prd_disciplines:
+  - skill: superpowers:test-driven-development
+    when: execute       # apply during EXECUTE step
+    mode: advisory      # the execute skill decides how to use it
+  - skill: superpowers:systematic-debugging
+    when: failure       # invoke when EXECUTE encounters errors
+    mode: reactive      # interrupt EXECUTE, invoke debugging, resume
+```
+
+`when` values: `execute`, `review`, `failure`, `always`
+`mode` values: `advisory` (skill decides), `mandatory` (hard gate), `reactive` (interrupt on trigger)
 
 ## Knowledge Tiers
 
@@ -177,7 +234,16 @@ The active PRD skill is pluggable. Default chain:
      Parse `knowledge_layer` (default: `skillwiki`). Then resolve
      `BACKEND_CAPS` — read the `knowledge_backends` map if present in
      config (see templates/project-config.md for schema); otherwise derive
-     defaults from `knowledge_layer` + `vault` fields. If `query_vault` in
+     defaults from `knowledge_layer` + `vault` fields.
+     Then resolve `PRD_CAPS` — read `prd_layer` from config. If absent,
+     auto-discover: if `superpowers:brainstorming` is available →
+     `superpowers`; else if `superpowers:test-driven-development` is
+     available → `tdd`; else → `manual`. Read `prd_backends` map if
+     present; otherwise derive defaults from `prd_layer`. Store the set
+     of PRD capabilities and registered skill names as `PRD_CAPS`.
+     Resolve `prd_pipeline` (default per `prd_layer`, override from config).
+     Store as `PRD_PIPELINE`. Resolve `prd_disciplines` if declared.
+     If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
      reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
      lines like `- entities/, concepts/, ...` ending in `/`. Store as
@@ -189,7 +255,9 @@ The active PRD skill is pluggable. Default chain:
      `slug` (parent dir basename), `vault` (first `~/wiki` tilde-path
      or run `skillwiki path` if available), `knowledge_layer` (default
      `skillwiki` if vault exists, `none` otherwise — then derive
-     BACKEND_CAPS from it),
+     BACKEND_CAPS from it), `prd_layer` (default `superpowers` if
+     superpowers skills are available, else `manual` — then derive
+     PRD_CAPS from it),
      `cli_src`/`cli_test` (first `packages/*/src/commands/` or
      `src/commands/` match), `skills_glob`
      (`packages/skills/*/SKILL.md` if exists), `release_branch`
@@ -298,25 +366,62 @@ a simple YAML header with `title`, `status`, `kind`, and `created` date.
 repo content. Ensure it's listed in `.gitignore` when running in `none`
 mode. The project-config template includes a Gitignore section for this.
 
-### 3. SPEC — `<PRD brainstorming/design skill>` (mandatory)
+### 3. SPEC — spec artifact (conditional on `prd_pipeline` + `PRD_CAPS`)
 
-Default: `superpowers:brainstorming`. Pass the redirect path so the
-spec lands in the vault.
+**If `spec` step is NOT in the active pipeline template:** skip to step 4.
 
-### 4. PLAN — `<PRD planning skill>` (mandatory)
+**If `spec` step IS in the active pipeline template:**
 
-Default: `superpowers:writing-plans`. Pass the redirect path.
+- **`brainstorm` in PRD_CAPS:** Invoke the registered brainstorm skill
+  (from `prd_backends` registry) with work-item context. Output: `spec.md`
+  at redirect path.
+- **`spec` in PRD_CAPS (but not `brainstorm`):** Invoke the registered
+  spec skill. Output: `spec.md` at redirect path.
+- **Neither in PRD_CAPS:** Inline spec from QUERY results + work item
+  description. Output: `spec.md` (minimal).
 
-### 5. EXECUTE — `<PRD execution skill>` (mandatory)
+### 4. PLAN — plan artifact (conditional on `prd_pipeline` + `PRD_CAPS`)
 
-Preferred: `superpowers:subagent-driven-development`. Fallback:
-`superpowers:executing-plans`.
+**If `plan` step is NOT in the active pipeline template:** skip to step 5.
 
-### 6. SIMPLIFY — `/simplify` review (mandatory, hard gate)
+**If `plan` step IS in the active pipeline template:**
 
-Run on all modified/new files. Fix every issue raised before any
-further step. No bypass. (`/simplify` is provided by the superpowers
-skill suite; if not installed, do a manual code review instead.)
+- **`plan` in PRD_CAPS:** Invoke the registered plan skill with `spec.md`.
+  Output: `plan.md` at redirect path.
+- **`plan` not in PRD_CAPS:** Inline plan from `spec.md`. Output:
+  `plan.md` (minimal, derived from spec).
+
+### 5. EXECUTE — implementation (conditional on `prd_pipeline` + `PRD_CAPS`)
+
+**If `execute` step is NOT in the active pipeline template:** skip to step 6
+(manual pipeline — user drives implementation).
+
+**If `execute` step IS in the active pipeline template:**
+
+- **`execute` in PRD_CAPS:** Invoke the registered execute skill with
+  `plan.md` (or `spec.md` if no plan). If `subagent_dispatch` in
+  PRD_CAPS, dispatch subagents per plan task. Otherwise, inline execution.
+- **`execute` not in PRD_CAPS:** Prompt user: "Execute manually, then mark
+  work item done."
+
+**Discipline injection (sub-step of EXECUTE):**
+- If any `prd_disciplines` entry has `when: execute`, pass its context
+  to the execute skill as advisory guidance.
+- If execution encounters errors and any discipline has `when: failure`
+  with `mode: reactive`, interrupt EXECUTE, invoke the reactive discipline
+  (e.g., systematic-debugging), then resume.
+
+### 6. REVIEW — code quality gate (conditional on `prd_pipeline` + `PRD_CAPS`)
+
+**If `review` step is NOT in the active pipeline template:** skip to step 7.
+
+**If `review` step IS in the active pipeline template:**
+
+- **`review` in PRD_CAPS:** Invoke the registered review skill on all
+  modified/new files. Fix every issue raised before any further step.
+  No bypass for `mode: mandatory` disciplines.
+- **`review` not in PRD_CAPS:** Manual code review (or skip for
+  vault-only work where no code was touched).
 
 ### 7. SAVE — crystallize session insights (optional)
 
@@ -697,7 +802,9 @@ stale local state:
    CLAUDE.md and MEMORY.md fresh every cycle.
 2. **Always start work with proj-work.** Redirect paths come from
    there, not from the PRD skill.
-3. **PRD skill is pluggable.** superpowers is the default, not required.
+3. **PRD skill is pluggable via `prd_layer` config.** Steps 3–6 branch on
+   `PRD_CAPS` and `prd_pipeline`, not hardcoded skill names. superpowers
+   is the default backend, not required.
 4. **Never push without simplify.** Hard gate for code changes;
    git-only and vault-only work skip simplify (nothing to review). E2E
    joins the gate when the project has it.
