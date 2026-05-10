@@ -207,10 +207,11 @@ The active PRD skill is pluggable. Default chain:
        passes; else `none` — then derive BACKEND_CAPS from the resolved
        knowledge layer
    - **Fallback 3**: if critical fields (slug) cannot be resolved,
-     prompt user with: *"No dev-loop config found. Run `bootstrap` to
-     scaffold `.claude/dev-loop.config.md`?"* If the user declines or
-     `knowledge_layer` cannot be determined, default to `none` and
-     proceed with git-based alternatives.
+     default to `playground` as the slug. This ensures the PRD bridge
+     chain always has a target — `proj-work` emits redirect paths, and
+     `superpowers:brainstorming` / `superpowers:writing-plans` can fire
+     normally. If `knowledge_layer` also cannot be determined, default
+     to `none` and proceed with git-based alternatives.
 
 3. **Read CLAUDE.md and MEMORY.md fresh** — the system-prompt copy
    loaded at session start goes stale if a prior cycle edited them.
