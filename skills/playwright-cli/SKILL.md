@@ -12,6 +12,12 @@ The project config (`.playwright/cli.config.json`) sets `cdpEndpoint: http://loc
 
 Do not attempt `playwright-cli open` or `playwright-cli attach` until Phase 0 completes.
 
+**Preferred — fresh restart (kills stale sessions too):**
+```bash
+bash scripts/chrome-debug.sh --restart
+```
+
+**Or step by step:**
 ```bash
 # Check if Chrome is already running on port 9222
 bash scripts/chrome-debug.sh --check-port
@@ -19,11 +25,25 @@ bash scripts/chrome-debug.sh --check-port
 # If port is free, launch Chrome with remote debugging
 bash scripts/chrome-debug.sh
 
+# If port is occupied but attach fails (stale session), restart cleanly:
+playwright-cli kill-all
+bash scripts/chrome-debug.sh --restart
+
 # If you need a clean profile (no cookies from personal Chrome)
 bash scripts/chrome-debug.sh --repo-local-profile
 ```
 
 When the script prints `[OK] Chrome is listening on port 9222`, advance to Phase 1.
+
+### Known issue: Stale attach session
+
+If `playwright-cli attach` times out after 30s even though Chrome is healthy on port 9222, a stale playwright-cli daemon is holding a dead session. Fix:
+```bash
+playwright-cli kill-all
+bash scripts/chrome-debug.sh --restart
+playwright-cli attach
+```
+The `--restart` flag kills the Chrome debugger process and stale daemon sessions together, ensuring a clean start.
 
 ## Phase 1: Attach and interact
 

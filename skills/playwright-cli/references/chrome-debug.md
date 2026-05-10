@@ -33,6 +33,9 @@ bash scripts/chrome-debug.sh https://example.com
 
 # Launch with diagnosis first
 bash scripts/chrome-debug.sh --launch-and-explain
+
+# Kill existing Chrome + stale playwright-cli daemons and launch fresh
+bash scripts/chrome-debug.sh --restart
 ```
 
 ## Profile Modes

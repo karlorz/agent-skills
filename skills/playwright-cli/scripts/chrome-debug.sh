@@ -10,6 +10,7 @@ JSON_OUTPUT=0
 CHECK_PORT_ONLY=0
 EXPLAIN_ONLY=0
 LAUNCH_AND_EXPLAIN=0
+FORCE_RESTART=0
 PROFILE_MODE="${CHROME_DEBUG_PROFILE_MODE:-default-user}"
 PROFILE_DIRECTORY_NAME="${CHROME_DEBUG_PROFILE_DIRECTORY:-Default}"
 REFRESH_FROM_DEFAULT="${CHROME_DEBUG_REFRESH_FROM_DEFAULT:-0}"
@@ -71,6 +72,7 @@ Options:
   --explain       Print a short diagnosis and suggested next action without launching Chrome
   --launch-and-explain
                    Print the diagnosis first, then continue with the normal launch flow
+  --restart       Kill any existing Chrome debug instance + stale playwright-cli sessions, then launch fresh
   --default-user-profile
                    Clone the normal Chrome profile into a debug-safe user-data directory (default)
   --refresh-from-default
@@ -630,6 +632,9 @@ while [[ $# -gt 0 ]]; do
     --launch-and-explain)
       LAUNCH_AND_EXPLAIN=1
       ;;
+    --restart)
+      FORCE_RESTART=1
+      ;;
     --default-user-profile)
       PROFILE_MODE="default-user"
       ;;
@@ -718,6 +723,41 @@ if [[ "${DRY_RUN}" == "1" ]]; then
     log_ok "Dry-run only; Chrome was not started."
   fi
   exit 0
+fi
+
+if [[ "${FORCE_RESTART}" == "1" ]] && port_is_healthy; then
+  log_info "Restart requested — killing existing Chrome debug instance and stale playwright-cli sessions."
+  if command -v playwright-cli >/dev/null 2>&1; then
+    playwright-cli kill-all 2>/dev/null || true
+  fi
+  # Kill the exact process holding port 9222 (more reliable than pgrep by profile marker)
+  port_pid="$(lsof -ti "tcp:${DEBUG_PORT}" 2>/dev/null || true)"
+  if [[ -n "${port_pid}" ]]; then
+    log_info "Killing process ${port_pid} holding port ${DEBUG_PORT}."
+    kill "${port_pid}" 2>/dev/null || true
+    sleep 1
+    port_pid="$(lsof -ti "tcp:${DEBUG_PORT}" 2>/dev/null || true)"
+    if [[ -n "${port_pid}" ]]; then
+      log_info "Process still alive; sending SIGKILL."
+      kill -9 "${port_pid}" 2>/dev/null || true
+    fi
+  fi
+  stop_profile_processes
+  cleanup_profile_locks
+  log_info "Waiting for port ${DEBUG_PORT} to be free."
+  for _ in {1..40}; do
+    if ! port_is_healthy; then
+      log_ok "Port ${DEBUG_PORT} is free."
+      break
+    fi
+    sleep 0.5
+  done
+  if port_is_healthy; then
+    log_error "Chrome did not release port ${DEBUG_PORT} after restart request."
+    log_error "Close Chrome manually and rerun."
+    exit 1
+  fi
+  log_ok "Previous instance stopped."
 fi
 
 if port_is_healthy; then
