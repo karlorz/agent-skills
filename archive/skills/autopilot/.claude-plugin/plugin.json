@@ -1,7 +1,8 @@
 {
   "name": "autopilot",
   "version": "1.0.0",
-  "description": "Managed Codex home-hook autopilot for self-sustaining session management",
+  "description": "[ARCHIVED] Managed Codex home-hook autopilot for self-sustaining session management",
+  "archived": "2026-05-11",
   "author": {
     "name": "kalrorz"
   },

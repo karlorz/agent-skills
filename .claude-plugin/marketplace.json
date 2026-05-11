@@ -4,7 +4,7 @@
     "name": "kalrorz"
   },
   "metadata": {
-    "description": "Curated skills for Claude Code: deep research, code simplification, Obsidian knowledge management, autopilot session management, and dev-loop cycles.",
+    "description": "Curated skills for Claude Code: deep research, code simplification, and dev-loop cycles.",
     "version": "1.0.0"
   },
   "plugins": [
@@ -25,22 +25,6 @@
       "keywords": ["simplify", "review", "refactor", "quality"]
     },
     {
-      "name": "obsidian-gh-knowledge",
-      "source": "./skills/obsidian-gh-knowledge",
-      "description": "CLI-first Obsidian vault bootstrap and operation with local/GitHub fallback",
-      "version": "1.0.0",
-      "category": "knowledge",
-      "keywords": ["obsidian", "knowledge", "github", "vault", "notes"]
-    },
-    {
-      "name": "autopilot",
-      "source": "./skills/autopilot",
-      "description": "Managed Codex home-hook autopilot for self-sustaining session management",
-      "version": "1.0.0",
-      "category": "automation",
-      "keywords": ["autopilot", "codex", "session", "hooks"]
-    },
-    {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
       "description": "Generic single-pass PRD + skillwiki dev cycle engine. Pluggable knowledge backends via capability model, drift guard, project-agnostic.",
@@ -55,14 +39,6 @@
       "version": "1.0.0",
       "category": "reference",
       "keywords": ["hermes", "hermes-agent", "cli", "reference", "nousresearch", "commands"]
-    },
-    {
-      "name": "dev-loop-research",
-      "source": "./skills/dev-loop-research",
-      "description": "Standalone research agent — scans repo and vault health, outputs prioritized work-item recommendations",
-      "version": "1.0.0",
-      "category": "automation",
-      "keywords": ["research", "dev-loop", "vault-health", "code-health", "work-items", "agentic"]
     },
     {
       "name": "playwright-cli",

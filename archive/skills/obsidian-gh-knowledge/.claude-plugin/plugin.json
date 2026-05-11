@@ -1,7 +1,8 @@
 {
   "name": "obsidian-gh-knowledge",
   "version": "1.0.0",
-  "description": "CLI-first Obsidian vault bootstrap and operation with local/GitHub fallback",
+  "description": "[ARCHIVED] CLI-first Obsidian vault bootstrap and operation with local/GitHub fallback",
+  "archived": "2026-05-11",
   "author": {
     "name": "kalrorz"
   },
