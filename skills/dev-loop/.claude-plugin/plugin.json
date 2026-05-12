@@ -7,5 +7,5 @@
   },
   "license": "MIT",
   "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability"],
-  "skills": "./"
+  "skills": ["./", "./research"]
 }

@@ -1,5 +1,6 @@
 ---
 name: dev-loop
+version: "1.5.1"
 description: "Generic single-pass PRD + skillwiki dev cycle. Project-agnostic engine with auto-capture, pluggable knowledge backends, drift guard. Pass `high` for aggressive mode."
 argument-hint: "[high]"
 ---
@@ -196,7 +197,7 @@ prd_disciplines:
 │  Then run maintenance based on BACKEND_CAPS:               │
 │  - lint_vault cap: wiki-lint/audit/crystallize/distill     │
 │  - no lint_vault: git gc, prune branches, project lint     │
-│  Then invoke research agent (see research.md).              │
+│  Then invoke research agent (see research/SKILL.md).      │
 │  Exit with one-line summary of what was done.               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -644,7 +645,7 @@ instead:
      retros, batch-write a summary retro covering the gap. This prevents
      retro gaps from accumulating silently during intensive sprints.
 
-4. Invoke research agent — see `research.md` in this skill directory.
+4. Invoke research agent — see `research/SKILL.md` in this skill directory.
    Pass intensity through (`normal` or `high`). Also pass
    `BACKEND_CAPS` and `VAULT_TYPES` (derived from config at REFRESH)
    so the research agent can skip Track B when `query_vault` not in
@@ -928,6 +929,6 @@ re-run REFRESH to load the new config.
 
 ## Research Agent
 
-The companion research agent prompt lives in `research.md` adjacent to
+The companion research agent prompt lives in `research/SKILL.md` adjacent to
 this `SKILL.md`. It is invoked from IDLE DISCOVERY step 4. The research
 agent shares the same project config; do not duplicate config fields.
