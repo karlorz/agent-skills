@@ -1,6 +1,6 @@
 ---
 name: research
-version: "1.5.1"
+version: "1.5.2"
 description: Pluggable research agent for dev-loop. Scans code health (CLI, tests, skills, specs) and optional vault health (coverage, links, quality). Outputs prioritized work items. Pass 'high' for aggressive mode.
 type: companion-prompt
 mode: recurring
@@ -32,14 +32,20 @@ Pluggable research cycle for dev-loop. Scans configurable health tracks, cross-r
 
 ## Capabilities Detection
 
-At REFRESH, detect available backends from config or environment:
+At REFRESH, re-derive `BACKEND_CAPS` using the same logic as the parent dev-loop skill. Do NOT assume inherited state — explicitly resolve from config:
+
+1. Read `knowledge_layer` from project config (default: `skillwiki` if vault exists, `none` otherwise).
+2. Resolve `BACKEND_CAPS` from `knowledge_layer` — same registry/defaults as parent skill REFRESH step.
+3. Derive track booleans from `BACKEND_CAPS` membership:
 
 | Capability | Detection | Track |
 |------------|-----------|-------|
 | `cli_backend` | `cli_src` field exists | A |
-| `vault_backend` | `vault` field exists AND backend has `query_vault` | B |
+| `vault_backend` | `query_vault` in BACKEND_CAPS | B |
 
 Skip tracks when backends unavailable. Run with available tracks only.
+
+**Critical:** `BACKEND_CAPS` controls work-item creation paths in the Output step. If `create_work_item` is in `BACKEND_CAPS`, use `proj-work` for vault-native paths. Only fall back to git-local (`.claude/dev-loop-work/`) when `create_work_item` is absent.
 
 ## Intensity
 
@@ -142,6 +148,17 @@ Healthy thresholds:
 
 ## Output
 
+### Work-item creation
+
+When synthesizing recommendations that need work items, check `create_work_item in BACKEND_CAPS`:
+
+- **`create_work_item` in BACKEND_CAPS:** Use `proj-work` to create work items under `{vault}/projects/{slug}/work/`. This ensures wiki indexing, `knowledge.md` references, and `wiki-lint` visibility.
+- **`create_work_item` not in BACKEND_CAPS:** Fall back to `.claude/dev-loop-work/YYYY-MM-DD-{slug}/` (git-local path). Ensure `.claude/dev-loop-work/` is in `.gitignore`.
+
+Never silently default to git-local when the vault backend is configured — this bypasses the vault and breaks provenance.
+
+### Logging
+
 If `vault_backend`:
 - Append to `{vault}/log.md`
 - Update MEMORY.md if top-N changed
@@ -156,21 +173,24 @@ The agent delegates to configured backends. Expected interface:
 interface ResearchBackend {
   // Detection
   isAvailable(): boolean;
-  
+
   // Track A
   listSourceFiles(): string[];
   listTestFiles(): string[];
   listSkillFiles(): string[];
-  
+
   // Track B
   countRawFiles(): number;
   countCitedRaw(): number;
   countIsolatedPages(): number;
   countThinPages(threshold: number): number;
   listOrphanPages(): string[];
-  
+
   // Output
   appendLog(entry: string): void;
+
+  // Work-item creation (requires create_work_item in BACKEND_CAPS)
+  createWorkItem(slug: string, kind: string): { specPath: string; planPath: string };
 }
 ```
 
