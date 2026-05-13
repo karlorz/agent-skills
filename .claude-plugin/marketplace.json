@@ -28,7 +28,7 @@
       "name": "dev-loop",
       "source": "./skills/dev-loop",
       "description": "Generic single-pass PRD + skillwiki dev cycle engine. Pluggable knowledge backends via capability model, drift guard, project-agnostic.",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "automation",
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability"]
     },

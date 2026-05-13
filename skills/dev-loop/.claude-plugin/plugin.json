@@ -1,6 +1,6 @@
 {
   "name": "dev-loop",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Generic single-pass PRD + skillwiki dev cycle engine. Auto-capture, pluggable knowledge backends, drift guard, hot-reload sync, project-agnostic.",
   "author": {
     "name": "kalrorz"
