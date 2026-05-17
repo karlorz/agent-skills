@@ -170,18 +170,67 @@ restore_group() {
     caddy_domains)
       [ -f "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" ] && ssh "$TARGET" "tar xzf - -C /" < "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" 2>/dev/null || true
       [ -f "$BACKUP_CONTENT_DIR/ssl-certs.tar.gz" ] && ssh "$TARGET" "tar xzf - -C /" < "$BACKUP_CONTENT_DIR/ssl-certs.tar.gz" 2>/dev/null || true
-      ssh "$TARGET" "systemctl restart caddy 2>/dev/null || service caddy restart 2>/dev/null || true"
+      # Check if Caddy binary exists on target — offer to install if missing
+      caddy_exists=$(ssh "$TARGET" "which caddy 2>/dev/null || echo MISSING" 2>/dev/null || echo "MISSING")
+      if [ "$caddy_exists" = "MISSING" ]; then
+        echo "  Caddy not installed on target. Attempting to install..."
+        caddy_install=$(ssh "$TARGET" "sudo apt-get install -y caddy 2>&1" 2>/dev/null || echo "INSTALL_FAILED")
+        if [[ "$caddy_install" == *"INSTALL_FAILED"* ]] || [[ "$caddy_install" == *"Unable to locate package"* ]]; then
+          echo "  ⚠ Caddy install failed. Install it manually to serve restored domains."
+          echo "    Debian/Ubuntu: sudo apt-get install caddy"
+          echo "    Other: https://caddyserver.com/docs/install"
+        else
+          echo "  Caddy installed successfully."
+          ssh "$TARGET" "sudo systemctl daemon-reload; sudo systemctl enable caddy; sudo systemctl restart caddy || sudo service caddy restart || true" 2>/dev/null || true
+        fi
+      else
+        ssh "$TARGET" "sudo systemctl daemon-reload 2>/dev/null; sudo systemctl enable caddy 2>/dev/null; sudo systemctl restart caddy 2>/dev/null || sudo service caddy restart 2>/dev/null || true" 2>/dev/null || true
+      fi
       ;;
     hermes)
       if [ -f "$BACKUP_CONTENT_DIR/hermes-backup.zip" ]; then
-        scp "$BACKUP_CONTENT_DIR/hermes-backup.zip" "${TARGET}:/tmp/hermes-restore.zip" 2>/dev/null || true
-        ssh "$TARGET" "hermes import /tmp/hermes-restore.zip 2>/dev/null || true"
-        ssh "$TARGET" "rm -f /tmp/hermes-restore.zip" 2>/dev/null || true
+        # Use ~/ (real disk) instead of /tmp (small tmpfs) for large backups
+        hermes_size=$(stat -f%z "$BACKUP_CONTENT_DIR/hermes-backup.zip" 2>/dev/null || echo 0)
+        remote_path="/tmp/hermes-restore.zip"
+        if [ "$hermes_size" -gt 1073741824 ]; then  # >1GB
+          remote_path="~/hermes-restore.zip"
+          echo "  Large backup ($((hermes_size/1024/1024))MB), using home dir for transfer..."
+        fi
+        scp "$BACKUP_CONTENT_DIR/hermes-backup.zip" "${TARGET}:${remote_path}" 2>/dev/null || {
+          echo "  ⚠ SCP failed — check disk space on target"
+          return
+        }
+        ssh "$TARGET" "hermes import --force ${remote_path} 2>/dev/null || hermes import ${remote_path} 2>/dev/null || true"
+        ssh "$TARGET" "rm -f ${remote_path}" 2>/dev/null || true
+        # Re-install gateway service (source unit files may have wrong paths)
+        echo "  Re-installing Hermes gateway service..."
+        ssh "$TARGET" "
+          # Remove stale system-level unit files from source host
+          rm -f /etc/systemd/system/hermes-gateway.service /etc/systemd/system/hermes-dashboard.service 2>/dev/null
+          systemctl daemon-reload 2>/dev/null
+          # Re-install using local hermes binary (writes correct paths)
+          hermes gateway install 2>/dev/null || true
+          systemctl --user start hermes-gateway.service 2>/dev/null || true
+        " 2>/dev/null || true
       fi
       ;;
     other_services)
       [ -f "$BACKUP_CONTENT_DIR/services.txt" ] && scp "$BACKUP_CONTENT_DIR/services.txt" "${TARGET}:/tmp/" 2>/dev/null || true
+      # Systemd daemon-reload in case unit files were deployed
+      echo "  Reloading systemd..."
+      ssh "$TARGET" "systemctl daemon-reload 2>/dev/null || true"
+      ssh "$TARGET" "systemctl --user daemon-reload 2>/dev/null || true"
+      # List backed-up services that need packages installed on target
+      if [ -f "$BACKUP_CONTENT_DIR/services.txt" ]; then
+        svc_list=$(grep -oE 'alertmanager|prometheus|grafana-server|filebrowser|tailscaled|komari|komari-agent|claude-ingress' "$BACKUP_CONTENT_DIR/services.txt" | sort -u | tr '\n' ' ' || true)
+        if [ -n "$svc_list" ]; then
+          echo "  Services requiring package install on target: $svc_list"
+          echo "  Install with: apt-get install <packages> then systemctl enable --now <service>"
+        fi
+      fi
       ;;
+
+
     apt)
       if [ -f "$BACKUP_CONTENT_DIR/dpkg-selections.txt" ]; then
         echo "Warning: apt restore across distro versions may break dependencies"
