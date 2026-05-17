@@ -38,6 +38,62 @@ bash scripts/host-backup-cli.sh --host sg01 --profile full --research
 bash scripts/host-restore-cli.sh --archive ./sg01-backup.tar.gz --target newhost --all
 ```
 
+---
+
+## Non-Root User Setup (Recommended)
+
+By default, backup and restore operations use the non-root `agent` user for SSH. Root access is not required if the `agent` user has passwordless sudo.
+
+### Prerequisite: Bootstrap the agent user
+
+Run once per target host to create the `agent` user with passwordless sudo:
+
+```bash
+bash scripts/hermes/setup-remote-user.sh <host>
+```
+
+This connects as root (one-time bootstrap), creates the `agent` user, grants passwordless sudo, deploys your SSH key, and optionally writes an SSH config alias.
+
+### How non-root works
+
+The CLI scripts default to `agent@<host>` for SSH connections:
+
+| Scenario | Result | Example |
+|----------|--------|---------|
+| Default (no flags) | `agent@<host>` | `ssh agent@sg01 "cmd"` |
+| `--user root` | `root@<host>` | `ssh root@sg01 "cat /etc/caddy/Caddyfile"` |
+| `--user deploy` | `deploy@<host>` | `ssh deploy@sg01 "cmd"` |
+| `<host>-agent` alias | Uses SSH config | `ssh sg01-agent "cmd"` |
+
+The `agent` user requires passwordless sudo for operations that write to system paths (e.g., `/etc/caddy/`, `/etc/hosts`, systemd services). The `setup-remote-user.sh` script configures this automatically.
+
+### Specifying a user explicitly
+
+```bash
+# Backup as root (if needed for system-level operations)
+bash scripts/host-backup-cli.sh --host sg01 --user root --profile full
+
+# Backup as a specific non-root user
+bash scripts/host-backup-cli.sh --host sg01 --user deploy --profile quick
+
+# Restore to a target as non-root agent (default)
+bash scripts/host-restore-cli.sh --archive ./backup.tar.gz --target newhost --all
+
+# Restore as root
+bash scripts/host-restore-cli.sh --archive ./backup.tar.gz --target newhost --user root --all
+
+# Using SSH config alias (handles user/key/port in ~/.ssh/config)
+bash scripts/host-backup-cli.sh --host sg01-agent --profile full
+```
+
+### Security
+
+- After bootstrapping `agent` user, consider disabling root SSH login on the target host
+- Passwordless sudo is required for non-interactive automation (systemd services, Caddy config)
+- The agent user's SSH key is deployed from your local `~/.ssh/id_ed25519.pub` or a specified key
+
+---
+
 ## Architecture
 
 ```

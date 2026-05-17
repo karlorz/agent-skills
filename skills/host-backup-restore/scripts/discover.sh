@@ -36,11 +36,12 @@ manifest = {
     'apt_sources': []
 }
 
-def ssh(cmd, timeout=10, raw=False):
+def ssh(cmd, timeout=10, raw=False, sudo=False):
     '''Run a command on the remote host and return output.'''
     try:
+        cmd_with_sudo = ('sudo ' + cmd) if sudo else cmd
         r = subprocess.run(
-            ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, cmd],
+            ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, cmd_with_sudo],
             capture_output=True,
             text=True,
             timeout=timeout
@@ -52,7 +53,7 @@ def ssh(cmd, timeout=10, raw=False):
 # ============================================
 # Caddy — parse Caddyfile for domain→upstream
 # ============================================
-caddyfile = ssh('cat /etc/caddy/Caddyfile 2>/dev/null', timeout=5)
+caddyfile = ssh('cat /etc/caddy/Caddyfile 2>/dev/null', timeout=5, sudo=True)
 if caddyfile:
     current_domain = None
     for line in caddyfile.split('\n'):
@@ -118,7 +119,7 @@ sqlite_files = ssh(
     '-not -path \"*/proc/*\" -not -path \"*/snap/*\" '
     '-not -path \"*/.git/*\" -not -path \"*/node_modules/*\" '
     '2>/dev/null | head -20',
-    timeout=15
+    timeout=15, sudo=True
 )
 if sqlite_files:
     manifest['databases']['sqlite'] = [f.strip() for f in sqlite_files.split('\n') if f.strip()]
@@ -130,7 +131,7 @@ if sqlite_files:
 sys_services = ssh(
     'systemctl list-units --type=service --no-pager --no-legend 2>/dev/null | '
     'grep -v cmux | head -40',
-    timeout=15
+    timeout=15, sudo=True
 )
 if sys_services:
     for line in sys_services.split('\n'):
@@ -159,7 +160,7 @@ if user_services:
 # ============================================
 sources = ssh(
     'cat /etc/apt/sources.list 2>/dev/null; cat /etc/apt/sources.list.d/*.list 2>/dev/null || true',
-    timeout=10
+    timeout=10, sudo=True
 )
 if sources:
     for line in sources.split('\n'):
