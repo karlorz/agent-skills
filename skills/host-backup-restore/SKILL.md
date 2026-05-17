@@ -613,6 +613,13 @@ After user selects "hermes" group:
 
 **Model specification:** Per [[concepts/claude-code-agent-model-specification]], the `model: sonnet` is set in the agent frontmatter (`.claude-plugin/agents/hermes-backup-worker.md`), not in `plugin.json` or `SKILL.md`. The Agent tool parameter can override at spawn time but defaults to the agent file setting.
 
+> **Primary entry point:** The `hermes-backup-worker` agent is the recommended way to perform Hermes backup/restore operations. Use `Agent(subagent_type="hermes-backup-worker", ...)` instead of calling `scripts/hermes/` scripts directly. The agent handles script selection, error handling, and result reporting.
+
+> **Performance note:** `hermes backup` on sg01 creates a ~2.2 GB zip via SSH. The transfer can take 10+ minutes over WAN. Consider:
+> - Spawning `hermes-backup-worker` with `run_in_background: true` for non-blocking backup
+> - Using `--profile minimal` or `--hermes-tier minimal` for faster snapshots
+> - Running hermes backup directly on the host (`ssh sg01 "hermes backup -o backup.zip"`) for large transfers
+
 ---
 
 ## DevSH Testing
@@ -667,6 +674,16 @@ ssh -o BatchMode=yes <host> "hostname"
 - `systemctl --user` FAILS (no user bus in LXC) — run gateway as system service or background process
 - `devsh exec` works for all commands
 - HTTP file transfer works (same 10.10.x.x/16 subnet)
+
+#### File transfer methods (pve-lxc)
+
+| Method | Works for | Limit | Command |
+|--------|-----------|-------|---------|
+| base64 + devsh exec | Text files, small binaries | ~32 KB (shell arg limit) | `B64=$(base64 < file); devsh exec "$LXC" "echo \$B64 \| base64 -d > /tmp/file"` |
+| HTTP serve | Any file size | Requires HTTP server on local machine | `python3 -m http.server 8080 & curl -o /tmp/file http://10.10.x.1:8080/file` |
+| SCP via sg01 bridge | Any file size | Requires sg01 as jump host | `scp file sg01:/tmp/; ssh sg01 "scp /tmp/file 10.10.1.123:/tmp/"` |
+
+For backup archives larger than 32 KB (Caddy config, SSL certs, Hermes zip), use the HTTP serve or SCP bridge method. Base64 encoding hits the shell's argument length limit for binary files.
 
 ---
 
