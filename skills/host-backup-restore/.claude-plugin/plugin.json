@@ -1,0 +1,24 @@
+{
+  "name": "host-backup-restore",
+  "version": "3.1.0",
+  "description": "Host-level backup restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet workers for general + Hermes ops), post-discovery research, skillwiki infrastructure capture, and Hermes module (absorbed from hermes-remote-backup). Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
+  "author": {
+    "name": "kalrorz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "backup",
+    "restore",
+    "host",
+    "caddy",
+    "hermes",
+    "disaster-recovery",
+    "cli",
+    "ssh",
+    "profiles",
+    "deep-research",
+    "agent",
+    "hermes-backup"
+  ],
+  "skills": "./"
+}

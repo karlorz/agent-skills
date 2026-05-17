@@ -50,6 +50,14 @@
       "upstream": "microsoft/playwright-cli",
       "upstreamVersion": "0.1.13",
       "forkScheme": "upstreamVersion-forkPatch"
+    },
+    {
+      "name": "host-backup-restore",
+      "source": "./skills/host-backup-restore",
+      "description": "Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker), post-discovery research, and skillwiki infrastructure capture. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
+      "version": "3.1.0",
+      "category": "operations",
+      "keywords": ["backup", "restore", "host", "caddy", "hermes", "disaster-recovery", "cli", "ssh", "profiles", "deep-research", "agent", "hermes-backup"]
     }
   ]
 }
