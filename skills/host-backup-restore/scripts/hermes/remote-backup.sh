@@ -26,15 +26,39 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RETAIN=""
 UPLOAD=""
 
+require_value() {
+  local flag="$1"
+  if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --mode) MODE="$2"; shift 2 ;;
+    --mode)
+      require_value "$1" "${2:-}"
+      MODE="$2"
+      shift 2
+      ;;
     --include-profiles) INCLUDE_PROFILES=true; shift ;;
     --include-systemd) INCLUDE_SYSTEMD=true; shift ;;
     --include-rclone-config) INCLUDE_RCLONE_CONFIG=true; shift ;;
-    --dest) DEST="$2"; shift 2 ;;
-    --retain) RETAIN="$2"; shift 2 ;;
-    --upload) UPLOAD="$2"; shift 2 ;;
+    --dest)
+      require_value "$1" "${2:-}"
+      DEST="$2"
+      shift 2
+      ;;
+    --retain)
+      require_value "$1" "${2:-}"
+      RETAIN="$2"
+      shift 2
+      ;;
+    --upload)
+      require_value "$1" "${2:-}"
+      UPLOAD="$2"
+      shift 2
+      ;;
     --help|-h)
       echo "Usage: remote-backup.sh <host> [--mode quick|full] [--include-profiles] [--include-systemd] [--dest <path>]"
       exit 0 ;;
@@ -50,6 +74,10 @@ case "$MODE" in
   quick|full) ;;
   *) echo "ERROR: --mode must be quick or full" >&2; exit 1 ;;
 esac
+if [ -n "$RETAIN" ] && (! echo "$RETAIN" | grep -qxE '[0-9]+' || [ "$RETAIN" -lt 1 ]); then
+  echo "ERROR: --retain must be a positive integer (got: $RETAIN)" >&2
+  exit 1
+fi
 
 # ── Preflight ────────────────────────────────────────────────────────────────
 
@@ -172,9 +200,15 @@ fi
 if [ -n "$UPLOAD" ]; then
   echo "--- Upload: Syncing to $UPLOAD ---"
   if command -v rclone &>/dev/null; then
-    rclone sync "$DEST/$HOST/" "$UPLOAD" --backup-dir "${UPLOAD%/}/archive" \
-      --progress 2>&1 | tail -5 || echo "  WARNING: rclone sync failed (non-fatal)" >&2
-    echo "  Synced to: $UPLOAD"
+    SYNC_RC=0
+    SYNC_TAIL=$(rclone sync "$DEST/$HOST/" "$UPLOAD" --backup-dir "${UPLOAD%/}/archive" \
+      --progress 2>&1 | tail -5) || SYNC_RC=$?
+    [ -n "$SYNC_TAIL" ] && echo "$SYNC_TAIL"
+    if [ "$SYNC_RC" -eq 0 ]; then
+      echo "  Synced to: $UPLOAD"
+    else
+      echo "  WARNING: rclone sync failed (non-fatal)" >&2
+    fi
   else
     echo "  WARNING: rclone not found on macOS — install with: brew install rclone"
   fi

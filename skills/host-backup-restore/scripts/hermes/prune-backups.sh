@@ -16,28 +16,51 @@
 
 set -euo pipefail
 
-# Allow empty globs so ls *.zip doesn't fail when no backups exist
+# Allow empty globs so pattern loops don't fail when no backups exist
 shopt -s nullglob
 
-DEST_ROOT="${1:-}"
+DEST_ROOT=""
 RETAIN=7
 DRY_RUN=false
 
+require_value() {
+  local flag="$1"
+  if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --retain) RETAIN="$2"; shift 2 ;;
+    --retain)
+      require_value "$1" "${2:-}"
+      RETAIN="$2"
+      shift 2
+      ;;
     --dry-run) DRY_RUN=true; shift ;;
     --help|-h)
       echo "Usage: prune-backups.sh <dest-root> [--retain <N>] [--dry-run]"
       exit 0 ;;
     *)
       # first non-flag arg is dest-root
-      [ -z "$DEST_ROOT" ] && DEST_ROOT="$1" && shift || { echo "ERROR: Unknown: $1" >&2; exit 1; } ;;
+      if [ -z "$DEST_ROOT" ]; then
+        DEST_ROOT="$1"
+        shift
+      else
+        echo "ERROR: Unknown: $1" >&2
+        exit 1
+      fi
+      ;;
   esac
 done
 
 [ -z "$DEST_ROOT" ] && { echo "ERROR: <dest-root> is required" >&2; exit 1; }
 [ ! -d "$DEST_ROOT" ] && { echo "ERROR: Directory not found: $DEST_ROOT" >&2; exit 1; }
+if ! echo "$RETAIN" | grep -qxE '[0-9]+' || [ "$RETAIN" -lt 1 ]; then
+  echo "ERROR: --retain must be a positive integer (got: $RETAIN)" >&2
+  exit 1
+fi
 
 TOTAL_REMOVED=0
 TOTAL_SAVED=0
@@ -48,11 +71,12 @@ for HOST_DIR in "$DEST_ROOT"/*/; do
 
   # Collect unique backup timestamp prefixes (YYYYMMDD-HHMMSS) from zip/tgz files
   # Sort descending so newest are kept
-  TIMESTAMPS=$(ls -1 "$HOST_DIR"/*.zip "$HOST_DIR"/*.tar.gz 2>/dev/null \
-    | sed -n 's/.*hermes[-a-z]*-\([0-9]\{8\}-[0-9]\{6\}\)\(\..*\)/\1/p' \
-    | sort -r -u)
+  TIMESTAMPS=$(find "$HOST_DIR" -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' \) \
+    -print 2>/dev/null \
+    | grep -oE '[0-9]{8}-[0-9]{6}' \
+    | sort -r -u || true)
 
-  TIMESTAMP_COUNT=$(echo "$TIMESTAMPS" | grep -c . 2>/dev/null || echo 0)
+  TIMESTAMP_COUNT=$(printf "%s\n" "$TIMESTAMPS" | sed '/^$/d' | wc -l | tr -d ' ')
 
   if [ "$TIMESTAMP_COUNT" -le "$RETAIN" ]; then
     echo "  $HOST: $TIMESTAMP_COUNT sets (<= $RETAIN, nothing to prune)"
@@ -61,11 +85,9 @@ for HOST_DIR in "$DEST_ROOT"/*/; do
   fi
 
   # Keep first RETAIN (newest), remove the rest
-  TO_KEEP=$(echo "$TIMESTAMPS" | head -n "$RETAIN")
   TO_REMOVE=$(echo "$TIMESTAMPS" | tail -n +$((RETAIN + 1)))
 
   REMOVED_COUNT=0
-  TS_LIST=""
 
   while IFS= read -r ts; do
     [ -z "$ts" ] && continue
@@ -78,7 +100,6 @@ for HOST_DIR in "$DEST_ROOT"/*/; do
       fi
       REMOVED_COUNT=$((REMOVED_COUNT + 1))
     done
-    TS_LIST="$TS_LIST $ts"
   done <<< "$TO_REMOVE"
 
   TOTAL_REMOVED=$((TOTAL_REMOVED + REMOVED_COUNT))

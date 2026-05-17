@@ -15,11 +15,31 @@ HOST=""
 VM_ID=""
 JSON_ONLY=false
 
+require_value() {
+  local flag="$1"
+  if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --mode) MODE="$2"; shift 2 ;;
-    --host) HOST="$2"; shift 2 ;;
-    --vm-id) VM_ID="$2"; shift 2 ;;
+    --mode)
+      require_value "$1" "${2:-}"
+      MODE="$2"
+      shift 2
+      ;;
+    --host)
+      require_value "$1" "${2:-}"
+      HOST="$2"
+      shift 2
+      ;;
+    --vm-id)
+      require_value "$1" "${2:-}"
+      VM_ID="$2"
+      shift 2
+      ;;
     --json-only) JSON_ONLY=true; shift ;;
     --help|-h)
       echo "Usage: pre-inspect.sh --mode ssh|devsh --host <host>|--vm-id <id> [--json-only]"
@@ -50,8 +70,8 @@ _run() {
     out=$(devsh exec "$VM_ID" "$1" 2>&1) || rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    echo "ERROR: command failed (exit $rc)${out:+: $out}" >&2
-    return "$rc"
+    echo "__ERROR__:$rc:${out}"
+    return 0
   fi
   echo "$out"
 }
@@ -114,7 +134,7 @@ case "$ARCH" in
   armv7l|armv6l)
     _record "architecture" "warn" "$ARCH (32-bit ARM)"
     [ "$JSON_ONLY" = false ] && echo "  ⚠️  Architecture: $ARCH (32-bit — Hermes may not work)" ;;
-  ERROR:*)
+  __ERROR__:*)
     _record "architecture" "fail" "$ARCH"
     [ "$JSON_ONLY" = false ] && echo "  ❌ Architecture: $ARCH" ;;
   *)
@@ -124,7 +144,10 @@ esac
 
 # 3. Python3
 PYTHON=$(_run "python3 --version 2>/dev/null || echo 'not_found'")
-if echo "$PYTHON" | grep -qE "^Python 3\.(1[0-9]|[2-9][0-9])"; then
+if echo "$PYTHON" | grep -q "^__ERROR__:"; then
+  _record "python3" "fail" "$PYTHON"
+  [ "$JSON_ONLY" = false ] && echo "  ❌ Python: probe failed"
+elif echo "$PYTHON" | grep -qE "^Python 3\.(1[0-9]|[2-9][0-9])"; then
   _record "python3" "pass" "$PYTHON"
   [ "$JSON_ONLY" = false ] && echo "  ✅ Python: $PYTHON"
 elif echo "$PYTHON" | grep -q "^Python"; then
@@ -137,7 +160,10 @@ fi
 
 # 4. curl
 CURL=$(_run "curl --version 2>/dev/null | head -1 || echo 'not_found'")
-if echo "$CURL" | grep -q "^curl"; then
+if echo "$CURL" | grep -q "^__ERROR__:"; then
+  _record "curl" "fail" "$CURL"
+  [ "$JSON_ONLY" = false ] && echo "  ❌ curl: probe failed"
+elif echo "$CURL" | grep -q "^curl"; then
   _record "curl" "pass" "$CURL"
   [ "$JSON_ONLY" = false ] && echo "  ✅ curl: $(echo "$CURL" | awk '{print $2}')"
 else
@@ -148,12 +174,17 @@ fi
 # 5. Disk space
 DISK=$(_run "df -h / 2>/dev/null | tail -1 | awk '{print \$4}' || echo 'unknown'")
 DISK_GB=$(_run "df / 2>/dev/null | tail -1 | awk '{print \$4}' || echo '0'")
-if [ "$DISK_GB" != "0" ] && [ "$DISK_GB" -lt 5242880 ] 2>/dev/null; then
-  _record "disk_space" "warn" "${DISK} free (<5GB)"
-  [ "$JSON_ONLY" = false ] && echo "  ⚠️  Disk: $DISK free (minimum 5GB recommended)"
-elif [ "$DISK_GB" != "0" ] 2>/dev/null; then
-  _record "disk_space" "pass" "${DISK} free"
-  [ "$JSON_ONLY" = false ] && echo "  ✅ Disk: $DISK free"
+if echo "$DISK_GB" | grep -q "^__ERROR__:"; then
+  _record "disk_space" "warn" "probe_failed"
+  [ "$JSON_ONLY" = false ] && echo "  ⚠️  Disk: probe failed"
+elif echo "$DISK_GB" | grep -qxE '[0-9]+'; then
+  if [ "$DISK_GB" -lt 5242880 ]; then
+    _record "disk_space" "warn" "${DISK} free (<5GB)"
+    [ "$JSON_ONLY" = false ] && echo "  ⚠️  Disk: $DISK free (minimum 5GB recommended)"
+  else
+    _record "disk_space" "pass" "${DISK} free"
+    [ "$JSON_ONLY" = false ] && echo "  ✅ Disk: $DISK free"
+  fi
 else
   _record "disk_space" "warn" "unknown"
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  Disk: unknown"
@@ -162,12 +193,17 @@ fi
 # 6. Memory
 MEM=$(_run "free -h 2>/dev/null | grep '^Mem:' | awk '{print \$7}' || echo 'unknown'")
 MEM_KB=$(_run "free 2>/dev/null | grep '^Mem:' | awk '{print \$7}' || echo '0'")
-if [ "$MEM_KB" != "0" ] && [ "$MEM_KB" -lt 2097152 ] 2>/dev/null; then
-  _record "memory" "warn" "${MEM} available (<2GB)"
-  [ "$JSON_ONLY" = false ] && echo "  ⚠️  Memory: $MEM available (minimum 2GB recommended)"
-elif [ "$MEM_KB" != "0" ] 2>/dev/null; then
-  _record "memory" "pass" "${MEM} available"
-  [ "$JSON_ONLY" = false ] && echo "  ✅ Memory: $MEM available"
+if echo "$MEM_KB" | grep -q "^__ERROR__:"; then
+  _record "memory" "warn" "probe_failed"
+  [ "$JSON_ONLY" = false ] && echo "  ⚠️  Memory: probe failed"
+elif echo "$MEM_KB" | grep -qxE '[0-9]+'; then
+  if [ "$MEM_KB" -lt 2097152 ]; then
+    _record "memory" "warn" "${MEM} available (<2GB)"
+    [ "$JSON_ONLY" = false ] && echo "  ⚠️  Memory: $MEM available (minimum 2GB recommended)"
+  else
+    _record "memory" "pass" "${MEM} available"
+    [ "$JSON_ONLY" = false ] && echo "  ✅ Memory: $MEM available"
+  fi
 else
   _record "memory" "warn" "unknown"
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  Memory: unknown"
@@ -178,7 +214,7 @@ WIKI_FS=$(_run "df -T ~/wiki 2>/dev/null | tail -1 | awk '{print \$2}' || echo '
 if [ "$WIKI_FS" = "fuse.rclone" ]; then
   _record "wiki_s3_mount" "pass" "fuse.rclone"
   [ "$JSON_ONLY" = false ] && echo "  ✅ ~/wiki S3 mount: fuse.rclone"
-elif [ "$WIKI_FS" = "unknown" ]; then
+elif [ "$WIKI_FS" = "unknown" ] || echo "$WIKI_FS" | grep -q "^__ERROR__:"; then
   _record "wiki_s3_mount" "warn" "unknown (~/wiki may not exist)"
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  ~/wiki: unknown (directory may not exist)"
 else
@@ -188,7 +224,7 @@ fi
 
 # 8. Hermes installed
 HERMES_VER=$(_run "hermes --version 2>/dev/null || echo 'not_installed'")
-if [ "$HERMES_VER" != "not_installed" ]; then
+if [ "$HERMES_VER" != "not_installed" ] && ! echo "$HERMES_VER" | grep -q "^__ERROR__:"; then
   _record "hermes_installed" "pass" "$HERMES_VER"
   [ "$JSON_ONLY" = false ] && echo "  ✅ Hermes: $HERMES_VER"
 else
@@ -201,7 +237,7 @@ SYSTEMD=$(_run "systemctl is-system-running 2>/dev/null || echo 'not_found'")
 if [ "$SYSTEMD" = "running" ] || [ "$SYSTEMD" = "degraded" ]; then
   _record "systemd_system" "pass" "$SYSTEMD"
   [ "$JSON_ONLY" = false ] && echo "  ✅ systemd (system): $SYSTEMD"
-elif [ "$SYSTEMD" = "not_found" ]; then
+elif [ "$SYSTEMD" = "not_found" ] || echo "$SYSTEMD" | grep -q "^__ERROR__:"; then
   _record "systemd_system" "warn" "not_found (container without systemd)"
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  systemd: not found"
 else
@@ -214,6 +250,9 @@ USER_BUS=$(_run "systemctl --user status 2>&1 | head -1 || echo 'no_bus'")
 if echo "$USER_BUS" | grep -q "Failed to connect to bus"; then
   _record "systemd_user_bus" "warn" "no_user_bus (LXC container — use system service)"
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  systemd --user: NOT AVAILABLE (use system service instead)"
+elif echo "$USER_BUS" | grep -q "^__ERROR__:"; then
+  _record "systemd_user_bus" "warn" "probe_failed"
+  [ "$JSON_ONLY" = false ] && echo "  ⚠️  systemd --user: probe failed"
 else
   _record "systemd_user_bus" "pass" "available"
   [ "$JSON_ONLY" = false ] && echo "  ✅ systemd --user: available"
@@ -231,8 +270,13 @@ fi
 
 # 11. OS info
 OS=$(_run "cat /etc/os-release 2>/dev/null | grep -E '^(PRETTY_NAME|VERSION_ID)=' | head -2 | tr '\n' ';' || uname -a | head -1")
-_record "os" "pass" "$OS"
-[ "$JSON_ONLY" = false ] && echo "  ✅ OS: $(echo "$OS" | sed 's/;.*VERSION_ID=/ /;s/VERSION_ID=//;s/\"//g' | head -c 80)"
+if echo "$OS" | grep -q "^__ERROR__:"; then
+  _record "os" "warn" "probe_failed"
+  [ "$JSON_ONLY" = false ] && echo "  ⚠️  OS: probe failed"
+else
+  _record "os" "pass" "$OS"
+  [ "$JSON_ONLY" = false ] && echo "  ✅ OS: $(echo "$OS" | sed 's/;.*VERSION_ID=/ /;s/VERSION_ID=//;s/\"//g' | head -c 80)"
+fi
 
 # 12. SSH key auth (SSH mode only)
 if [ "$MODE" = "ssh" ]; then

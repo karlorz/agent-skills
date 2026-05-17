@@ -28,16 +28,33 @@ set -euo pipefail
 HOST=""
 USERNAME=""
 
+require_value() {
+  local flag="$1"
+  if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --user)    USERNAME="$2"; shift 2 ;;
+    --user)
+      require_value "$1" "${2:-}"
+      USERNAME="$2"
+      shift 2
+      ;;
     --help|-h)
       echo "Usage: setup-nonroot-hermes.sh <host> --user <name>" >&2
       exit 0 ;;
     -*)
       echo "ERROR: Unknown option $1" >&2; exit 1 ;;
     *)
-      [ -z "$HOST" ] && HOST="$1" || { echo "ERROR: Unexpected arg: $1" >&2; exit 1; }
+      if [ -z "$HOST" ]; then
+        HOST="$1"
+      else
+        echo "ERROR: Unexpected arg: $1" >&2
+        exit 1
+      fi
       shift ;;
   esac
 done
@@ -84,18 +101,19 @@ echo ""
 
 # Step 3: Install hermes-agent from system source
 echo "--- Step 3: Install hermes-agent in venv ---"
-if [ -d "/usr/local/lib/hermes-agent" ]; then
-  # System source exists — copy to user-accessible location
-  SRC_EXISTS=$(ssh $SSH_OPTS "$HOST" "test -d '${USER_HOME}/hermes-agent-src' && echo yes || echo no" 2>/dev/null || echo "no")
-  if [ "$SRC_EXISTS" != "yes" ]; then
-    # Check if system source exists on target
-    HAS_SOURCE=$(ssh $SSH_OPTS "$HOST" "test -d /usr/local/lib/hermes-agent && echo yes || echo no" 2>/dev/null || echo "no")
-    if [ "$HAS_SOURCE" = "yes" ]; then
-      # Need root to copy — use sudo
-      ssh $SSH_OPTS "$HOST" "sudo cp -r /usr/local/lib/hermes-agent '${USER_HOME}/hermes-agent-src' && sudo chown -R '${USERNAME}:${USERNAME}' '${USER_HOME}/hermes-agent-src'" 2>&1
-      echo "  Copied Hermes source from /usr/local/lib/hermes-agent"
-    fi
+SRC_EXISTS=$(ssh $SSH_OPTS "$HOST" "test -d '${USER_HOME}/hermes-agent-src' && echo yes || echo no" 2>/dev/null || echo "no")
+if [ "$SRC_EXISTS" != "yes" ]; then
+  # Check if system source exists on target
+  HAS_SOURCE=$(ssh $SSH_OPTS "$HOST" "test -d /usr/local/lib/hermes-agent && echo yes || echo no" 2>/dev/null || echo "no")
+  if [ "$HAS_SOURCE" = "yes" ]; then
+    # Need root to copy — use sudo
+    ssh $SSH_OPTS "$HOST" "sudo cp -r /usr/local/lib/hermes-agent '${USER_HOME}/hermes-agent-src' && sudo chown -R '${USERNAME}:${USERNAME}' '${USER_HOME}/hermes-agent-src'" 2>&1
+    echo "  Copied Hermes source from /usr/local/lib/hermes-agent"
+    SRC_EXISTS="yes"
   fi
+fi
+
+if [ "$SRC_EXISTS" = "yes" ]; then
   # Install from local source (use --python for explicit venv python path)
   VENV_PYTHON="${USER_HOME}/.hermes-venv/bin/python"
   ssh $SSH_OPTS "$HOST" "${USER_HOME}/.local/bin/uv pip install -e '${USER_HOME}/hermes-agent-src' --python '${VENV_PYTHON}' -q 2>&1" 2>/dev/null || {
@@ -104,8 +122,8 @@ if [ -d "/usr/local/lib/hermes-agent" ]; then
   }
   echo "  Hermes installed: $(ssh $SSH_OPTS "$HOST" "export PATH='${USER_HOME}/.hermes-venv/bin:\$PATH'; hermes --version 2>&1 | head -1")"
 else
-  # No system source — install from PyPI
-  echo "  No system Hermes source found — installing from PyPI..."
+  # No source on target — install from PyPI
+  echo "  No system Hermes source found on target — installing from PyPI..."
   ssh $SSH_OPTS "$HOST" "export UV_PROJECT_ENVIRONMENT='${USER_HOME}/.hermes-venv'; ${USER_HOME}/.local/bin/uv pip install hermes-agent -q" 2>&1
 fi
 echo ""

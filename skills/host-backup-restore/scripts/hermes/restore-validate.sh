@@ -15,11 +15,31 @@ HOST=""
 VM_ID=""
 JSON_ONLY=false
 
+require_value() {
+  local flag="$1"
+  if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --mode) MODE="$2"; shift 2 ;;
-    --host) HOST="$2"; shift 2 ;;
-    --vm-id) VM_ID="$2"; shift 2 ;;
+    --mode)
+      require_value "$1" "${2:-}"
+      MODE="$2"
+      shift 2
+      ;;
+    --host)
+      require_value "$1" "${2:-}"
+      HOST="$2"
+      shift 2
+      ;;
+    --vm-id)
+      require_value "$1" "${2:-}"
+      VM_ID="$2"
+      shift 2
+      ;;
     --json-only) JSON_ONLY=true; shift ;;
     --help|-h)
       echo "Usage: restore-validate.sh --mode ssh|devsh --host <host>|--vm-id <id> [--json-only]"

@@ -3,7 +3,7 @@
 # setup-remote-user.sh — Create non-root user + passwordless sudo on remote
 # ============================================================================
 # Bootstrap a remote Debian host with a non-root automation user (default:
-# "agent"). This is a one-time prerequisite for running hermes-remote-backup
+# "agent"). This is a one-time prerequisite for running Hermes backup workflows
 # as a non-root user.
 #
 # Usage:
@@ -34,19 +34,38 @@ PUBLIC_IP=""
 WRITE_SSH_CONFIG=false
 DRY_RUN=false
 
+require_value() {
+  local flag="$1"
+  if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    exit 1
+  fi
+}
+
 # ── Parse args ────────────────────────────────────────────────────────────────
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --user)     USERNAME="$2"; shift 2
+    --user)
+      require_value "$1" "${2:-}"
+      USERNAME="$2"
+      shift 2
       # Validate: only alphanumeric + underscore + dash, POSIX username chars
       if ! echo "$USERNAME" | grep -qxE '[a-z_][a-z0-9_-]*\$?'; then
         echo "ERROR: Invalid username '$USERNAME' — use only [a-z0-9_-]" >&2
         exit 1
       fi
       ;;
-    --key)      PUBKEY="$2";       shift 2 ;;
-    --public-ip) PUBLIC_IP="$2";   shift 2 ;;
+    --key)
+      require_value "$1" "${2:-}"
+      PUBKEY="$2"
+      shift 2
+      ;;
+    --public-ip)
+      require_value "$1" "${2:-}"
+      PUBLIC_IP="$2"
+      shift 2
+      ;;
     --ssh-config) WRITE_SSH_CONFIG=true; shift ;;
     --dry-run)  DRY_RUN=true;      shift ;;
     --help|-h)
@@ -56,7 +75,12 @@ while [[ $# -gt 0 ]]; do
       echo "ERROR: Unknown option $1" >&2
       exit 1 ;;
     *)
-      [ -z "$HOST" ] && HOST="$1" || { echo "ERROR: Unexpected arg: $1" >&2; exit 1; }
+      if [ -z "$HOST" ]; then
+        HOST="$1"
+      else
+        echo "ERROR: Unexpected arg: $1" >&2
+        exit 1
+      fi
       shift ;;
   esac
 done
@@ -178,11 +202,12 @@ echo ""
 
 echo "--- Step 5: Deploy SSH public key ---"
 PUBKEY_CONTENT=$(cat "$PUBKEY")
+PUBKEY_ESCAPED=$(printf "%s" "$PUBKEY_CONTENT" | sed "s/'/'\\\\''/g")
 SSH_DIR_CMD=$(cat <<CMD
 mkdir -p ~${USERNAME}/.ssh
 chmod 700 ~${USERNAME}/.ssh
-if ! grep -qF '${PUBKEY_CONTENT}' ~${USERNAME}/.ssh/authorized_keys 2>/dev/null; then
-  echo '${PUBKEY_CONTENT}' >> ~${USERNAME}/.ssh/authorized_keys
+if ! grep -qF '${PUBKEY_ESCAPED}' ~${USERNAME}/.ssh/authorized_keys 2>/dev/null; then
+  echo '${PUBKEY_ESCAPED}' >> ~${USERNAME}/.ssh/authorized_keys
   echo 'ADDED'
 else
   echo 'EXISTS'
@@ -260,7 +285,7 @@ echo "    ssh ${HOST}-${USERNAME} \"sudo whoami\""
 echo "    # Expected output: root"
 echo ""
 echo "  Run backup as non-root:"
-echo "    bash scripts/remote-backup.sh ${HOST}-${USERNAME} --mode quick"
+echo "    bash scripts/hermes/remote-backup.sh ${HOST}-${USERNAME} --mode quick"
 echo ""
 echo "  SECURITY NOTE:"
 echo "    Consider disabling root SSH login after verification:"

@@ -14,10 +14,26 @@ ARCHIVE=""
 TARGET=""
 NON_ROOT_USER=""
 
+require_value() {
+  local flag="$1"
+  if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target) TARGET="$2"; shift 2 ;;
-    --non-root-user) NON_ROOT_USER="$2"; shift 2 ;;
+    --target)
+      require_value "$1" "${2:-}"
+      TARGET="$2"
+      shift 2
+      ;;
+    --non-root-user)
+      require_value "$1" "${2:-}"
+      NON_ROOT_USER="$2"
+      shift 2
+      ;;
     --help|-h)
       echo "Usage: remote-restore.sh <archive> --target <host> [--non-root-user <user>]" >&2
       exit 0 ;;
@@ -31,6 +47,10 @@ done
 [ -z "$ARCHIVE" ] && { echo "ERROR: <archive> is required" >&2; exit 1; }
 [ -z "$TARGET" ] && { echo "ERROR: --target <host> is required" >&2; exit 1; }
 [ ! -f "$ARCHIVE" ] && { echo "ERROR: Not found: $ARCHIVE" >&2; exit 1; }
+if [ -n "$NON_ROOT_USER" ] && ! echo "$NON_ROOT_USER" | grep -qxE '[a-z_][a-z0-9_-]*\$?'; then
+  echo "ERROR: Invalid --non-root-user '$NON_ROOT_USER'" >&2
+  exit 1
+fi
 
 echo "=== Hermes Remote Restore ==="
 echo "  Archive: $ARCHIVE"
@@ -46,7 +66,10 @@ ssh $SSH_OPTS "$TARGET" "hostname" &>/dev/null || {
 
 # Transfer and import
 REMOTE_ZIP="/tmp/hermes-restore-$(basename "$ARCHIVE")"
-scp $SSH_OPTS "$ARCHIVE" "$TARGET:$REMOTE_ZIP"
+scp $SSH_OPTS "$ARCHIVE" "$TARGET:$REMOTE_ZIP" || {
+  echo "ERROR: Failed to transfer archive to $TARGET:$REMOTE_ZIP" >&2
+  exit 1
+}
 
 # Stop services before restore
 echo "  Stopping services..."
