@@ -91,8 +91,8 @@ if [ -n "$PROFILE" ]; then
   fi
 fi
 
-# Compose SSH target — default to non-root agent user
-# Use --user root to force root SSH, or --user <name> for a specific user
+# Compose SSH target — resolve user from ~/.ssh/config if available
+# Priority: --user flag > SSH config User directive > agent@ default
 if [ -n "$BACKUP_USER" ]; then
   SSH_TARGET="${BACKUP_USER}@${HOST}"
 elif [[ "$HOST" == *@* ]]; then
@@ -102,8 +102,18 @@ elif [[ "$HOST" == *-agent ]]; then
   # SSH config alias (e.g., sg01-agent with User agent in ~/.ssh/config) — use as-is
   SSH_TARGET="$HOST"
 else
-  # Default: use non-root agent user
-  SSH_TARGET="agent@${HOST}"
+  # Check ~/.ssh/config for User directive matching this host
+  ssh_config_user=$(awk -v host="$HOST" '
+    /^Host / { match_host=0; for(i=2;i<=NF;i++) if($i==host) match_host=1 }
+    match_host && /^  User / { print $2; found=1; exit }
+  ' ~/.ssh/config 2>/dev/null)
+  if [ -n "$ssh_config_user" ]; then
+    SSH_TARGET="${ssh_config_user}@${HOST}"
+    echo "Using SSH config user: ${ssh_config_user}@${HOST}"
+  else
+    # Default: use non-root agent user
+    SSH_TARGET="agent@${HOST}"
+  fi
 fi
 export SSH_TARGET
 
