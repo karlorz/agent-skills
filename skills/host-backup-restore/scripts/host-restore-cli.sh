@@ -202,15 +202,17 @@ restore_group() {
         }
         ssh "$TARGET" "hermes import --force ${remote_path} 2>/dev/null || hermes import ${remote_path} 2>/dev/null || true"
         ssh "$TARGET" "rm -f ${remote_path}" 2>/dev/null || true
-        # Re-install gateway service (source unit files may have wrong paths)
-        echo "  Re-installing Hermes gateway service..."
+        # Re-install gateway + dashboard services (source unit files may have wrong paths)
+        echo "  Re-installing Hermes gateway and dashboard services..."
         ssh "$TARGET" "
           # Remove stale system-level unit files from source host
-          rm -f /etc/systemd/system/hermes-gateway.service /etc/systemd/system/hermes-dashboard.service 2>/dev/null
-          systemctl daemon-reload 2>/dev/null
+          sudo rm -f /etc/systemd/system/hermes-gateway.service /etc/systemd/system/hermes-dashboard.service 2>/dev/null
+          sudo systemctl daemon-reload 2>/dev/null
           # Re-install using local hermes binary (writes correct paths)
           hermes gateway install 2>/dev/null || true
+          hermes dashboard install --system 2>/dev/null || true
           systemctl --user start hermes-gateway.service 2>/dev/null || true
+          sudo systemctl start hermes-dashboard.service 2>/dev/null || true
         " 2>/dev/null || true
       fi
       ;;
