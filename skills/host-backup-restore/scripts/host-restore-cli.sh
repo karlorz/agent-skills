@@ -5,6 +5,7 @@ set -euo pipefail
 ARCHIVE=""
 BACKUP_GROUPS=""
 TARGET=""
+RESTORE_USER=""
 ALL=false
 DRY_RUN=false
 
@@ -13,6 +14,7 @@ usage() {
   echo "Options:"
   echo "  --archive PATH        Backup archive path (.tar.gz) (required)"
   echo "  --target HOST         Target hostname for restore (required)"
+  echo "  --user USER           SSH user for target (default: agent; use root for root SSH)"
   echo "  --all                 Restore all groups"
   echo "  --groups 'g1,g2,...'  Specific groups to restore"
   echo "  --dry-run             Preview only"
@@ -23,6 +25,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --archive) ARCHIVE="$2"; shift 2 ;;
     --target) TARGET="$2"; shift 2 ;;
+    --user) RESTORE_USER="$2"; shift 2 ;;
     --all) ALL=true; shift ;;
     --groups) BACKUP_GROUPS="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
@@ -40,8 +43,19 @@ if [ ! -f "$ARCHIVE" ]; then
   exit 1
 fi
 
+# Compose SSH target — default to non-root agent user
+if [ -n "$RESTORE_USER" ]; then
+  SSH_TARGET="${RESTORE_USER}@${TARGET}"
+elif [[ "$TARGET" == *@* ]]; then
+  SSH_TARGET="$TARGET"
+elif [[ "$TARGET" == *-agent ]]; then
+  SSH_TARGET="$TARGET"
+else
+  SSH_TARGET="agent@${TARGET}"
+fi
+TARGET="$SSH_TARGET"
+
 echo "=== Host Restore CLI ==="
-echo "Archive: $ARCHIVE"
 echo "Target:  $TARGET"
 echo "Dry run: $DRY_RUN"
 echo ""
