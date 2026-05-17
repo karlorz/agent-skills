@@ -654,6 +654,7 @@ After restoring Hermes to a target host, run this post-restore validation sequen
 5. **Content check**: `du -sh ~/.hermes/state.db`, `ls ~/.hermes/skills/ | wc -l`, `cat ~/.hermes/cron/jobs.json`
 
 > **Important:** Stop the gateway BEFORE importing: `systemctl --user stop hermes-gateway.service` ^[entities/hermes-backup-restore-guide.md]
+> Also stop the dashboard if it's running as a system service: `sudo systemctl stop hermes-dashboard.service`
 
 For full Hermes backup/restore reference, see the [[hermes-cli]] skill.
 
