@@ -377,6 +377,30 @@ Offer to save the selection as a custom profile:
 ```
 
 3. **AskUserQuestion for groups to restore** (same per-group yes/no pattern as Step 4b).
+
+**If `caddy_domains` was selected and Caddy is not on the target:**
+
+Check if Caddy exists on the target:
+
+```bash
+ssh <target> "which caddy 2>/dev/null || echo MISSING"
+```
+
+If MISSING, prompt the user:
+
+```json
+{
+  "question": "Caddy is not installed on <target>. Should I install it before restoring Caddy config?",
+  "header": "Caddy install",
+  "options": [
+    {"label": "Yes (Recommended)", "description": "Install caddy via apt-get on the target, then restore config and restart the service"},
+    {"label": "No", "description": "Restore config files only — Caddy won't serve domains until manually installed"}
+  ]
+}
+```
+
+If yes, run: `ssh <target> "sudo apt-get install -y caddy"`
+
 4. Run restore:
 
 ```bash
