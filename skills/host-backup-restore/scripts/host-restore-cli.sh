@@ -43,7 +43,8 @@ if [ ! -f "$ARCHIVE" ]; then
   exit 1
 fi
 
-# Compose SSH target — default to non-root agent user
+# Compose SSH target — resolve user from ~/.ssh/config if available
+# Priority: --user flag > user@host text > *-agent alias > SSH config User directive > agent@ default
 if [ -n "$RESTORE_USER" ]; then
   SSH_TARGET="${RESTORE_USER}@${TARGET}"
 elif [[ "$TARGET" == *@* ]]; then
@@ -51,7 +52,17 @@ elif [[ "$TARGET" == *@* ]]; then
 elif [[ "$TARGET" == *-agent ]]; then
   SSH_TARGET="$TARGET"
 else
-  SSH_TARGET="agent@${TARGET}"
+  # Check ~/.ssh/config for User directive matching this host
+  ssh_config_user=$(awk -v host="$TARGET" '
+    /^Host / { match_host=0; for(i=2;i<=NF;i++) if($i==host) match_host=1 }
+    match_host && /^[[:space:]]+User / { print $2; exit }
+  ' ~/.ssh/config 2>/dev/null)
+  if [ -n "$ssh_config_user" ]; then
+    SSH_TARGET="${ssh_config_user}@${TARGET}"
+    echo "Using SSH config user: ${ssh_config_user}@${TARGET}"
+  else
+    SSH_TARGET="agent@${TARGET}"
+  fi
 fi
 TARGET="$SSH_TARGET"
 
