@@ -105,7 +105,7 @@ else
   # Check ~/.ssh/config for User directive matching this host
   ssh_config_user=$(awk -v host="$HOST" '
     /^Host / { match_host=0; for(i=2;i<=NF;i++) if($i==host) match_host=1 }
-    match_host && /^  User / { print $2; found=1; exit }
+    match_host && /^[[:space:]]+User / { print $2; exit }
   ' ~/.ssh/config 2>/dev/null)
   if [ -n "$ssh_config_user" ]; then
     SSH_TARGET="${ssh_config_user}@${HOST}"
