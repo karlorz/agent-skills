@@ -237,7 +237,7 @@ if [ "$WIKI_FS" = "fuse.rclone" ]; then
 
   # 8.1. Cold cache detection (only when mount is active)
   if [ "$JSON_ONLY" = false ]; then
-    CACHE_OUT=$(_run "timeout 10 bash -c 'time rg -l \".\" /root/wiki/concepts/ 2>/dev/null | head -3 >/dev/null' 2>&1" || echo "timeout")
+    CACHE_OUT=$(_run "timeout 10 bash -c 'time rg -l \".\" /root/wiki/concepts/ 2>/dev/null | head -3 >/dev/null' 2>&1 || echo 'timeout'")
     if echo "$CACHE_OUT" | grep -q "timeout"; then
       _record "wiki_s3_cache" "warn" ">10s — cache likely cold"
       echo "  ⚠️  wiki cache: COLD (>10s scan). Run: systemctl start wiki-cache-warm"
