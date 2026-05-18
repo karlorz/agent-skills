@@ -234,6 +234,30 @@ WIKI_FS=$(_run "df -T ~/wiki 2>/dev/null | tail -1 | awk '{print \$2}' || echo '
 if [ "$WIKI_FS" = "fuse.rclone" ]; then
   _record "wiki_s3_mount" "pass" "fuse.rclone"
   [ "$JSON_ONLY" = false ] && echo "  ✅ ~/wiki S3 mount: fuse.rclone"
+
+  # 8.1. Cold cache detection (only when mount is active)
+  if [ "$JSON_ONLY" = false ]; then
+    CACHE_OUT=$(_run "timeout 10 bash -c 'time rg -l \".\" /root/wiki/concepts/ 2>/dev/null | head -3 >/dev/null' 2>&1" || echo "timeout")
+    if echo "$CACHE_OUT" | grep -q "timeout"; then
+      _record "wiki_s3_cache" "warn" ">10s — cache likely cold"
+      echo "  ⚠️  wiki cache: COLD (>10s scan). Run: systemctl start wiki-cache-warm"
+    else
+      CACHE_REAL=$(echo "$CACHE_OUT" | grep -E '^real[[:space:]]' | head -1 | sed 's/real[[:space:]]*//' || echo "")
+      if [ -n "$CACHE_REAL" ]; then
+        CACHE_SEC=$(echo "$CACHE_REAL" | sed 's/^0m//;s/s$//' 2>/dev/null || echo "0")
+        if [ -n "$CACHE_SEC" ] && awk -v s="$CACHE_SEC" 'BEGIN { exit (s+0 > 5) ? 1 : 0 }' 2>/dev/null; then
+          _record "wiki_s3_cache" "pass" "${CACHE_REAL} (warm)"
+          echo "  ✅ wiki cache: warm (${CACHE_REAL})"
+        else
+          _record "wiki_s3_cache" "warn" "${CACHE_REAL} — cache may be cold"
+          echo "  ⚠️  wiki cache: SLOW (${CACHE_REAL} — cold?). Run: systemctl start wiki-cache-warm"
+        fi
+      else
+        _record "wiki_s3_cache" "pass" "fast (warm)"
+        echo "  ✅ wiki cache: warm"
+      fi
+    fi
+  fi
 elif [ "$WIKI_FS" = "unknown" ] || echo "$WIKI_FS" | grep -q "^__ERROR__:"; then
   _record "wiki_s3_mount" "warn" "unknown (~/wiki may not exist)"
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  ~/wiki: unknown (directory may not exist)"
