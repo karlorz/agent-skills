@@ -47,6 +47,8 @@ backup_group() {
       ssh "$HOST" "sudo cat /etc/hosts" > "$BACKUP_DIR/hosts" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       ssh "$HOST" "sudo cat /etc/ssh/sshd_config" > "$BACKUP_DIR/sshd_config" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       ssh "$HOST" "sudo cat /etc/os-release" > "$BACKUP_DIR/os-release" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      # rclone config (for wiki S3 mount restore)
+      ssh "$HOST" "cat ~/.config/rclone/rclone.conf 2>/dev/null" > "$BACKUP_DIR/rclone.conf" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       echo "$(date -Iseconds)" > "$BACKUP_DIR/BACKUP_TIMESTAMP"
       ;;
     caddy_domains)
@@ -80,6 +82,22 @@ with open('$BACKUP_DIR/domains.txt', 'w') as f:
       if [ "$HERMES_TIER" = "minimal" ]; then
         BACKUP_MODE="--quick"
       fi
+
+      # Precheck /tmp space: clean old backup zips and warn on small tmpfs
+      ssh "$HOST" "
+        tmp_avail=\$(df -m /tmp 2>/dev/null | tail -1 | awk '{print \$4}')
+        tmp_fstype=\$(df -T /tmp 2>/dev/null | tail -1 | awk '{print \$2}')
+        echo \"  /tmp: \${tmp_avail}MB available on \${tmp_fstype:-unknown}\"
+        old_count=\$(ls -1 /tmp/hermes-backup-*.zip 2>/dev/null | wc -l)
+        if [ \"\$old_count\" -gt 0 ]; then
+          echo \"  Cleaning \$old_count old hermes backup zips from /tmp...\"
+          rm -f /tmp/hermes-backup-*.zip
+        fi
+        if [ \"\${tmp_fstype}\" = \"tmpfs\" ] && [ \"\$tmp_avail\" -lt 3072 ]; then
+          echo \"  WARNING: /tmp is tmpfs with <3GB — Hermes backup may fail. Set --hermes-tier minimal or use ~/ instead.\"
+        fi
+      " 2>&1 || true
+
       # shellcheck disable=SC2086
       ssh "$HOST" "hermes backup $BACKUP_MODE -o /tmp/hermes-backup-$TIMESTAMP.zip 2>&1" > "$BACKUP_DIR/hermes-backup-log.txt" 2>/dev/null || {
         echo "hermes backup failed (may not be installed)"
