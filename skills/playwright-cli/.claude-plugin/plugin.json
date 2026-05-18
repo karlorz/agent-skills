@@ -1,11 +1,11 @@
 {
   "name": "playwright-cli",
-  "version": "1.0.0",
-  "description": "Automate browser interactions via playwright-cli for web scraping, testing, and browser automation. Includes Chrome debug launcher for CDP attach workflow.",
+  "version": "1.1.2",
+  "description": "Automate browser interactions via playwright-cli for web scraping, testing, and browser automation. Includes browser-worker agent (model: sonnet) for mechanical Chrome lifecycle and interaction tasks.",
   "author": {
     "name": "kalrorz"
   },
   "license": "MIT",
-  "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "chrome-debug"],
+  "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "chrome-debug", "agent", "browser-worker"],
   "skills": "./"
 }

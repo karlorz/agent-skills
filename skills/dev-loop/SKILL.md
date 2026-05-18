@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.5.1"
-description: "Generic single-pass PRD + skillwiki dev cycle. Project-agnostic engine with auto-capture, pluggable knowledge backends, drift guard. Pass `high` for aggressive mode."
+version: "1.6.0"
+description: "Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Pass `high` for aggressive mode."
 argument-hint: "[high]"
 ---
 
@@ -56,13 +56,31 @@ claimable work regardless of P-score. Specifically:
 - **P3+ pickup**: in high mode there is no such thing as "only P3 left"
   — all items are equal. Do NOT exit idle when the backlog has any items.
 
+## Model Strategy
+
+Dev-loop spawns agents for implementation, code review, and research. To balance cost and quality, each agent-eligible step pins to a model tier matched to its complexity:
+
+| Step | Agent | Model | Rationale |
+|------|-------|-------|-----------|
+| 1. QUERY | wiki-query / git search | `sonnet` (complex queries only) | Vault search and codebase exploration — mechanical lookup |
+| 3. SPEC (brainstorm) | Parent session | inherit | Creative exploration, requirements gathering — benefits from parent model |
+| 4. PLAN | Parent session | inherit | Architecture design, dependency mapping — benefits from parent model |
+| 5. EXECUTE (subagents) | Implementation subagents | `sonnet` | Mechanical coding from plan — following spec, no architectural judgment |
+| 6. SIMPLIFY | simplify-worker | `sonnet` | Code review: search, compare, pattern match — integration-level judgment |
+| IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
+| IDLE: maintenance | skillwiki skills (lint, audit, etc.) | inline (Skill tool) | Low token volume; future: agent spawns via skillwiki project task |
+
+**Steps that stay inline (not agent-eligible):** WORK, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume.
+
+**Cost impact**: ~70% of agent-eligible work (EXECUTE subagents + SIMPLIFY + research) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
+
 ## System Context
 
 | Layer | Tool | Role |
 |-------|------|------|
 | PRD | Pluggable via `prd_layer` config — default `superpowers`, also `codestable`, `tdd`, `manual`, `none` | Brainstorm, spec, plan, execute, review |
 | Knowledge | Pluggable via `knowledge_layer` config — default `skillwiki`, also `none` | Ingest, validate, query, crystallize, distill, decide, lint, audit |
-| Quality | `/simplify` (or equivalent reviewer) | Pre-push code review gate |
+| Quality | `simplify-worker` agent (model: sonnet, spawned inline) | Pre-push code review gate |
 | Hygiene | `claude-md-management:claude-md-improver`, `/compact` | Long-session context maintenance |
 
 The knowledge layer is pluggable via `knowledge_layer` in the project config.
@@ -103,7 +121,7 @@ See config template for `knowledge_backends` registry details.
 | `spec` | (from brainstorm) | codestable:generate | inline | — | — |
 | `plan` | superpowers:writing-plans | — | superpowers:writing-plans | — | — |
 | `execute` | superpowers:subagent-driven-development | codestable:generate | superpowers:test-driven-development | inline | — |
-| `review` | simplify | codestable:validate | superpowers:requesting-code-review | manual | — |
+| `review` | simplify-worker (sonnet agent) | codestable:validate | superpowers:requesting-code-review | manual | — |
 | `subagent_dispatch` | yes | no | no | no | no |
 
 At REFRESH, `PRD_CAPS` is resolved alongside `BACKEND_CAPS`: read `prd_layer`
@@ -173,7 +191,7 @@ prd_disciplines:
 │  3. SPEC      <PRD skill> → spec.md at vault path           │
 │  4. PLAN      <PRD skill> → plan.md at vault path           │
 │  5. EXECUTE   <PRD execution skill> → implement             │
-│  6. SIMPLIFY  /simplify → fix every issue (HARD GATE)       │
+│  6. SIMPLIFY  Agent(simplify-worker, model: sonnet) → fix  │
 ├─────────────────────────────────────────────────────────────┤
 │ OPTIONAL (run if config declares)                           │
 │  7. SAVE      wiki-crystallize → session insights           │
@@ -327,6 +345,13 @@ prd_disciplines:
 ### 1. QUERY — context check (mandatory)
 
 **If `query_vault` in BACKEND_CAPS:**
+For complex vault queries spanning multiple type directories or requiring
+cross-reference synthesis, delegate to a sonnet agent with `model: "sonnet"`:
+```
+Agent(description: "Vault context search", model: "sonnet", prompt: "Search the vault for prior specs, plans, concepts, decisions overlapping: <task>. Use wiki-query for ranked search. Report top candidates with relevance rationale.")
+```
+For simple single-term lookups, run inline — no agent spawn needed.
+
 Search the vault (resolved from `vault` config field) for prior specs,
 plans, concepts, decisions overlapping the task. Feed results into the
 PRD skill's exploration step. Skip if `vault` is empty.
@@ -401,7 +426,9 @@ mode. The project-config template includes a Gitignore section for this.
 
 - **`execute` in PRD_CAPS:** Invoke the registered execute skill with
   `plan.md` (or `spec.md` if no plan). If `subagent_dispatch` in
-  PRD_CAPS, dispatch subagents per plan task. Otherwise, inline execution.
+  PRD_CAPS, dispatch subagents per plan task with `model: "sonnet"`
+  (implementation is mechanical coding following a plan — Sonnet handles
+  this at ~5x lower cost than Opus). Otherwise, inline execution.
 - **`execute` not in PRD_CAPS:** Prompt user: "Execute manually, then mark
   work item done."
 
@@ -645,7 +672,12 @@ instead:
      retros, batch-write a summary retro covering the gap. This prevents
      retro gaps from accumulating silently during intensive sprints.
 
-4. Invoke research agent — see `research/SKILL.md` in this skill directory.
+4. Invoke research agent with `model: "sonnet"` — see `research/SKILL.md` in
+   this skill directory. Code and vault health scanning is mechanical
+   analysis; Sonnet handles it at lower cost without quality loss.
+   ```
+   Agent(description: "Dev-loop research", model: "sonnet", prompt: "Run research cycle with intensity: <normal|high>. BACKEND_CAPS: <caps>. VAULT_TYPES: <types>. Scan code health and vault health per research/SKILL.md.")
+   ```
    Pass intensity through (`normal` or `high`). Also pass
    `BACKEND_CAPS` and `VAULT_TYPES` (derived from config at REFRESH)
    so the research agent can skip Track B when `query_vault` not in
@@ -744,10 +776,10 @@ setup.
 ## Pre-Push Gate (when PUSH applies)
 
 ```
-/simplify passes?
-  ├── NO  → fix issues, re-run simplify
+simplify-worker passes? (model: sonnet)
+  ├── NO  → fix issues, re-run simplify-worker
   └── YES → run E2E (if applicable)
-              ├── any tier fails? → fix, re-run from simplify
+              ├── any tier fails? → fix, re-run from simplify-worker
               └── ALL PASS        → DEPLOY (if applicable)
                                      ├── deploy fails? → report, do not retry auth
                                      └── deploy OK     → PUSH: bump → commit → push → tag (CI publishes)
@@ -755,7 +787,7 @@ setup.
                                                                    └── CI red?  → fix workflow, re-push tag
 ```
 
-A push that bypasses simplify is a broken release. Treat E2E and DEPLOY
+A push that bypasses review is a broken release. Treat E2E and DEPLOY
 with the same discipline if the project has them.
 
 ## N9 Reingest Protocol
@@ -806,8 +838,8 @@ stale local state:
 3. **PRD skill is pluggable via `prd_layer` config.** Steps 3–6 branch on
    `PRD_CAPS` and `prd_pipeline`, not hardcoded skill names. superpowers
    is the default backend, not required.
-4. **Never push without simplify.** Hard gate for code changes;
-   git-only and vault-only work skip simplify (nothing to review). E2E
+4. **Never push without review.** Hard gate for code changes;
+   git-only and vault-only work skip simplify-worker (nothing to review). E2E
    joins the gate when the project has it.
 5. **Validate before index.** When `audit_vault` in BACKEND_CAPS:
    `skillwiki validate` must pass before touching `index.md` or

@@ -1,7 +1,7 @@
 ---
 name: research
-version: "1.5.2"
-description: Pluggable research agent for dev-loop. Scans code health (CLI, tests, skills, specs) and optional vault health (coverage, links, quality). Outputs prioritized work items. Pass 'high' for aggressive mode.
+version: "1.5.3"
+description: Pluggable research agent for dev-loop. Spawn with model: sonnet — scans code health (CLI, tests, skills, specs) and optional vault health (coverage, links, quality). Outputs prioritized work items. Pass 'high' for aggressive mode.
 type: companion-prompt
 mode: recurring
 ---
@@ -9,6 +9,12 @@ mode: recurring
 # Dev-Loop Research Agent
 
 Pluggable research cycle for dev-loop. Scans configurable health tracks, cross-references findings with retros, outputs prioritized work-item recommendations.
+
+## Model Strategy
+
+This agent is spawned by dev-loop with `model: "sonnet"`. Code health scanning (coverage gaps, skills drift, spec drift, unpushed commits) and vault health scanning (raw coverage, cross-links, page quality, type coverage) are mechanical analysis tasks — searching, counting, pattern matching. Sonnet handles these at ~5x lower cost than Opus with no quality loss for this work.
+
+When invoked standalone (not via dev-loop), default to the calling session's model.
 
 ## Architecture
 

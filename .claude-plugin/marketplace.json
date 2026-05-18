@@ -11,8 +11,8 @@
     {
       "name": "deep-research",
       "source": "./skills/deep-research",
-      "description": "Multi-source research engine with flexible output: terminal, file, or skillwiki vault integration",
-      "version": "2.2.0",
+      "description": "Multi-source research engine with tiered model pinning (sonnet/haiku agents for research, parent model for synthesis), deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration",
+      "version": "2.3.0",
       "category": "research",
       "keywords": ["research", "deep-research", "multi-source", "context7", "deepwiki"]
     },
@@ -27,10 +27,10 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. Pluggable knowledge backends via capability model, drift guard, project-agnostic.",
-      "version": "1.5.2",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine with simplify-worker agent (model: sonnet) for code review gate. Pluggable knowledge backends via capability model, drift guard, project-agnostic.",
+      "version": "1.6.1",
       "category": "automation",
-      "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability"]
+      "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker"]
     },
     {
       "name": "hermes-cli",
@@ -43,19 +43,16 @@
     {
       "name": "playwright-cli",
       "source": "./skills/playwright-cli",
-      "description": "Browser automation via playwright-cli — fork of microsoft/playwright-cli with attach+headed defaults and project config overrides",
-      "version": "0.1.13-0",
+      "description": "Browser automation via playwright-cli with browser-worker agent (model: sonnet) for mechanical Chrome lifecycle and interaction tasks — fork of microsoft/playwright-cli with attach+headed defaults and project config overrides",
+      "version": "1.1.1",
       "category": "automation",
-      "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "testing", "chrome"],
-      "upstream": "microsoft/playwright-cli",
-      "upstreamVersion": "0.1.13",
-      "forkScheme": "upstreamVersion-forkPatch"
+      "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "testing", "chrome", "agent", "browser-worker"]
     },
     {
       "name": "host-backup-restore",
       "source": "./skills/host-backup-restore",
       "description": "Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker), post-discovery research, and skillwiki infrastructure capture. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
-      "version": "3.1.0",
+      "version": "3.1.1",
       "category": "operations",
       "keywords": ["backup", "restore", "host", "caddy", "hermes", "disaster-recovery", "cli", "ssh", "profiles", "deep-research", "agent", "hermes-backup"]
     }

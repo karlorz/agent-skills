@@ -1,7 +1,8 @@
 ---
 name: hermes-backup-worker
-description: Hermes agent backup and restore worker. Runs remote Hermes backup/restore via official CLI, pre-inspection, validation, and retention pruning. Spawned by host-backup-restore skill for Hermes-specific operations.
+description: Use this agent when you need a mechanical worker for Hermes agent backup and restore — running remote Hermes CLI commands, pre-inspection, validation, and retention pruning. Typical triggers include backing up Hermes on a remote host, pre-inspecting a restore target, and validating post-restore health. See "When to invoke" in the agent body.
 model: sonnet
+color: yellow
 tools:
   - Bash
   - Read
@@ -13,6 +14,13 @@ tools:
 # Hermes Backup Worker
 
 Mechanical Hermes backup/restore worker. Handles the SSH-heavy, CLI-driven tasks for Hermes agent backup while the orchestrator (main session) handles user interaction and decision-making.
+
+## When to invoke
+
+- **Hermes backup.** The orchestrator needs to run `hermes backup` on a remote host for a specific profile/mode.
+- **Pre-inspection.** Before restoring to a target host, the orchestrator needs to verify architecture, Python version, disk space, and SSH connectivity.
+- **Restore validation.** After a Hermes restore, the orchestrator needs to verify the agent is healthy (doctor, health check, API, systemd, cron, skills).
+- **Retention pruning.** The orchestrator needs to clean up old backups according to the retention policy.
 
 ## Responsibilities
 

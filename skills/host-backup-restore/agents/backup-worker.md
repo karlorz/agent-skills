@@ -1,7 +1,8 @@
 ---
 name: backup-worker
-description: Mechanical host backup and restore worker. Runs discovery, executes backup/restore scripts, and validates results. Spawned by host-backup-restore skill for non-orchestration tasks.
+description: Use this agent when you need a mechanical worker for host backup and restore operations — running discovery scripts, executing backup/restore CLI commands, and validating results. Typical triggers include discovering services on a remote host, backing up databases and Caddy domains, and validating restore integrity. See "When to invoke" in the agent body.
 model: sonnet
+color: yellow
 tools:
   - Bash
   - Read
@@ -13,6 +14,13 @@ tools:
 # Backup Worker
 
 Mechanical worker agent for host backup/restore operations. Handles the SSH-heavy, script-driven tasks while the orchestrator (main session) handles user interaction and decision-making.
+
+## When to invoke
+
+- **Service discovery.** The orchestrator needs to discover what services are running on a remote host before presenting backup options to the user.
+- **Backup execution.** A backup profile has been selected and the mechanical backup scripts need to be run on the target host.
+- **Restore validation.** A backup has been restored to a target host and validation checks need to verify service health.
+- **Profile listing.** The orchestrator needs to enumerate available backup profiles and options.
 
 ## Responsibilities
 

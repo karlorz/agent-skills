@@ -33,6 +33,22 @@ flowchart LR
     F --- F3[vault: default when available]
 ```
 
+## Model Strategy
+
+Deep research spawns parallel agents for source gathering and content refinement. To balance cost and quality, each phase pins to a model tier matched to its complexity:
+
+| Phase | Model | Rationale |
+|-------|-------|-----------|
+| Phase 2: Research agents | `sonnet` (or `haiku` for simple fetches) | Parallel reading, fetching, summarizing — mechanical and independent work |
+| Phase 3: Synthesis | *(inherit)* | Cross-source reasoning, pattern merging, diagram generation — benefits from parent model capability |
+| Phase 4: Refinement | `sonnet` | Redundancy removal, prose tightening — editorial work, no architectural judgment |
+
+All Phase 2 and Phase 4 agents are spawned via the Agent tool with `model: "sonnet"` (drop to `model: "haiku"` for simple single-page fetches). Phase 3 synthesis runs in the parent session context and inherits the parent model.
+
+**Cost impact**: When the parent session runs Opus, research and refinement agents run on Sonnet (~5-10x cheaper per token), while only the cross-source synthesis phase uses the parent model.
+
+**Agent model specification** (see `concepts/claude-code-agent-model-specification`): The Agent tool's `model` parameter overrides the agent definition's frontmatter `model:` field. Valid values: `"sonnet"`, `"opus"`, `"haiku"`, or a full model ID. Do NOT set model in skill files — only at Agent spawn time or in agent `.md` frontmatter.
+
 ## When to Use
 
 - User requests comprehensive research on a topic
@@ -68,33 +84,32 @@ The skill auto-detects the best output mode based on vault availability:
 
 ### Phase 2: Multi-Source Research
 
-Run these queries in parallel where possible.
+Spawn research agents in parallel. All agents use `model: "sonnet"` for cost efficiency — research tasks (search, fetch, read, summarize) are mechanical work that Sonnet handles well. For trivial single-page fetches, drop to `model: "haiku"`.
 
-**Web Search (2-3 queries)**
+**Web Search Agents** (2-3 parallel)
 ```
-Query 1: <topic> (primary)
-Query 2: <topic> best practices OR <topic> tutorial
-Query 3: <topic> <current-year> (optional, for freshness)
+Agent(description: "Web search 1", model: "sonnet", prompt: "Search for: <topic> (primary). Report key findings with source URLs.")
+Agent(description: "Web search 2", model: "sonnet", prompt: "Search for: <topic> best practices OR <topic> tutorial. Report key findings with source URLs.")
+Agent(description: "Web search 3", model: "sonnet", prompt: "Search for: <topic> current year. Report key findings with source URLs.")  // optional, for freshness
 ```
 
-**Deep-Fetch** (after search results arrive)
-- Open the 2-3 most relevant source URLs from search results
-- Extract specific passages needed for synthesis (not just snippet text)
+**Deep-Fetch Agents** (after search results arrive, 2-3 parallel)
+```
+Agent(description: "Deep-fetch N", model: "haiku", prompt: "Fetch and extract key passages from <URL>. Focus on specific facts, code examples, or claims relevant to <topic>. Skip navigation and boilerplate.")
+```
 - Prioritize official docs, changelogs, and primary sources over aggregator sites
 
-**Context7 MCP** (max 3 calls)
+**Context7 Agent** (parallel with web search)
 ```
-1. resolve-library-id for library/framework mentioned
-2. query-docs for usage patterns
-3. query-docs for code examples if needed
+Agent(description: "Context7 docs", model: "sonnet", prompt: "Using Context7 MCP: resolve-library-id for <library>, then query-docs for <topic> usage patterns and code examples. Max 3 total Context7 calls. Report findings.")
 ```
 
-**DeepWiki MCP**
+**DeepWiki Agent** (parallel with web search)
 ```
-ask_question on relevant repo about architecture, patterns, implementation
+Agent(description: "DeepWiki repo", model: "sonnet", prompt: "Using DeepWiki MCP: ask_question on <repo> about architecture, patterns, and implementation relevant to <topic>. Report findings.")
 ```
 
-**Graceful degradation**: If any source fails, continue with remaining sources. Note failures in report.
+**Graceful degradation**: If any agent fails, continue with remaining agents. Note failures in report.
 
 ### Phase 3: Synthesis
 
@@ -128,19 +143,26 @@ Compose research report with these sections:
 
 ### Phase 4: Content Refinement (unless --no-refine)
 
-Two-pass refinement to tighten the report before output:
+Spawn a refinement agent with `model: "sonnet"` — tightening prose and removing redundancy is editorial work that doesn't require the parent model's capability.
 
-**Pass A: Consolidation**
+```
+Agent(description: "Refine report", model: "sonnet", prompt: "Refine this research report with two passes:
+
+Pass A — Consolidation:
 - Remove redundancy across callout sections
 - Move repeated content into Analysis
 - Merge similar examples or findings
 
-**Pass B: Tightening**
+Pass B — Tightening:
 - Reduce verbose prose
 - Verify TL;DR accuracy against full findings
 - Check Mermaid rendering (if diagram present)
 - Trim sources to top 5-7 most authoritative
-- Verify Verification Methods section is actionable (not just "check the docs")
+- Verify Verification Methods section is actionable (not just 'check the docs')
+
+Original report:
+<insert synthesized report from Phase 3>")
+```
 
 **Skip refinement** when:
 - `--no-refine` flag is set
@@ -169,12 +191,13 @@ Topic: <topic>
 Mode: vault | stdout | file
 
 Sources Queried:
-  - Web search: <count> queries
-  - Deep-fetch: <count> pages opened
-  - Context7: <library-id or "not used">
-  - DeepWiki: <repo or "not used">
+  - Web search: <count> agents (model: sonnet)
+  - Deep-fetch: <count> agents (model: haiku)
+  - Context7: <library-id or "not used"> (model: sonnet)
+  - DeepWiki: <repo or "not used"> (model: sonnet)
 
-Refinement: <"applied" or "skipped (--no-refine)">
+Synthesis: parent session (model: inherit)
+Refinement: <"applied (model: sonnet)" or "skipped (--no-refine)">
 Output: <vault page path, file path, or "terminal">
 Pages created: <list of vault pages, if any>
 Warnings: <any>
@@ -213,10 +236,11 @@ Warnings: <any>
 
 ## Tool Usage
 
-- **Web search**: Current information
-- **Web fetch**: Deep-fetch top sources for richer content extraction
-- **Context7 MCP**: Library/framework documentation
-- **DeepWiki MCP**: GitHub repository insights
+- **Agent tool** (`model: "sonnet"` or `"haiku"`): Spawn research and refinement agents. The `model` parameter is mandatory for Phase 2 and 4 agents — see Model Strategy section. See `concepts/claude-code-agent-model-specification` for the full model resolution rules.
+- **Web search**: Current information (used inside web search agents)
+- **Web fetch**: Deep-fetch top sources for richer content extraction (used inside deep-fetch agents)
+- **Context7 MCP**: Library/framework documentation (used inside Context7 agent)
+- **DeepWiki MCP**: GitHub repository insights (used inside DeepWiki agent)
 - **skillwiki CLI**: `skillwiki path` (auto-detect vault), `skillwiki lang` (output language), `skillwiki hash`, `skillwiki validate`
 
 ## Related Reference

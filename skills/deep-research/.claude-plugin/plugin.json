@@ -1,7 +1,7 @@
 {
   "name": "deep-research",
-  "version": "2.2.0",
-  "description": "Multi-source research engine with deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration",
+  "version": "2.3.0",
+  "description": "Multi-source research engine with tiered model pinning (sonnet/haiku agents for research, parent model for synthesis), deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration",
   "author": {
     "name": "kalrorz"
   },

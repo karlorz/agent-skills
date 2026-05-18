@@ -1,12 +1,29 @@
 ---
 name: playwright-cli
-description: This skill should be used when the user asks to "open a browser", "browse a website", "scrape a page", "automate Chrome", "take a screenshot of a webpage", "fill out a form", "click a button on a page", "interact with a website", or mentions any browser automation, web scraping, or CDP task. Use this skill even if the user just says "go to" a URL, "check a website", or wants to see what's on a page.
+description: This skill should be used when the user asks to "open a browser", "browse a website", "scrape a page", "automate Chrome", "take a screenshot of a webpage", "fill out a form", "click a button on a page", "interact with a website", or mentions any browser automation, web scraping, or CDP task. Use this skill even if the user just says "go to" a URL, "check a website", or wants to see what's on a page. Includes a browser-worker agent (model: sonnet) for delegating mechanical Chrome lifecycle and interaction tasks.
 allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(bash\ scripts/chrome-debug.sh:*)
 ---
 
 # Browser Automation with playwright-cli
 
+## Model Strategy
+
+Browser automation tasks are tiered by complexity. Simple single-script operations (Chrome launch) use `model: "haiku"`. Multi-step interaction sequences (navigate, snapshot, interpret element refs) use `model: "sonnet"`. The orchestrator handles navigation intent, anti-pattern detection, and result interpretation — keeping the parent session focused on decision-making while the worker handles command sequences.
+
 ## Phase 0: Launch Chrome (ALWAYS FIRST)
+
+For single-script launch tasks, delegate to browser-worker with `model: "haiku"`:
+```
+Agent(description: "Launch Chrome", model: "haiku", prompt: "Launch Chrome with CDP on port 9222. Run scripts/chrome-debug.sh --restart, then playwright-cli attach.")
+```
+
+For multi-step browser interactions (navigation, snapshot, element manipulation), use `model: "sonnet"`:
+```
+Agent(description: "Navigate and snapshot", model: "sonnet", prompt: "Go to <url>, wait for load, take a snapshot. Report element refs.")
+Agent(description: "Screenshot page", model: "sonnet", prompt: "Take a full-page screenshot. Save as <filename>.")
+```
+
+Alternatively, run directly:
 
 The project config (`.playwright/cli.config.json`) sets `cdpEndpoint: http://localhost:9222`. This means `playwright-cli open` will attempt to connect to port 9222 first and fail if Chrome is not already running there. That is why Chrome must be launched before any playwright-cli command.
 
@@ -46,6 +63,8 @@ playwright-cli attach
 The `--restart` flag kills the Chrome debugger process and stale daemon sessions together, ensuring a clean start.
 
 ## Phase 1: Attach and interact
+
+Run directly (Chrome should already be running from Phase 0):
 
 ```bash
 # Attach to the Chrome instance launched in Phase 0
