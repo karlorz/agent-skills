@@ -1,7 +1,7 @@
 {
   "name": "dev-loop",
-  "version": "1.6.2",
-  "description": "Generic single-pass PRD + skillwiki dev cycle engine. Includes simplify-worker agent (model: sonnet) for SIMPLIFY code review gate. Auto-capture, pluggable knowledge backends, drift guard, hot-reload sync, project-agnostic.",
+  "version": "1.7.0",
+  "description": "Generic single-pass PRD + skillwiki dev cycle engine. Execution subagents hard-wired to sonnet for cost efficiency. Includes simplify-worker agent (model: sonnet) for SIMPLIFY code review gate. Auto-capture, pluggable knowledge backends, drift guard, hot-reload sync, project-agnostic.",
   "author": {
     "name": "kalrorz"
   },

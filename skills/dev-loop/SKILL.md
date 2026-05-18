@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-version: "1.6.0"
+version: "1.7.0"
 description: "Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Pass `high` for aggressive mode."
 argument-hint: "[high]"
 ---
@@ -73,6 +73,8 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 **Steps that stay inline (not agent-eligible):** WORK, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume.
 
 **Cost impact**: ~70% of agent-eligible work (EXECUTE subagents + SIMPLIFY + research) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
+
+**CLAUDE_CODE_SUBAGENT_MODEL**: This env var acts as a global override — when set to a model ID, it forces ALL subagents to that model regardless of per-agent `model` parameters. For dev-loop's tiered model strategy to work correctly, `CLAUDE_CODE_SUBAGENT_MODEL` MUST be unset or empty (`""`). If this var is set (e.g., to `claude-sonnet-4-6`), every subagent from every skill will run on that model, and per-agent overrides are silently ignored. The current settings.json at `~/.claude/settings.json` has `"CLAUDE_CODE_SUBAGENT_MODEL": ""` — this is correct and should stay empty for per-agent model control to function.
 
 ## System Context
 
@@ -426,9 +428,17 @@ mode. The project-config template includes a Gitignore section for this.
 
 - **`execute` in PRD_CAPS:** Invoke the registered execute skill with
   `plan.md` (or `spec.md` if no plan). If `subagent_dispatch` in
-  PRD_CAPS, dispatch subagents per plan task with `model: "sonnet"`
-  (implementation is mechanical coding following a plan — Sonnet handles
-  this at ~5x lower cost than Opus). Otherwise, inline execution.
+  PRD_CAPS, you MUST dispatch every subagent with `model: "sonnet"`.
+  The superpowers:subagent-driven-development skill templates show
+  Agent calls without a `model` field — ADD `model: "sonnet"` to
+  every Agent invocation (implementer, spec reviewer, code quality
+  reviewer). None of these roles require the parent model's capability:
+  implementation is mechanical coding from a plan, spec review is
+  checklist verification, and code quality review is pattern matching.
+  Sonnet handles all three at ~5x lower cost with no quality loss.
+  This is a hard rule: zero execution subagents go out without
+  `model: "sonnet"`. If `subagent_dispatch` is not in PRD_CAPS,
+  execute inline.
 - **`execute` not in PRD_CAPS:** Prompt user: "Execute manually, then mark
   work item done."
 
@@ -903,6 +913,14 @@ stale local state:
     SKILL.md differs from the source but the user hasn't reloaded
     plugins, block the cycle. Running stale skill logic silently is
     worse than stopping and asking the user to `/reload-plugins`.
+21. **Execution subagents always run on sonnet.** When `subagent_dispatch`
+    in PRD_CAPS, every subagent spawned during EXECUTE (implementer,
+    spec reviewer, code quality reviewer) must include
+    `model: "sonnet"`. The superpowers:subagent-driven-development
+    templates omit `model` — the controller MUST add it. None of these
+    roles benefit from the parent model. If `CLAUDE_CODE_SUBAGENT_MODEL`
+    is set to a non-empty value, it globally overrides per-agent model
+    parameters — it must remain empty (`""`) for this rule to work.
 
 ## Obsidian Integration (requires `query_vault` in BACKEND_CAPS)
 

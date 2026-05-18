@@ -27,8 +27,8 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine with simplify-worker agent (model: sonnet) for code review gate. Pluggable knowledge backends via capability model, drift guard, project-agnostic.",
-      "version": "1.6.1",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. Execution subagents hard-wired to sonnet for cost efficiency. Simplify-worker agent for code review gate. Pluggable knowledge backends, drift guard, project-agnostic.",
+      "version": "1.7.0",
       "category": "automation",
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker"]
     },
