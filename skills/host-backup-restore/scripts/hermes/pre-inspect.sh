@@ -209,7 +209,27 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  Memory: unknown"
 fi
 
-# 7. Wiki S3 mount (fail if not fuse.rclone)
+# 6.5. FUSE kernel support (required for rclone S3 mounts)
+FUSE_DEV=$(_run "test -c /dev/fuse && stat -c '%a' /dev/fuse 2>/dev/null || echo 'missing'")
+FUSE_CTL=$(_run "grep -q fusectl /proc/mounts 2>/dev/null && echo 'active' || echo 'missing'")
+if [ "$FUSE_DEV" != "missing" ] && [ "$FUSE_CTL" = "active" ]; then
+  _record "fuse_kernel" "pass" "/dev/fuse present, fusectl active"
+  [ "$JSON_ONLY" = false ] && echo "  ✅ FUSE kernel: available (/dev/fuse + fusectl)"
+elif [ "$FUSE_DEV" = "missing" ]; then
+  _record "fuse_kernel" "fail" "/dev/fuse missing — FUSE not available"
+  if [ "$JSON_ONLY" = false ]; then
+    echo "  ❌ FUSE kernel: /dev/fuse NOT FOUND — rclone S3 mounts will not work"
+    echo "     Fix options (pick one):"
+    echo "     1. LXC template (best): add features: fuse=1 to PVE base template"
+    echo "     2. LXC per-container: set fuse=1 on container features in PVE host"
+    echo "     3. tmpfiles.d: echo 'c /dev/fuse 0666 root root - 10:229' > /etc/tmpfiles.d/fuse.conf"
+  fi
+else
+  _record "fuse_kernel" "fail" "fusectl not active — kernel module missing"
+  [ "$JSON_ONLY" = false ] && echo "  ❌ FUSE kernel: fusectl not active (kernel module may be missing)"
+fi
+
+# 8. Wiki S3 mount (fail if not fuse.rclone)
 WIKI_FS=$(_run "df -T ~/wiki 2>/dev/null | tail -1 | awk '{print \$2}' || echo 'unknown'")
 if [ "$WIKI_FS" = "fuse.rclone" ]; then
   _record "wiki_s3_mount" "pass" "fuse.rclone"
@@ -219,10 +239,18 @@ elif [ "$WIKI_FS" = "unknown" ] || echo "$WIKI_FS" | grep -q "^__ERROR__:"; then
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  ~/wiki: unknown (directory may not exist)"
 else
   _record "wiki_s3_mount" "fail" "${WIKI_FS} (expected fuse.rclone)"
-  [ "$JSON_ONLY" = false ] && echo "  ❌ ~/wiki S3 mount: ${WIKI_FS} (expected fuse.rclone — files may silently diverge from S3!)"
+  if [ "$JSON_ONLY" = false ]; then
+    echo "  ❌ ~/wiki S3 mount: ${WIKI_FS} (expected fuse.rclone — files may silently diverge from S3!)"
+    if [ "${FUSE_DEV:-missing}" != "missing" ]; then
+      echo "     FUSE is available but mount is not configured."
+      echo "     Setup: rclone mount cloud:cloud/wiki ~/wiki --vfs-cache-mode writes --allow-other --daemon"
+    else
+      echo "     FUSE is also missing — fix FUSE first, then configure rclone mount."
+    fi
+  fi
 fi
 
-# 8. Hermes installed
+# 9. Hermes installed
 HERMES_VER=$(_run "hermes --version 2>/dev/null || echo 'not_installed'")
 if [ "$HERMES_VER" != "not_installed" ] && ! echo "$HERMES_VER" | grep -q "^__ERROR__:"; then
   _record "hermes_installed" "pass" "$HERMES_VER"
@@ -232,7 +260,7 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  Hermes: NOT INSTALLED (will install)"
 fi
 
-# 8. systemd (system level)
+# 10. systemd (system level)
 SYSTEMD=$(_run "systemctl is-system-running 2>/dev/null || echo 'not_found'")
 if [ "$SYSTEMD" = "running" ] || [ "$SYSTEMD" = "degraded" ]; then
   _record "systemd_system" "pass" "$SYSTEMD"
@@ -245,7 +273,7 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  systemd: $SYSTEMD"
 fi
 
-# 9. systemd user bus (for --user services)
+# 11. systemd user bus (for --user services)
 USER_BUS=$(_run "systemctl --user status 2>&1 | head -1 || echo 'no_bus'")
 if echo "$USER_BUS" | grep -q "Failed to connect to bus"; then
   _record "systemd_user_bus" "warn" "no_user_bus (LXC container — use system service)"
@@ -258,7 +286,7 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ✅ systemd --user: available"
 fi
 
-# 10. sudo NOPASSWD
+# 12. sudo NOPASSWD
 SUDO=$(_run "sudo -n true 2>&1 && echo 'ok' || echo 'needs_password'")
 if [ "$SUDO" = "ok" ]; then
   _record "sudo_nopasswd" "pass" "yes"
@@ -268,7 +296,7 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  sudo NOPASSWD: no (may need password for install)"
 fi
 
-# 11. OS info
+# 13. OS info
 OS=$(_run "cat /etc/os-release 2>/dev/null | grep -E '^(PRETTY_NAME|VERSION_ID)=' | head -2 | tr '\n' ';' || uname -a | head -1")
 if echo "$OS" | grep -q "^__ERROR__:"; then
   _record "os" "warn" "probe_failed"
@@ -278,7 +306,7 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ✅ OS: $(echo "$OS" | sed 's/;.*VERSION_ID=/ /;s/VERSION_ID=//;s/\"//g' | head -c 80)"
 fi
 
-# 12. SSH key auth (SSH mode only)
+# 14. SSH key auth (SSH mode only)
 if [ "$MODE" = "ssh" ]; then
   SSH_AUTH=$(_run "echo 'ssh_ok'")
   if [ "$SSH_AUTH" = "ssh_ok" ]; then
@@ -290,7 +318,7 @@ if [ "$MODE" = "ssh" ]; then
   fi
 fi
 
-# 13. Git (required by Hermes installer)
+# 15. Git (required by Hermes installer)
 GIT=$(_run "git --version 2>/dev/null || echo 'not_found'")
 if echo "$GIT" | grep -q "^git"; then
   _record "git" "pass" "$GIT"
@@ -300,7 +328,7 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ❌ Git: NOT FOUND (required by Hermes installer)"
 fi
 
-# 14. xz-utils (required by Hermes installer for Node.js tarball)
+# 16. xz-utils (required by Hermes installer for Node.js tarball)
 XZ=$(_run "xz --version 2>/dev/null | head -1 || echo 'not_found'")
 if echo "$XZ" | grep -q "xz"; then
   _record "xz_utils" "pass" "$XZ"
@@ -310,7 +338,7 @@ else
   [ "$JSON_ONLY" = false ] && echo "  ⚠️  xz-utils: not found (needed for Hermes Node.js install)"
 fi
 
-# 15. devsh exec (devsh mode only)
+# 17. devsh exec (devsh mode only)
 if [ "$MODE" = "devsh" ]; then
   DEVSH_OK=$(_run "echo 'devsh_ok'")
   if [ "$DEVSH_OK" = "devsh_ok" ]; then
