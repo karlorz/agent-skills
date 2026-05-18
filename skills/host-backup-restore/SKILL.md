@@ -339,6 +339,7 @@ For each detected group, use `AskUserQuestion` (yes/no). Iterate through groups 
 | `databases` | sqlite files, postgres/mysql/redis dumps, mongodb | state.db, [any others detected] |
 | `other_services` | systemd unit files, service states | hermes-gateway, hermes-dashboard, caddy, filebrowser, obsidian, xvfb, [others] |
 | `apt` | Package list (`apt list --installed`), apt sources | N sources |
+| `wiki` | rclone S3 mount for wiki vault (`~/wiki` backed by cloud:cloud/wiki) | rclone.conf, ~/wiki mount |
 
 After collecting all answers, run backup-host.sh with the selected groups:
 
@@ -400,6 +401,46 @@ If MISSING, prompt the user:
 ```
 
 If yes, run: `ssh <target> "sudo apt-get install -y caddy"`
+
+**Check wiki S3 mount status on target:**
+
+```bash
+ssh <target> "df -T ~/wiki 2>/dev/null | grep -q fuse.rclone && echo 'MOUNTED' || echo 'MISSING'"
+```
+
+If MISSING, check FUSE availability:
+
+```bash
+ssh <target> "test -c /dev/fuse && echo 'FUSE_OK' || echo 'NO_FUSE'"
+```
+
+If `FUSE_OK`, prompt:
+
+```json
+{
+  "question": "Wiki S3 mount is not active on <target>. Should I set it up?",
+  "header": "Wiki mount",
+  "options": [
+    {"label": "Yes (Recommended)", "description": "Restore rclone.conf from backup and mount wiki at ~/wiki"},
+    {"label": "No", "description": "Skip — wiki will not be available on this host until manually mounted"}
+  ]
+}
+```
+
+If yes, run the wiki restore group via: `bash scripts/host-restore-cli.sh --archive <path> --target <host> --groups wiki`
+
+If `NO_FUSE`, inform the user with fix guidance:
+
+```markdown
+FUSE is not available on this host. The wiki S3 mount cannot be set up.
+
+Fix options:
+1. **LXC template (best):** Add `features: fuse=1` to the PVE base template
+2. **LXC per-container:** Set `fuse=1` on the container features in PVE
+3. **tmpfiles.d:** Create `/etc/tmpfiles.d/fuse.conf` with `c /dev/fuse 0666 root root - 10:229`
+
+After FUSE is available, re-run the restore with `--groups wiki`.
+```
 
 4. Run restore:
 
