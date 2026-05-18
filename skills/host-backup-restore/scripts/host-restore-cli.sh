@@ -104,6 +104,8 @@ AVAILABLE_GROUPS=""
 [ -f "$BACKUP_CONTENT_DIR/services.txt" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS other_services"
 # databases available if sqlite files present
 ls "$BACKUP_CONTENT_DIR"/*.db &>/dev/null && AVAILABLE_GROUPS="$AVAILABLE_GROUPS databases"
+# wiki available if rclone.conf present in backup
+[ -f "$BACKUP_CONTENT_DIR/rclone.conf" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS wiki"
 
 echo "Available groups:${AVAILABLE_GROUPS:- none detected}"
 echo ""
@@ -254,6 +256,43 @@ restore_group() {
       for db_file in "$BACKUP_CONTENT_DIR"/*.db; do
         [ -f "$db_file" ] && scp "$db_file" "${TARGET}:/tmp/$(basename "$db_file")" 2>/dev/null || true
       done
+      ;;
+    wiki)
+      # Check if rclone S3 wiki mount is configured
+      wiki_fs=$(ssh "$TARGET" "df -T ~/wiki 2>/dev/null | tail -1 | awk '{print \$2}' || echo 'missing'" 2>/dev/null || echo "missing")
+      if [ "$wiki_fs" = "fuse.rclone" ]; then
+        echo "  Wiki S3 mount already active: fuse.rclone"
+      else
+        fuse_ok=$(ssh "$TARGET" "test -c /dev/fuse && echo 'yes' || echo 'no'" 2>/dev/null || echo "no")
+        if [ "$fuse_ok" = "yes" ]; then
+          echo "  FUSE available. Setting up rclone wiki mount..."
+          # Copy rclone.conf from backup archive
+          if [ -f "$BACKUP_CONTENT_DIR/rclone.conf" ]; then
+            ssh "$TARGET" "mkdir -p ~/.config/rclone" 2>/dev/null || true
+            scp "$BACKUP_CONTENT_DIR/rclone.conf" "${TARGET}:~/.config/rclone/rclone.conf" 2>/dev/null || {
+              echo "  ⚠ Failed to copy rclone.conf"
+              return
+            }
+            echo "  rclone.conf restored."
+          fi
+          # Check rclone binary
+          rclone_ok=$(ssh "$TARGET" "which rclone 2>/dev/null || echo MISSING" 2>/dev/null || echo "MISSING")
+          if [ "$rclone_ok" = "MISSING" ]; then
+            echo "  rclone not installed. Install it: curl https://rclone.org/install.sh | sudo bash"
+            return
+          fi
+          # Mount wiki
+          ssh "$TARGET" "
+            mkdir -p ~/wiki
+            fusermount -uz ~/wiki 2>/dev/null || true
+            rclone mount cloud:cloud/wiki ~/wiki --vfs-cache-mode writes --vfs-cache-max-age 168h --allow-other --daemon 2>&1
+          " 2>/dev/null || echo "  ⚠ rclone mount failed"
+        else
+          echo "  ⚠ FUSE not available. Skipping wiki S3 mount."
+          echo "     LXC: enable fuse=1 in PVE template or use tmpfiles.d:"
+          echo "     echo 'c /dev/fuse 0666 root root - 10:229' > /etc/tmpfiles.d/fuse.conf"
+        fi
+      fi
       ;;
   esac
 
