@@ -63,15 +63,16 @@ if caddyfile:
             continue
         # Domain lines (start with a hostname, end with {)
         skip_prefixes = ('http','/','reverse','respond','file_server','redir','basicauth','basic_auth','log','encode','tls','import','header','@','route','handle','{','acme','admin','common_name','debug','grace_period','grace_interval','issuer','key_type','ocsp_stapling','preferred_chains','protocol_name','renew_interval','trusted_roots','trusted_leaf_certificates')
+        # Handle reverse_proxy BEFORE skip_prefixes filter (reverse matches reverse_proxy)
+        if current_domain and line.startswith('reverse_proxy'):
+            upstream = line.replace('reverse_proxy', '').strip()
+            if manifest['caddy_domains']:
+                manifest['caddy_domains'][-1]['upstream'] = upstream
+            continue
         if not line.startswith(skip_prefixes):
             if '{' in line:
                 current_domain = line.split()[0].strip().rstrip('{').strip()
                 manifest['caddy_domains'].append({'domain': current_domain, 'upstream': ''})
-            elif current_domain and line.startswith('reverse_proxy'):
-                upstream = line.replace('reverse_proxy', '').strip()
-                # Update the last domain's upstream
-                if manifest['caddy_domains']:
-                    manifest['caddy_domains'][-1]['upstream'] = upstream
 
     # Fallback: also try caddy validate --json for accurate parsing
     r = ssh('caddy validate --config /etc/caddy/Caddyfile --json 2>/dev/null', timeout=15, raw=True)
