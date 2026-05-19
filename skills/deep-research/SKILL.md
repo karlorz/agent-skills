@@ -47,7 +47,7 @@ All Phase 2 and Phase 4 agents are spawned via the Agent tool with `model: "sonn
 
 **Cost impact**: When the parent session runs Opus, research and refinement agents run on Sonnet (~5-10x cheaper per token), while only the cross-source synthesis phase uses the parent model.
 
-**Agent model specification** (see `concepts/claude-code-agent-model-specification`): The Agent tool's `model` parameter overrides the agent definition's frontmatter `model:` field. Valid values: `"sonnet"`, `"opus"`, `"haiku"`, or a full model ID. Do NOT set model in skill files — only at Agent spawn time or in agent `.md` frontmatter.
+**Agent model specification** (see `concepts/claude-code-agent-model-specification`): The Agent tool's `model` parameter overrides the agent definition's frontmatter `model:` field. Valid values: `"sonnet"`, `"opus"`, `"haiku"`, or a full model ID. Do NOT set `model:` in skill frontmatter — it causes the skill to register as an agent, inflating the agent count. Always specify model at Agent spawn time or in agent `.md` frontmatter.
 
 ## When to Use
 
