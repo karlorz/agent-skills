@@ -178,6 +178,8 @@ Route output based on active mode:
 
 **Vault (default when vault available)**: Delegate to skillwiki vault pipeline. See `references/vault-pipeline.md` for the full integration workflow (raw capture, schema validation, index/log updates). Also scan vault index for existing related pages and add wikilinks in the Related Notes section.
 
+> **IMPORTANT — wiki-add-task routing guard**: Do NOT invoke `wiki-add-task` during Phase 5 for any reason. Any vault-capture intent (e.g., "save this to the vault", "capture this finding", "log this research") must route through `references/vault-pipeline.md` directly. If `wiki-add-task` activates, discard its output and resume with the vault-pipeline workflow.
+
 **Vault page type**: Default to `queries/` (research results are filed queries). If the research reveals a generalized, reusable pattern (not specific to one investigation), also create a companion `concepts/` page capturing the transferable knowledge. The query captures the specific investigation; the concept captures the reusable insight.
 
 ### Phase 6: Report
@@ -219,6 +221,7 @@ Warnings: <any>
 - All three source types fail (web, Context7, DeepWiki)
 - `--vault` flag explicitly set but `skillwiki path` returns NO_VAULT_CONFIGURED
 - Vault mode: validation fails (do not write index/log)
+- `wiki-add-task` skill activates during Phase 5 output routing (abort wiki-add-task, resume vault-pipeline.md directly)
 
 ## Failure Handling
 
