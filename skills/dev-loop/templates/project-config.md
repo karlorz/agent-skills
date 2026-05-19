@@ -162,6 +162,43 @@ to listing directories in the vault root that contain `.md` files.
 When `query_vault` not in BACKEND_CAPS, `vault` is ignored — the loop uses
 git history and local work items instead of a vault.
 
+## Interview
+
+Controls interactive interview phases. The `interview` section is separate from
+`knowledge_backends` — interviews are session-scoped and interactive, not
+persistent knowledge operations. Two capabilities: `setup_interview` (one-time
+project bootstrap) and `work_item_interview` (conditional, per SPEC step).
+
+When the `interview` section is absent, both capabilities are off — the loop
+runs fully automated with no interactive phases.
+
+```yaml
+interview:
+  setup:
+    skill: setup-dev-loop          # bundled, always available
+    glossary: grill-with-docs      # delegates domain section when installed (optional)
+  work_item:
+    default: native                # built-in three questions (zero-dependency)
+    upgrade: grill-with-docs       # optional: grill-with-docs | grill-me
+    source: mattpocock/skills      # install source for upgrade
+    install: "npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y"
+    trigger: auto                  # auto | manual | never
+```
+
+**Interview backends:**
+
+| Backend | Type | Provides | Install |
+|---------|------|----------|---------|
+| `native` | Built-in | `work_item_interview` | None (always available) |
+| `grill-with-docs` | External | `setup_interview` (glossary), `work_item_interview` | `npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y` |
+| `grill-me` | External | `work_item_interview` | `npx skills@latest add mattpocock/skills --skill grill-me -a claude-code -g -y` |
+| `setup-dev-loop` | Bundled | `setup_interview` | None (bundled with dev-loop) |
+
+**Trigger modes:**
+- `auto` — run ambiguity detection before SPEC, grill if ambiguous (default)
+- `manual` — only grill when work item has `grill: true`
+- `never` — fully automated, no interviews
+
 ## Code layout
 
 Used by introspection, research agent, and trivial-cycle scoping.

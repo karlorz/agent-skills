@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.7.1"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Pass `high` for aggressive mode.'
+version: "1.8.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: pluggable interview phase with native 3-question default and optional grill-with-docs upgrade. Use /setup-dev-loop for interactive project bootstrap. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -11,7 +11,9 @@ A single-pass dev cycle. When invoked, runs ONE cycle: refresh context,
 load project config, pick up the next claimable work item, drive it
 through the loop, exit. The PRD skill drives the work; skillwiki
 captures the knowledge in two tiers — project journal and global
-playbook.
+playbook. A pluggable interview phase (native 3-question default,
+optional grill-with-docs upgrade) sharpens requirements before SPEC.
+`/setup-dev-loop` provides interactive project bootstrap.
 
 This skill is **project-agnostic**. All project specifics come from a
 config file in the active repo. If no config exists, the skill
@@ -74,6 +76,60 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 
 **Cost impact**: ~70% of agent-eligible work (EXECUTE subagents + SIMPLIFY + research) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
 
+### Interview Capability Matrix
+
+Interview capabilities are separate from knowledge backends — they are interactive,
+session-scoped, and declared in the `interview` config section. When the `interview`
+section is absent, both capabilities are off and the loop runs fully automated.
+
+| Capability | native (built-in) | grill-with-docs | grill-me | none |
+|---|---|---|---|---|
+| `setup_interview` | no | yes (glossary delegate) | no | no |
+| `work_item_interview` | yes (3 fixed questions) | yes (adaptive + CONTEXT.md) | yes (adaptive, no files) | no |
+
+**Interview backends are resolved at REFRESH:**
+1. Parse `interview` section from config. If absent → both capabilities off.
+2. `setup_interview`: always available via bundled `setup-dev-loop` skill. If
+   `grill-with-docs` is installed, the glossary section delegates to it.
+3. `work_item_interview`: resolves to `native` by default. If `upgrade` is set
+   (e.g., `grill-with-docs`) AND the skill is installed at
+   `~/.claude/skills/<name>/SKILL.md`, the upgrade overrides native.
+4. `trigger` field: `auto` (ambiguity detection), `manual` (only on `grill: true`),
+   or `never` (fully automated).
+
+**Key constraint**: AskUserQuestion is confirmed broken in subagents (Claude Code
+GitHub issues #34592, #12890). All interview logic MUST run in the main session.
+This matches dev-loop's existing architecture — SPEC and PLAN already run in the
+parent session; EXECUTE dispatches sonnet subagents which don't need interactive tools.
+
+### Interview Engine (Native Default)
+
+When `work_item_interview` resolves to `native`, the GRILL step runs three fixed
+`AskUserQuestion` calls in the main session:
+
+1. **Scope**: "What's the scope of this change? What's explicitly out of scope?"
+   Options: ["Feature + tests", "Bug fix only", "Refactor (no behavior change)", "Other"]
+2. **Constraints**: "What constraints exist? (existing code to respect, performance requirements, compatibility concerns)"
+   Options: ["None specific", "Must match existing patterns", "Performance-critical path", "Other"]
+3. **Acceptance**: "How do you know it's done? What must be true?"
+   Options: ["Tests pass + manual verification", "Tests pass only", "Code review approval", "Other"]
+
+Output: a Q&A summary appended as a preamble to `spec.md` in the work item:
+
+```markdown
+## Interview Summary (native)
+
+- **Scope**: Feature + tests — adding X with full test coverage
+- **Constraints**: Must match existing patterns in <file>
+- **Acceptance**: Tests pass + manual verification
+```
+
+This preamble feeds into the SPEC step — the PRD skill reads it as context before
+writing the full spec. When `grill-with-docs` or `grill-me` is the backend, their
+output (sharpened terminology, resolved decisions) serves the same role.
+
+### Model Strategy (continued)
+
 **CLAUDE_CODE_SUBAGENT_MODEL**: This env var acts as a global override — when set to a model ID, it forces ALL subagents to that model regardless of per-agent `model` parameters.
 
 For dev-loop's tiered model strategy to work correctly, `CLAUDE_CODE_SUBAGENT_MODEL` MUST be unset or empty (`""`).
@@ -90,6 +146,7 @@ The current settings.json at `~/.claude/settings.json` has `"CLAUDE_CODE_SUBAGEN
 | Knowledge | Pluggable via `knowledge_layer` config — default `skillwiki`, also `none` | Ingest, validate, query, crystallize, distill, decide, lint, audit |
 | Quality | `simplify-worker` agent (model: sonnet, spawned inline) | Pre-push code review gate |
 | Hygiene | `claude-md-management:claude-md-improver`, `/compact` | Long-session context maintenance |
+| Interview | Pluggable via `interview` config — default `native`, optional `grill-with-docs` / `grill-me` | Setup bootstrap + per-work-item grilling |
 
 The knowledge layer is pluggable via `knowledge_layer` in the project config.
 Steps branch on **capabilities**, not backend names — check `if <capability> in
@@ -196,6 +253,7 @@ prd_disciplines:
 │ CORE (mandatory)                                            │
 │  1. QUERY     wiki-query → vault context check              │
 │  2. WORK      proj-work  → create work item + redirect paths│
+│  2b. GRILL    <Interview backend> → sharpen requirements    │
 │  3. SPEC      <PRD skill> → spec.md at vault path           │
 │  4. PLAN      <PRD skill> → plan.md at vault path           │
 │  5. EXECUTE   <PRD execution skill> → implement             │
@@ -270,6 +328,20 @@ prd_disciplines:
      of PRD capabilities and registered skill names as `PRD_CAPS`.
      Resolve `prd_pipeline` (default per `prd_layer`, override from config).
      Store as `PRD_PIPELINE`. Resolve `prd_disciplines` if declared.
+     **Resolve interview backends** — parse the `interview` section from
+     config. If absent → `setup_interview` and `work_item_interview` both
+     absent from BACKEND_CAPS (loop runs fully automated). If present:
+     - Parse `interview.setup` — `setup_interview` ∈ BACKEND_CAPS. Backend:
+       `setup-dev-loop` (bundled). If `glossary: grill-with-docs` is set AND
+       `~/.claude/skills/grill-with-docs/SKILL.md` exists, delegates glossary
+       section to it.
+     - Parse `interview.work_item` — `work_item_interview` ∈ BACKEND_CAPS.
+       Resolve backend: check if `upgrade` is set AND installed at
+       `~/.claude/skills/<upgrade>/SKILL.md` — if yes, backend = upgrade
+       skill name; otherwise backend = `native`. Store as
+       `INTERVIEW_BACKEND`.
+     - Parse `interview.work_item.trigger` — store as `INTERVIEW_TRIGGER`
+       (`auto`, `manual`, or `never`).
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
      reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
@@ -399,6 +471,35 @@ a simple YAML header with `title`, `status`, `kind`, and `created` date.
 **Gitignore:** `.claude/dev-loop-work/` contains session artifacts, not
 repo content. Ensure it's listed in `.gitignore` when running in `none`
 mode. The project-config template includes a Gitignore section for this.
+
+### 2b. GRILL — interview phase (conditional on `interview` config + ambiguity)
+
+**Skip if** `work_item_interview` capability is absent (no `interview` section in config).
+
+**Trigger decision:**
+- `trigger: never` → skip. Fully automated mode.
+- `trigger: manual` → run only if work item has `grill: true`. Skip otherwise.
+- `trigger: auto` (default) → run ambiguity detection:
+  1. If work item has `grill: true` → force interview
+  2. If work item has `grill: false` → skip interview
+  3. If unset → run pre-spec scan:
+     - Scan vault for conflicting prior decisions (≥2 on same topic) → ambiguous
+     - Check for zero prior art on the topic → ambiguous
+     - Detect vague language in work item description ("improve", "fix stuff", "refactor things") → ambiguous
+     - None of the above → skip interview
+
+**Backend resolution (from REFRESH):**
+- `native` → invoke inline AskUserQuestion (see Interview Engine section)
+- `grill-with-docs` → invoke `Skill("grill-with-docs")` in main session
+- `grill-me` → invoke `Skill("grill-me")` in main session
+
+**IMPORTANT**: GRILL MUST run inline in the main session. Do NOT spawn a subagent
+for this step. AskUserQuestion is broken in subagents. The Skill tool works in the
+main session and can load external interview skills.
+
+**Output**: Interview findings (Q&A summary for native, sharpened terminology +
+decisions for grill-with-docs) are prepended to the work-item spec preamble.
+This feeds directly into the SPEC step.
 
 ### 3. SPEC — spec artifact (conditional on `prd_pipeline` + `PRD_CAPS`)
 
@@ -955,9 +1056,22 @@ from Claude go to `.claude/dev-loop-work/captures.md` instead.
 ## Bootstrap Mode
 
 If the user explicitly asks to bootstrap a new project (or REFRESH
-fallback 3 fires), run the **two-step bootstrap**:
+fallback 3 fires), use the **two-step bootstrap**:
 
-### Step A: Create config file
+### Interview-first bootstrap (preferred)
+
+If `setup_interview` ∈ BACKEND_CAPS (the `interview` section is declared in
+config — which it won't be yet on a fresh project, so dev-loop auto-detects
+that `setup-dev-loop` is a bundled skill and offers it), invoke
+`Skill("setup-dev-loop")`. The setup skill walks the user through PRD layer,
+knowledge layer, release config, and delegates the domain glossary to
+`grill-with-docs` if installed. It writes `./.claude/dev-loop.config.md` and
+runs `proj-init` if a vault is available.
+
+### Step A: Create config file (fallback)
+
+If `setup_interview` ∉ BACKEND_CAPS (no interview section, or user declines
+the interactive setup), fall back to auto-detect:
 
 Copy `templates/project-config.md` into `./.claude/dev-loop.config.md`,
 filling in:
