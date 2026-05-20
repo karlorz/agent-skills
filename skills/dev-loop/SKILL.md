@@ -71,7 +71,7 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 6. SIMPLIFY | simplify-worker | `sonnet` | Code review: search, compare, pattern match — integration-level judgment |
 | 6b. MERGE | gh CLI (inline) | inline | PR creation and auto-merge — CLI commands, no judgment |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
-| IDLE: CI health | CI health agent | `sonnet` | GitHub Actions run inspection, required-check verification — mechanical API queries |
+| IDLE: CI health | ci-health-worker | `sonnet` | GitHub Actions run inspection, required-check verification — mechanical API queries |
 | IDLE: maintenance | skillwiki skills (lint, audit, etc.) | inline (Skill tool) | Low token volume; future: agent spawns via skillwiki project task |
 
 **Steps that stay inline (not agent-eligible):** WORK, MERGE, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume.
@@ -844,12 +844,13 @@ instead:
      retros, batch-write a summary retro covering the gap. This prevents
      retro gaps from accumulating silently during intensive sprints.
 
-3b. **CI health check** (only if `ci_configured: true`). Spawn a sonnet
-   agent to inspect GitHub Actions health — this is mechanical API
-   querying and status interpretation; Sonnet handles it at lower cost.
+3b. **CI health check** (only if `ci_configured: true`). Spawn
+   `ci-health-worker` agent (model: sonnet) to inspect GitHub Actions
+   health — this is mechanical API querying and status interpretation;
+   Sonnet handles it at lower cost.
 
    ```
-   Agent(description: "CI health check", model: "sonnet", prompt: "Check CI health for the repo. ci_discovery: <runtime|explicit>. required_checks: <list or 'discover from API'>. Run: (1) gh api repos/{owner}/{repo}/actions/runs --jq '.workflow_runs[:10] | .[] | {name, status, conclusion, head_branch, created_at}' for recent runs. (2) If ci_discovery: runtime, query gh api repos/{owner}/{repo}/branches/{release_branch}/protection/required_status_checks for required checks. (3) For each required check, report: pass/fail/missing from recent runs. (4) Flag any required check with conclusion: failure as P2. (5) Flag any workflow not run in 7+ days as stale. Report summary: healthy/degraded/broken.")
+   Agent(description: "CI health check", subagent_type: "dev-loop:ci-health-worker", model: "sonnet", prompt: "Check CI health for the repo. ci_discovery: <runtime|explicit>. required_checks: <list or 'discover from API'>. release_branch: <branch>. Run: (1) Discover required checks per ci_discovery mode. (2) Fetch recent workflow runs. (3) Assess health for each required check. (4) Report: healthy/degraded/broken with findings.")
    ```
 
    If the agent reports **broken** (required checks failing on the
