@@ -27,8 +27,8 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. Post-cycle MERGE step creates PRs with CI-gated auto-merge. Execution subagents hard-wired to sonnet for cost efficiency. Simplify-worker agent for code review gate. Pluggable interview phase (native / grill-with-docs / grill-me). /setup-dev-loop scaffolds all 6 config sections including CI setup (Section F). Pluggable knowledge backends, drift guard, project-agnostic.",
-      "version": "1.10.0",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. MERGE step with CI discovery (runtime GitHub API or explicit required_checks). IDLE CI health agent (sonnet). Execution subagents hard-wired to sonnet for cost efficiency. Simplify-worker agent for code review gate. Pluggable interview phase. /setup-dev-loop scaffolds all 6 config sections including CI setup. Pluggable knowledge backends, drift guard, project-agnostic.",
+      "version": "1.10.1",
       "category": "automation",
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker"]
     },

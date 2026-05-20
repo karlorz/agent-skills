@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.10.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: post-cycle MERGE step creates PRs with CI-gated auto-merge; /setup-dev-loop now scaffolds CI setup (Section F). Pass `high` for aggressive mode.'
+version: "1.10.1"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: MERGE step with CI discovery (runtime via GitHub API or explicit config); IDLE CI health agent (sonnet); /setup-dev-loop Section F. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -71,6 +71,7 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 6. SIMPLIFY | simplify-worker | `sonnet` | Code review: search, compare, pattern match — integration-level judgment |
 | 6b. MERGE | gh CLI (inline) | inline | PR creation and auto-merge — CLI commands, no judgment |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
+| IDLE: CI health | CI health agent | `sonnet` | GitHub Actions run inspection, required-check verification — mechanical API queries |
 | IDLE: maintenance | skillwiki skills (lint, audit, etc.) | inline (Skill tool) | Low token volume; future: agent spawns via skillwiki project task |
 
 **Steps that stay inline (not agent-eligible):** WORK, MERGE, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume.
@@ -345,6 +346,14 @@ prd_disciplines:
        `INTERVIEW_BACKEND`.
      - Parse `interview.work_item.trigger` — store as `INTERVIEW_TRIGGER`
        (`auto`, `manual`, or `never`).
+     **Resolve CI discovery** — parse `ci_configured` and `ci_discovery`
+     from config. If `ci_configured: true`:
+     - `ci_discovery: runtime` (default) → store `CI_DISCOVERY = runtime`,
+       `REQUIRED_CHECKS = []` (discovered at MERGE time via API).
+     - `ci_discovery: explicit` → store `CI_DISCOVERY = explicit`,
+       `REQUIRED_CHECKS = required_checks` list from config.
+     If `ci_configured: false` or absent → `CI_DISCOVERY = none`,
+     `REQUIRED_CHECKS = []`.
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
      reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
@@ -588,6 +597,15 @@ This feeds directly into the SPEC step.
    - If `ci_configured: true` in config:
      - Enable auto-merge with squash: `gh pr merge --auto --squash`
      - Report: "PR #N created with auto-merge (squash). CI checks must pass before merge."
+     - **CI discovery** (resolved at REFRESH from `ci_discovery` config):
+       - `runtime` (default): dev-loop queries
+         `gh api repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks`
+         to discover which checks are required. No config duplication — GitHub
+         branch protection is the source of truth. Falls back to listing recent
+         workflow runs if branch protection is not configured.
+       - `explicit`: dev-loop reads `required_checks` from config. Use when
+         branch protection is managed outside dev-loop or specific checks need
+         monitoring regardless of branch protection.
    - If `ci_configured: false` or absent:
      - Do NOT enable auto-merge — without CI, auto-merge can bypass review.
      - Warn: "No CI checks configured — PR #N created without auto-merge. Run /setup-dev-loop and set ci_configured: true to enable CI-gated auto-merge."
@@ -826,6 +844,21 @@ instead:
      retros, batch-write a summary retro covering the gap. This prevents
      retro gaps from accumulating silently during intensive sprints.
 
+3b. **CI health check** (only if `ci_configured: true`). Spawn a sonnet
+   agent to inspect GitHub Actions health — this is mechanical API
+   querying and status interpretation; Sonnet handles it at lower cost.
+
+   ```
+   Agent(description: "CI health check", model: "sonnet", prompt: "Check CI health for the repo. ci_discovery: <runtime|explicit>. required_checks: <list or 'discover from API'>. Run: (1) gh api repos/{owner}/{repo}/actions/runs --jq '.workflow_runs[:10] | .[] | {name, status, conclusion, head_branch, created_at}' for recent runs. (2) If ci_discovery: runtime, query gh api repos/{owner}/{repo}/branches/{release_branch}/protection/required_status_checks for required checks. (3) For each required check, report: pass/fail/missing from recent runs. (4) Flag any required check with conclusion: failure as P2. (5) Flag any workflow not run in 7+ days as stale. Report summary: healthy/degraded/broken.")
+   ```
+
+   If the agent reports **broken** (required checks failing on the
+   release branch), surface as a P2 finding for the next cycle.
+   If **degraded** (optional checks failing, or stale workflows), note
+   in the idle retro but don't escalate.
+
+   Skip if `ci_configured: false` — no CI to monitor.
+
 4. Invoke research agent with `model: "sonnet"` — see `research/SKILL.md` in
    this skill directory. Code and vault health scanning is mechanical
    analysis; Sonnet handles it at lower cost without quality loss.
@@ -939,6 +972,8 @@ simplify-worker passes? (model: sonnet)
               ├── on release branch → skip MERGE (changes land directly)
               └── on feature branch → push + create PR
                    ├── ci_configured: true  → enable auto-merge (squash), CI must pass
+                   │    ├── ci_discovery: runtime → query GitHub API for required checks
+                   │    └── ci_discovery: explicit → use required_checks from config
                    └── ci_configured: false → warn, no auto-merge
            → run E2E (if applicable)
               ├── any tier fails? → fix, re-run from simplify-worker

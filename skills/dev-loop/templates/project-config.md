@@ -252,22 +252,51 @@ Leave empty to skip DEPLOY entirely.
 ## CI Configuration
 
 Controls whether the dev-loop MERGE step enforces CI checks before
-auto-merging feature-branch PRs. Set `ci_configured: true` after
-running `/setup-dev-loop` Section F, which generates the GitHub
-Actions workflow and optionally configures branch protection.
+auto-merging feature-branch PRs, and how CI health is monitored during
+IDLE DISCOVERY.
+
+Set `ci_configured: true` after running `/setup-dev-loop` Section F,
+which generates GitHub Actions workflows and optionally configures
+branch protection.
+
+### CI discovery mode (how required checks are resolved)
+
+**Default: `runtime`** — dev-loop queries the GitHub API at merge time
+to discover required status checks from branch protection. No config
+duplication; GitHub is the source of truth. This is the recommended
+mode for repos where `/setup-dev-loop` has configured branch protection.
+
+**Optional override: `explicit`** — list required check names in config.
+Use this when branch protection is not configured (or managed outside
+dev-loop) and you need dev-loop to know which checks matter.
 
 ```yaml
 ci_configured: false              # set to true after /setup-dev-loop Section F
-ci_workflow: .github/workflows/ci.yml  # path to CI workflow (for MERGE step verification)
+ci_discovery: runtime             # runtime | explicit (default: runtime)
+
+# Only used when ci_discovery: explicit
+required_checks:                  # check names matching GitHub Actions job names
+  - ci                            # from .github/workflows/ci.yml
+  - e2e                           # from .github/workflows/e2e.yml
+  # - security-scan              # uncomment when security.yml is added
 ```
 
 When `ci_configured: false` (the default), the MERGE step warns but
 still creates the PR — it does not block the cycle. When `true`, the
 MERGE step enables auto-merge (squash) on the PR — GitHub will merge
-once CI passes. The step does not block or poll; it schedules and
-continues. Branch protection on the target branch (configured by
-/setup-dev-loop Section F) is the actual enforcement mechanism —
-without it, auto-merge can bypass CI even when `ci_configured: true`.
+once all required checks pass. The step does not block or poll; it
+schedules and continues.
+
+**Runtime discovery** uses:
+- `gh api repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks`
+  to discover which checks are required
+- Falls back to `gh api repos/{owner}/{repo}/actions/runs --jq`
+  if branch protection is not configured (lists all recent workflow runs)
+
+**Explicit mode** is for repos where:
+- Branch protection is managed by a different team/tool
+- You want dev-loop to monitor specific checks regardless of branch protection
+- You have workflows that are required but not enforced by branch protection
 
 ## Notes (optional)
 
@@ -322,7 +351,8 @@ manifests_count: 6
 remote_hosts: [sg01]
 
 ci_configured: true
-ci_workflow: .github/workflows/ci.yml
+ci_discovery: runtime
+# required_checks: not needed — branch protection is the source of truth
 
 notes:
   canonical_spec: ~/wiki/projects/llm-wiki/history/specs/2026-05-02-llm-wiki-skill-design.md
