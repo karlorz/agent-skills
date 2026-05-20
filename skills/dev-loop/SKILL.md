@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.9.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: /setup-dev-loop now scaffolds all 5 config sections including interview backend selection + trigger mode. Pass `high` for aggressive mode.'
+version: "1.10.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: post-cycle MERGE step creates PRs with CI-gated auto-merge; /setup-dev-loop now scaffolds CI setup (Section F). Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -69,10 +69,11 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 4. PLAN | Parent session | inherit | Architecture design, dependency mapping — benefits from parent model |
 | 5. EXECUTE (subagents) | Implementation subagents | `sonnet` | Mechanical coding from plan — following spec, no architectural judgment |
 | 6. SIMPLIFY | simplify-worker | `sonnet` | Code review: search, compare, pattern match — integration-level judgment |
+| 6b. MERGE | gh CLI (inline) | inline | PR creation and auto-merge — CLI commands, no judgment |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
 | IDLE: maintenance | skillwiki skills (lint, audit, etc.) | inline (Skill tool) | Low token volume; future: agent spawns via skillwiki project task |
 
-**Steps that stay inline (not agent-eligible):** WORK, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume.
+**Steps that stay inline (not agent-eligible):** WORK, MERGE, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume.
 
 **Cost impact**: ~70% of agent-eligible work (EXECUTE subagents + SIMPLIFY + research) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
 
@@ -201,10 +202,10 @@ to invoke per step. These are two separate concerns.
 
 | Template | Steps | Use case |
 |---|---|---|
-| `full` | spec → plan → execute → review | Default for superpowers. New features, refactors. |
-| `tdd-first` | plan → execute → review | Plan IS the test suite. TDD discipline during execute. |
-| `single-pass` | execute → review | Spec is inline from QUERY. Small features, fixes. |
-| `debug-only` | execute | No spec/plan. Root cause → fix → verify. |
+| `full` | spec → plan → execute → review → merge | Default for superpowers. New features, refactors. |
+| `tdd-first` | plan → execute → review → merge | Plan IS the test suite. TDD discipline during execute. |
+| `single-pass` | execute → review → merge | Spec is inline from QUERY. Small features, fixes. |
+| `debug-only` | execute → merge | No spec/plan. Root cause → fix → verify. |
 | `manual` | (none) | User drives everything. Dev-loop is orchestrator only. |
 
 Default pipeline per `prd_layer`:
@@ -258,6 +259,8 @@ prd_disciplines:
 │  4. PLAN      <PRD skill> → plan.md at vault path           │
 │  5. EXECUTE   <PRD execution skill> → implement             │
 │  6. SIMPLIFY  Agent(simplify-worker, model: sonnet) → fix  │
+│  6b. MERGE    PR from feature branch → main (if branch ≠   │
+│               release_branch and code was committed)        │
 ├─────────────────────────────────────────────────────────────┤
 │ OPTIONAL (run if config declares)                           │
 │  7. SAVE      wiki-crystallize → session insights           │
@@ -568,6 +571,40 @@ This feeds directly into the SPEC step.
 - **`review` not in PRD_CAPS:** Manual code review (or skip for
   vault-only work where no code was touched).
 
+### 6b. MERGE — post-cycle PR creation (conditional on branch + pipeline)
+
+**Skip if any of:**
+- Current branch == `release_branch` (changes land directly on default)
+- No code changes were committed this cycle (vault-only, git-only, trivial fast-path with no LOC changes)
+- `prd_pipeline` is `manual` (user drives everything)
+
+**If none of the skip conditions apply:**
+
+1. **Push feature branch** — `git push -u origin <current-branch>`
+2. **Create PR** — `gh pr create --base <release_branch> --title "<work-item-title>" --body "<summary>"`
+   - If a PR already exists for this branch (open), skip creation and use the existing PR.
+   - If the existing PR is merged or closed, create a new PR.
+3. **CI gate decision:**
+   - If `ci_configured: true` in config:
+     - Enable auto-merge with squash: `gh pr merge --auto --squash`
+     - Report: "PR #N created with auto-merge (squash). CI checks must pass before merge."
+   - If `ci_configured: false` or absent:
+     - Do NOT enable auto-merge — without CI, auto-merge can bypass review.
+     - Warn: "No CI checks configured — PR #N created without auto-merge. Run /setup-dev-loop and set ci_configured: true to enable CI-gated auto-merge."
+     - The user must manually review and merge the PR.
+4. **Error handling:**
+   - If `gh` is not installed or not authenticated, report: "gh CLI not available — push branch manually and create PR via GitHub."
+   - If push fails (network, permissions), report and continue — do not block the cycle on merge.
+
+**Pipeline integration:**
+- `full` pipeline: MERGE after REVIEW, before SAVE
+- `tdd-first` pipeline: MERGE after REVIEW
+- `single-pass` pipeline: MERGE after REVIEW
+- `debug-only` pipeline: MERGE after EXECUTE
+- `manual` pipeline: skip (user drives)
+
+**MERGE does not replace PUSH.** MERGE creates a PR to get code onto the release branch. PUSH (step 10) handles publishing (npm, tag-triggered CI). A project that only uses MERGE (no npm publish) will skip PUSH.
+
 ### 7. SAVE — crystallize session insights (optional)
 
 **If `crystallize` in BACKEND_CAPS:**
@@ -839,6 +876,9 @@ the pipeline:
 5. **EXECUTE** — inline (no subagent dispatch).
 6. **SIMPLIFY** — mandatory for code changes; **skip for git-only or
    vault-only work** (nothing to review).
+6b. **MERGE** — skip for vault-only work. For code changes on a
+   feature branch, create PR. For changes already on the release
+   branch, skip.
 7. **E2E / PUSH** — if applicable.
 
 Retro and consolidation steps are unchanged. The fast-path is a
@@ -895,7 +935,12 @@ setup.
 ```
 simplify-worker passes? (model: sonnet)
   ├── NO  → fix issues, re-run simplify-worker
-  └── YES → run E2E (if applicable)
+  └── YES → MERGE (if feature branch + code changed)
+              ├── on release branch → skip MERGE (changes land directly)
+              └── on feature branch → push + create PR
+                   ├── ci_configured: true  → enable auto-merge (squash), CI must pass
+                   └── ci_configured: false → warn, no auto-merge
+           → run E2E (if applicable)
               ├── any tier fails? → fix, re-run from simplify-worker
               └── ALL PASS        → DEPLOY (if applicable)
                                      ├── deploy fails? → report, do not retry auth
@@ -1028,6 +1073,12 @@ stale local state:
     roles benefit from the parent model. If `CLAUDE_CODE_SUBAGENT_MODEL`
     is set to a non-empty value, it globally overrides per-agent model
     parameters — it must remain empty (`""`) for this rule to work.
+22. **MERGE creates PRs, not direct merges.** The MERGE step creates
+    a pull request and optionally enables auto-merge — it never
+    force-pushes or directly merges a feature branch into the release
+    branch. This preserves branch protection, CI gates, and review
+    workflows. The only exception is when the cycle runs directly on
+    the release branch (MERGE is skipped because changes land directly).
 
 ## Obsidian Integration (requires `query_vault` in BACKEND_CAPS)
 

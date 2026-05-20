@@ -103,9 +103,48 @@ Options:
 
 Default posture: propose `auto`. Most projects never notice the interview is there — ambiguity detection skips it for clear, well-scoped tasks.
 
+**Section F — CI Setup.**
+
+> Explainer: Dev-loop can create PRs with auto-merge after each cycle, but auto-merge without CI checks means code can merge untested. Setting up a minimal CI workflow ensures every PR is validated before it lands on main.
+
+Check for existing CI:
+- Does `.github/workflows/ci.yml` already exist? If yes, skip to confirmation.
+- Does `.github/workflows/` exist with any other workflow? Note it for context.
+
+If no CI workflow exists, detect the repo framework:
+
+| Signal | Framework | CI steps |
+|--------|-----------|----------|
+| `package.json` with `scripts.lint` | Node.js | lint + type-check + test |
+| `package.json` without `scripts.lint` | Node.js (minimal) | npm install + npm test |
+| `Makefile` with `check` target | Make-based | make check |
+| `pyproject.toml` | Python | ruff check + pytest |
+| `Cargo.toml` | Rust | cargo clippy + cargo test |
+| None of the above | Generic | echo "No CI steps detected — add manually" |
+
+Present the detected framework and proposed CI steps. Ask:
+> "I'll generate `.github/workflows/ci.yml` with these steps. Should I also enable branch protection on main (require CI to pass before merge)?"
+
+Options:
+- **Yes, CI + branch protection** — generate workflow and configure `gh api` branch protection
+- **CI workflow only** — generate workflow, skip branch protection
+- **Skip for now** — don't generate anything, set `ci_configured: false`
+
+Default posture: propose "CI + branch protection" for new projects, "CI workflow only" for existing repos where branch protection might conflict with current workflows.
+
+The generated workflow uses:
+- `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }` to avoid duplicate runs
+- Triggers on `push` to main and `pull_request` targeting main
+- Caching for dependency installation (npm ci with cache, pip cache, etc.)
+- No secrets required — all steps use public actions and local tooling
+
+After generating the workflow:
+- Set `ci_configured: true` in the `dev-loop.config.md` output
+- Set `ci_workflow: .github/workflows/ci.yml` in the config
+
 ### 3. Confirm and write
 
-Show the user a draft of `./.claude/dev-loop.config.md` covering all five sections (PRD, knowledge, release, interview, glossary). Let them edit before writing.
+Show the user a draft of `./.claude/dev-loop.config.md` covering all six sections (PRD, knowledge, release, interview, glossary, CI setup). Let them edit before writing.
 
 ### 4. Write
 
@@ -120,3 +159,5 @@ Tell the user:
 - Domain docs in `docs/agents/` (and `CONTEXT.md` if grill-with-docs ran)
 - Next: run a dev-loop cycle — the engine will pick up the new config automatically
 - To change config later, edit `./.claude/dev-loop.config.md` directly
+- If Section F was completed: CI workflow written to `.github/workflows/ci.yml`, `ci_configured: true` in config
+- If Section F was skipped: set `ci_configured: false` — dev-loop MERGE step will warn about missing CI

@@ -249,6 +249,26 @@ remote_hosts: [<host>, ...]        # e.g., [sg01], or [] if not applicable
 It should be idempotent and handle its own rollback on failure.
 Leave empty to skip DEPLOY entirely.
 
+## CI Configuration
+
+Controls whether the dev-loop MERGE step enforces CI checks before
+auto-merging feature-branch PRs. Set `ci_configured: true` after
+running `/setup-dev-loop` Section F, which generates the GitHub
+Actions workflow and optionally configures branch protection.
+
+```yaml
+ci_configured: false              # set to true after /setup-dev-loop Section F
+ci_workflow: .github/workflows/ci.yml  # path to CI workflow (for MERGE step verification)
+```
+
+When `ci_configured: false` (the default), the MERGE step warns but
+still creates the PR — it does not block the cycle. When `true`, the
+MERGE step enables auto-merge (squash) on the PR — GitHub will merge
+once CI passes. The step does not block or poll; it schedules and
+continues. Branch protection on the target branch (configured by
+/setup-dev-loop Section F) is the actual enforcement mechanism —
+without it, auto-merge can bypass CI even when `ci_configured: true`.
+
 ## Notes (optional)
 
 Free-form project-specific gotchas, compatibility notes, paths to
@@ -300,6 +320,9 @@ bump_script: ./scripts/bump-version.sh
 publish_via: ci-tag-trigger
 manifests_count: 6
 remote_hosts: [sg01]
+
+ci_configured: true
+ci_workflow: .github/workflows/ci.yml
 
 notes:
   canonical_spec: ~/wiki/projects/llm-wiki/history/specs/2026-05-02-llm-wiki-skill-design.md
