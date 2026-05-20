@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.8.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: pluggable interview phase with native 3-question default and optional grill-with-docs upgrade. Use /setup-dev-loop for interactive project bootstrap. Pass `high` for aggressive mode.'
+version: "1.9.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: /setup-dev-loop now scaffolds all 5 config sections including interview backend selection + trigger mode. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 

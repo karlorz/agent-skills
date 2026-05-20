@@ -12,6 +12,7 @@ Scaffold the per-repo configuration that dev-loop consumes:
 - **Knowledge layer** — how the loop captures, queries, and maintains project knowledge
 - **Release config** — how artifacts are published and deployed
 - **Vault path** — where skillwiki vault lives (if any)
+- **Interview config** — when and how dev-loop asks clarifying questions per work item
 - **Domain glossary** — CONTEXT.md and ADR directory via delegation to grill-with-docs
 
 This is a prompt-driven skill, not a deterministic script. Explore, present findings, confirm with user, then write.
@@ -28,6 +29,7 @@ Look at the current repo to understand its starting state:
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `./.claude/dev-loop.config.md` — does it already exist?
 - Installed skills — `ls ~/.claude/skills/` for available PRD backends
+- Installed interview backends — check for `grill-with-docs`, `grill-me` under `~/.claude/skills/`
 - `skillwiki path` — is a vault configured?
 
 ### 2. Present findings and ask
@@ -73,9 +75,37 @@ If `grill-with-docs` is installed, tell the user: "I'll now invoke grill-with-do
 
 If `grill-with-docs` is NOT installed, tell the user: "For a richer glossary-building experience, install grill-with-docs: `npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y`. For now, I'll capture key terms in CONTEXT.md manually." Then ask 2-3 domain questions and write a basic CONTEXT.md.
 
+**Section E — Interview config.**
+
+> Explainer: Dev-loop can ask clarifying questions before writing a spec. Two capabilities: **setup interview** (the bootstrap flow you're in now — always available) and **work-item interview** (optional per-work-item grilling before the SPEC step). The work-item interview uses a backend — native (3 fixed questions, zero dependencies), grill-with-docs (adaptive + terminology + CONTEXT.md), or grill-me (adaptive, no persistent files). You can also control when it fires.
+
+Present the available backends:
+
+| Backend | Install | When to pick |
+|---------|---------|--------------|
+| `native` | None (always available) | Quick alignment, CI contexts, minimal interaction |
+| `grill-with-docs` | `npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y` | Codebases you'll revisit, building shared language |
+| `grill-me` | `npx skills@latest add mattpocock/skills --skill grill-me -a claude-code -g -y` | Adaptive questioning without persistent docs |
+
+Default posture:
+- Propose `native` — always works, no install required
+- If `grill-with-docs` or `grill-me` is already installed, note it and offer as alternatives
+- If Section D already chose grill-with-docs for glossary, mention the synergy: same skill handles both glossary building and work-item interviews
+
+Then ask about trigger mode:
+
+> Explainer: When does the interview fire? **auto** detects ambiguity (conflicting prior decisions, vague descriptions, zero prior art) and interviews only when needed. **manual** only interviews when a work item explicitly requests it. **never** disables interviews — the loop runs fully automated.
+
+Options:
+- **auto** (recommended) — ambiguity detection gates the interview, so it only fires when useful
+- **manual** — only work items with `grill: true` trigger an interview
+- **never** — no interviews, fully automated cycles
+
+Default posture: propose `auto`. Most projects never notice the interview is there — ambiguity detection skips it for clear, well-scoped tasks.
+
 ### 3. Confirm and write
 
-Show the user a draft of `./.claude/dev-loop.config.md` and `docs/agents/domain.md`. Let them edit before writing.
+Show the user a draft of `./.claude/dev-loop.config.md` covering all five sections (PRD, knowledge, release, interview, glossary). Let them edit before writing.
 
 ### 4. Write
 
