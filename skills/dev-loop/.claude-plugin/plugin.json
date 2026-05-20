@@ -1,11 +1,11 @@
 {
   "name": "dev-loop",
-  "version": "1.9.0",
-  "description": "Generic single-pass PRD + skillwiki dev cycle engine. Execution subagents hard-wired to sonnet for cost efficiency. Includes simplify-worker agent (model: sonnet) for SIMPLIFY code review gate. Pluggable interview phase with native 3-question default and optional grill-with-docs/grill-me upgrade. /setup-dev-loop scaffolds all 5 config sections (PRD, knowledge, release, interview, glossary). Auto-capture, pluggable knowledge backends, drift guard, hot-reload sync, project-agnostic.",
+  "version": "1.10.1",
+  "description": "Generic single-pass PRD + skillwiki dev cycle engine. MERGE step with CI discovery (runtime GitHub API or explicit required_checks). IDLE CI health agent (sonnet). Execution subagents hard-wired to sonnet. Simplify-worker agent for code review gate. Pluggable interview phase (native / grill-with-docs / grill-me). /setup-dev-loop scaffolds all 6 config sections including CI setup (Section F). Pluggable knowledge backends, drift guard, project-agnostic.",
   "author": {
     "name": "kalrorz"
   },
   "license": "MIT",
-  "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "interview", "grill", "setup", "native-interview"],
+  "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery"],
   "skills": ["./", "./research", "./setup"]
 }
