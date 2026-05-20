@@ -7,6 +7,5 @@
   },
   "license": "MIT",
   "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "ci-health-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery"],
-  "skills": ["./", "./research", "./setup"],
-  "agents": ["./agents/simplify-worker", "./agents/ci-health-worker"]
+  "skills": ["./", "./research", "./setup"]
 }
