@@ -3,3 +3,4 @@ __pycache__/
 .claude/settings.local.json
 skills/playwright-cli/.playwright-cli/
 logs/
+.claude/scheduled_tasks.json
