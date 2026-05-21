@@ -72,11 +72,11 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 6b. MERGE | gh CLI (inline) | inline | PR creation and auto-merge — CLI commands, no judgment |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
 | IDLE: CI health | ci-health-worker | `sonnet` | GitHub Actions run inspection, required-check verification — mechanical API queries |
-| IDLE: maintenance | skillwiki skills (lint, audit, etc.) | inline (Skill tool) | Low token volume; future: agent spawns via skillwiki project task |
+| IDLE: maintenance | skillwiki skills (lint, audit, etc.) | `sonnet` (Agent spawns) | Vault maintenance: search, validate, write — mechanical, no architectural judgment |
 
-**Steps that stay inline (not agent-eligible):** WORK, MERGE, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume.
+**Steps that stay inline (not agent-eligible):** WORK, MERGE, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume. IDLE maintenance skills (lint, audit, crystallize, distill, decide) are now agent-eligible and run on sonnet.
 
-**Cost impact**: ~70% of agent-eligible work (EXECUTE subagents + SIMPLIFY + research) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
+**Cost impact**: ~80% of agent-eligible work (EXECUTE subagents + SIMPLIFY + research + IDLE maintenance) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
 
 ### Interview Capability Matrix
 
@@ -831,11 +831,37 @@ instead:
 3. Run maintenance based on BACKEND_CAPS:
 
    **If `lint_vault` in BACKEND_CAPS (skillwiki maintenance):**
-   - `skillwiki:wiki-lint` — vault health, fix issues found
-   - `skillwiki:wiki-audit` — provenance integrity check
-   - `skillwiki:wiki-crystallize` — capture any session insights
-   - `skillwiki:proj-distill` — promote compound entries to concepts
-   - `skillwiki:proj-decide` — record any pending ADRs
+
+   Vault maintenance skills are dispatched as **Agent spawns with `model: "sonnet"`** — these are mechanical tasks (search, validate, write) that sonnet handles at ~5x lower cost than inheriting the parent model. Each agent gets a self-contained prompt with vault path and project context.
+
+   ```
+   Agent(description: "Vault lint", subagent_type: "skillwiki:wiki-lint", model: "sonnet",
+     prompt: "Run vault lint on the skillwiki vault. Fix any auto-fixable issues. Report findings summary.")
+   ```
+
+   ```
+   Agent(description: "Vault audit", subagent_type: "skillwiki:wiki-audit", model: "sonnet",
+     prompt: "Run vault audit on the skillwiki vault. Verify provenance integrity. Report findings.")
+   ```
+
+   ```
+   Agent(description: "Vault crystallize", subagent_type: "skillwiki:wiki-crystallize", model: "sonnet",
+     prompt: "Crystallize session insights into the skillwiki vault. Report any pages created.")
+   ```
+
+   ```
+   Agent(description: "Project distill", subagent_type: "skillwiki:proj-distill", model: "sonnet",
+     prompt: "Distill compound entries for project {slug} in the skillwiki vault. Promote recurring patterns to concept pages. Report any pages created.")
+   ```
+
+   ```
+   Agent(description: "Project decide", subagent_type: "skillwiki:proj-decide", model: "sonnet",
+     prompt: "Record any pending ADRs for project {slug} in the skillwiki vault. Report any decisions recorded.")
+   ```
+
+   **Fallback:** If Agent spawn fails (subagent_type unavailable), fall back to inline `Skill("skillwiki:<skill>")` invocation for backwards compatibility.
+
+   Additional maintenance tasks (run inline — low token volume):
    - **Drift check** — run `skillwiki drift` to detect changed upstream
      sources. Handle per N9 Reingest Protocol (metadata-only vs content
      drift).
