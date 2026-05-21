@@ -69,14 +69,14 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 4. PLAN | Parent session | inherit | Architecture design, dependency mapping — benefits from parent model |
 | 5. EXECUTE (subagents) | Implementation subagents | `sonnet` | Mechanical coding from plan — following spec, no architectural judgment |
 | 6. SIMPLIFY | simplify-worker | `sonnet` | Code review: search, compare, pattern match — integration-level judgment |
-| 6b. MERGE | gh CLI (inline) | inline | PR creation and auto-merge — CLI commands, no judgment |
+| 6b. MERGE | gh CLI (inline) + ci-health-worker | inline + `sonnet` | PR creation (inline) + CI health gate (ci-health-worker agent) |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
 | IDLE: CI health | ci-health-worker | `sonnet` | GitHub Actions run inspection, required-check verification — mechanical API queries |
 | IDLE: maintenance | skillwiki skills (lint, audit, etc.) | `sonnet` (Agent spawns) | Vault maintenance: search, validate, write — mechanical, no architectural judgment |
 
-**Steps that stay inline (not agent-eligible):** WORK, MERGE, SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume. IDLE maintenance skills (lint, audit, crystallize, distill, decide) are now agent-eligible and run on sonnet.
+**Steps that stay inline (not agent-eligible):** WORK, MERGE (commit + push + PR creation only), SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume. MERGE's CI health gate spawns ci-health-worker (sonnet). IDLE maintenance skills (lint, audit, crystallize, distill, decide) are now agent-eligible and run on sonnet.
 
-**Cost impact**: ~80% of agent-eligible work (EXECUTE subagents + SIMPLIFY + research + IDLE maintenance) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
+**Cost impact**: ~80% of agent-eligible work (EXECUTE subagents + SIMPLIFY + MERGE CI gate + research + IDLE maintenance) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
 
 ### Interview Capability Matrix
 
@@ -609,17 +609,19 @@ directly on the default branch. Report: "Changes committed and pushed to
    - If the existing PR is merged or closed, create a new PR.
 3. **CI gate decision:**
    - If `ci_configured: true` in config:
-     - Enable auto-merge with squash: `gh pr merge --auto --squash`
-     - Report: "PR #N created with auto-merge (squash). CI checks must pass before merge."
-     - **CI discovery** (resolved at REFRESH from `ci_discovery` config):
-       - `runtime` (default): dev-loop queries
-         `gh api repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks`
-         to discover which checks are required. No config duplication — GitHub
-         branch protection is the source of truth. Falls back to listing recent
-         workflow runs if branch protection is not configured.
-       - `explicit`: dev-loop reads `required_checks` from config. Use when
-         branch protection is managed outside dev-loop or specific checks need
-         monitoring regardless of branch protection.
+     - Spawn `ci-health-worker` agent (model: sonnet) to assess CI health
+       before enabling auto-merge. The agent handles CI discovery (runtime
+       vs explicit) and returns a structured health classification.
+       ```
+       Agent(description: "Pre-merge CI check", subagent_type: "dev-loop:ci-health-worker", model: "sonnet", prompt: "Check CI health for the repo before enabling auto-merge on a new PR. ci_discovery: <runtime|explicit>. required_checks: <list or 'discover from API'>. release_branch: <branch>. Run: (1) Discover required checks per ci_discovery mode. (2) Fetch recent workflow runs. (3) Assess health for each required check. (4) Report: healthy/degraded/broken with findings.")
+       ```
+     - Based on ci-health-worker's health classification:
+       - `healthy` or `degraded`: Enable auto-merge with squash:
+         `gh pr merge --auto --squash`. Report: "PR #N created with
+         auto-merge (squash). CI health: <classification>."
+       - `broken`: Do NOT enable auto-merge. Report: "PR #N created
+         WITHOUT auto-merge — CI is broken on the release branch.
+         Fix CI issues before merging." Surface as P2 finding.
    - If `ci_configured: false` or absent:
      - Do NOT enable auto-merge — without CI, auto-merge can bypass review.
      - Warn: "No CI checks configured — PR #N created without auto-merge. Run /setup-dev-loop and set ci_configured: true to enable CI-gated auto-merge."
@@ -1016,9 +1018,9 @@ simplify-worker passes? (model: sonnet)
               ├── commit code changes (always)
               ├── on release branch → git push directly
               └── on feature branch → push + create PR
-                   ├── ci_configured: true  → enable auto-merge (squash), CI must pass
-                   │    ├── ci_discovery: runtime → query GitHub API for required checks
-                   │    └── ci_discovery: explicit → use required_checks from config
+                   ├── ci_configured: true  → spawn ci-health-worker (sonnet)
+                   │    ├── healthy/degraded → enable auto-merge (squash), CI must pass
+                   │    └── broken → skip auto-merge, surface as P2
                    └── ci_configured: false → warn, no auto-merge
            → run E2E (if applicable)
               ├── any tier fails? → fix, re-run from simplify-worker
