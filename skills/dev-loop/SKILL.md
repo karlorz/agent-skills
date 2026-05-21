@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-version: "1.10.3"
+version: "1.10.4"
 description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: MERGE step with CI discovery (runtime via GitHub API or explicit config); IDLE CI health agent (sonnet); /setup-dev-loop Section F. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
