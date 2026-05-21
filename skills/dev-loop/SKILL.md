@@ -580,14 +580,28 @@ This feeds directly into the SPEC step.
 - **`review` not in PRD_CAPS:** Manual code review (or skip for
   vault-only work where no code was touched).
 
-### 6b. MERGE — post-cycle PR creation (conditional on branch + pipeline)
+### 6b. MERGE — post-cycle commit + push/PR (conditional on pipeline)
 
-**Skip if any of:**
-- Current branch == `release_branch` (changes land directly on default)
+MERGE has two sub-steps: **commit** (always when code changed) and
+**push + PR** (conditional on branch).
+
+**Skip entirely if any of:**
 - No code changes were committed this cycle (vault-only, git-only, trivial fast-path with no LOC changes)
 - `prd_pipeline` is `manual` (user drives everything)
 
-**If none of the skip conditions apply:**
+#### 6b-1: Commit (when code changed and no commit was made this cycle)
+
+If code changes exist and no commit was made this cycle → commit them.
+This applies **regardless of which branch we're on** — including the
+release branch. Message format: conventional commit from work item title.
+
+#### 6b-2: Push + PR (conditional on branch)
+
+**On release_branch:** `git push` directly. No PR needed — changes land
+directly on the default branch. Report: "Changes committed and pushed to
+<release_branch>."
+
+**On feature branch:**
 
 1. **Push feature branch** — `git push -u origin <current-branch>`
 2. **Create PR** — `gh pr create --base <release_branch> --title "<work-item-title>" --body "<summary>"`
@@ -621,7 +635,10 @@ This feeds directly into the SPEC step.
 - `debug-only` pipeline: MERGE after EXECUTE
 - `manual` pipeline: skip (user drives)
 
-**MERGE does not replace PUSH.** MERGE creates a PR to get code onto the release branch. PUSH (step 10) handles publishing (npm, tag-triggered CI). A project that only uses MERGE (no npm publish) will skip PUSH.
+**MERGE does not replace PUSH.** MERGE commits code and creates a PR (or
+pushes directly on the release branch). PUSH (step 10) handles publishing
+(npm, tag-triggered CI). A project that only uses MERGE (no npm publish)
+will skip PUSH.
 
 ### 7. SAVE — crystallize session insights (optional)
 
@@ -910,9 +927,9 @@ the pipeline:
 5. **EXECUTE** — inline (no subagent dispatch).
 6. **SIMPLIFY** — mandatory for code changes; **skip for git-only or
    vault-only work** (nothing to review).
-6b. **MERGE** — skip for vault-only work. For code changes on a
-   feature branch, create PR. For changes already on the release
-   branch, skip.
+6b. **MERGE** — skip for vault-only work. For code changes:
+   commit always, then push directly on release_branch or create PR
+   on a feature branch.
 7. **E2E / PUSH** — if applicable.
 
 Retro and consolidation steps are unchanged. The fast-path is a
@@ -969,8 +986,9 @@ setup.
 ```
 simplify-worker passes? (model: sonnet)
   ├── NO  → fix issues, re-run simplify-worker
-  └── YES → MERGE (if feature branch + code changed)
-              ├── on release branch → skip MERGE (changes land directly)
+  └── YES → MERGE (if code changed)
+              ├── commit code changes (always)
+              ├── on release branch → git push directly
               └── on feature branch → push + create PR
                    ├── ci_configured: true  → enable auto-merge (squash), CI must pass
                    │    ├── ci_discovery: runtime → query GitHub API for required checks
@@ -1109,12 +1127,12 @@ stale local state:
     roles benefit from the parent model. If `CLAUDE_CODE_SUBAGENT_MODEL`
     is set to a non-empty value, it globally overrides per-agent model
     parameters — it must remain empty (`""`) for this rule to work.
-22. **MERGE creates PRs, not direct merges.** The MERGE step creates
-    a pull request and optionally enables auto-merge — it never
-    force-pushes or directly merges a feature branch into the release
-    branch. This preserves branch protection, CI gates, and review
-    workflows. The only exception is when the cycle runs directly on
-    the release branch (MERGE is skipped because changes land directly).
+22. **MERGE commits code, then creates PRs or pushes directly.** The
+    MERGE step always commits code changes (regardless of branch), then
+    either creates a PR (feature branch) or pushes directly (release
+    branch). It never force-pushes or directly merges a feature branch
+    into the release branch. This preserves branch protection, CI gates,
+    and review workflows.
 
 ## Obsidian Integration (requires `query_vault` in BACKEND_CAPS)
 
