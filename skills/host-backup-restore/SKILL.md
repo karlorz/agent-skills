@@ -204,7 +204,7 @@ The skill uses a **sonnet-pinned worker agent** for mechanical tasks, keeping th
 
 ### Agent: backup-worker (model: sonnet)
 
-Defined in `.claude-plugin/agents/backup-worker.md`. Handles:
+Defined in `agents/backup-worker.md`. Handles:
 - SSH discovery (`discover.sh`)
 - Backup execution (`backup-host.sh`)
 - Restore execution (`host-restore-cli.sh`)
@@ -733,7 +733,7 @@ After user selects "hermes" group:
   → Orchestrator continues with next group or wiki capture
 ```
 
-**Model specification:** Per [[concepts/claude-code-agent-model-specification]], the `model: sonnet` is set in the agent frontmatter (`.claude-plugin/agents/hermes-backup-worker.md`), not in `plugin.json` or `SKILL.md`. The Agent tool parameter can override at spawn time but defaults to the agent file setting.
+**Model specification:** Per [[concepts/claude-code-agent-model-specification]], the `model: sonnet` is set in the agent frontmatter (`agents/hermes-backup-worker.md`), not in `plugin.json` or `SKILL.md`. The Agent tool parameter can override at spawn time but defaults to the agent file setting.
 
 > **Primary entry point:** The `hermes-backup-worker` agent is the recommended way to perform Hermes backup/restore operations. Use `Agent(subagent_type="hermes-backup-worker", ...)` instead of calling `scripts/hermes/` scripts directly. The agent handles script selection, error handling, and result reporting.
 
