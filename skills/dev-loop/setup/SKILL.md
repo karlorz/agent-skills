@@ -158,6 +158,21 @@ If the user has no critical paths, leave the section empty. The engine defaults 
 
 Default posture: if the repo has a CLAUDE.md or CONTEXT.md with known hot-spots, pre-populate suggestions.
 
+**Config emitted:**
+
+```yaml
+critical_paths:
+  <name>:
+    code:
+      - <glob-or-path>
+    vault:
+      - <concept-or-query-page-slug>
+    history_pins:
+      - <free-text incident reference>
+```
+
+**Runtime behavior:** Loaded at REFRESH into `CRITICAL_PATHS`. QUERY biases vault search toward `*.vault` slugs. WORK auto-escalates `priority: high` if changed files match `*.code` globs. Research agent ranks coverage gaps in `*.code` above other files. Schema reference: `templates/project-config.md` § Critical paths.
+
 **Section H — Fact-check tier.**
 
 > Explainer: Dev-loop agents can consult external knowledge sources (web search, library docs, vault queries) when writing specs and plans. Without fact-checking, agents rely on local context only — which can lead to version-sensitive errors or stale API assumptions.
@@ -181,6 +196,28 @@ If the user picks full fact-checking:
 
 Default posture: if grok-search is installed, propose full fact-checking with grok-search as primary. Otherwise, propose local + vault only.
 
+**Config emitted:**
+
+```yaml
+fact_check:
+  enabled: true
+  source_order:
+    - local_repo
+    - context7
+    - vault
+    - web
+  web_tools:
+    primary: mcp__grok-search__web_search
+  evidence_contract:
+    require_sources_used_section: true
+  triggers:
+    - "version "
+    - "deprecat"
+    - "CVE-"
+```
+
+**Runtime behavior:** Loaded at REFRESH into `FACT_CHECK_CAPS` (source_order, `web_available` bool, evidence_contract). Passed to SPEC and PLAN — PRD skills consult sources in declared order for version/API/deprecation claims. Output specs include `## Sources Used` if contract requires it. REVIEW gate flags missing section. Schema reference: `templates/project-config.md` § Fact-check tier.
+
 **Section I — Idle deep-research.**
 
 > Explainer: When dev-loop's IDLE cycle finds no claimable work, it normally exits after maintenance. Idle deep-research turns those dead cycles into a research backlog by invoking `/deep-research` on rotating topics — building up forward-looking ideas that compound over weeks.
@@ -199,6 +236,26 @@ If the user picks enable:
 3. Confirm budget defaults: 3 web searches, 3 deep fetches, 3 context7 calls per research run.
 
 Default posture: if the project has critical_paths, propose "enable with critical-path bias" as the default. Otherwise, propose "skip for now" — idle deep-research is most valuable on projects with long-running cron loops.
+
+**Config emitted:**
+
+```yaml
+idle_deep_research:
+  enabled: true
+  topic_seeds:
+    - <topic-1>
+    - <topic-2>
+  bias_toward: critical_paths
+  cooldown_cycles: 3
+  max_per_day: 4
+  skip_if_recent_query_page_exists: 7
+  budget:
+    web_searches: 3
+    deep_fetches: 3
+    context7_calls: 3
+```
+
+**Runtime behavior:** Idle Discovery step 4.5 — fires only when research step 4 returns no P2+ findings and cooldown allows. Round-robins through `topic_seeds`, biased toward `critical_paths.*.code` matches when `bias_toward` is set. Honors `budget.*` caps per run. Output ideas land via `wiki-add-task` as `kind: idea, p_score_default: P3`. Schema reference: `templates/project-config.md` § Idle deep-research.
 
 **Section J — Browser verification gate.**
 
@@ -228,6 +285,28 @@ If enabled:
 
 Default posture: if Vite/React is detected and playwright-cli is installed, propose "enable" with sensible defaults. Otherwise, propose "skip."
 
+**Config emitted:**
+
+```yaml
+browser_verification:
+  enabled: true
+  trigger:
+    - "apps/**/*.tsx"
+  prerequisites:
+    - "curl -fsS http://localhost:5173 >/dev/null"
+  base_url: http://localhost:5173
+  smoke_routes:
+    - /
+    - /login
+  reviser_workflow:
+    - take_snapshot
+    - list_console_messages
+    - evaluate_script
+  e2e_fallback: npm run test:e2e
+```
+
+**Runtime behavior:** Step 6a (between REVIEW and MERGE). Skipped unless changed files match `trigger` globs. Validates `prerequisites` (block on unhealthy), spawns `playwright-cli:browser-worker` (model: sonnet) to walk `reviser_workflow` on `smoke_routes`. Console errors fail the gate → return to EXECUTE. Schema reference: `templates/project-config.md` § Browser verification.
+
 **Section K — Reactive debugging budget.**
 
 > Explainer: When EXECUTE fails, dev-loop invokes systematic-debugging and retries. Without a budget, a reproducible failure can burn the daily web budget and lock the loop into the same broken step. The reactive-debug budget caps retries, captures evidence, fact-checks external-lib errors, and escalates persistent failures.
@@ -247,6 +326,24 @@ If not legacy:
 4. Confirm escalation: "Escalate after how many consecutive idle cycles with the same error?" (default: 3)
 
 Default posture: if fact-checking is enabled (Section H), propose "enable with budget" using the same fact_check_tool. Otherwise, propose "enable with budget" without fact-check.
+
+**Config emitted:**
+
+```yaml
+reactive_debugging:
+  enabled: true
+  auto_retry_attempts: 2
+  evidence_dir: .claude/dev-loop-debug/
+  evidence_capture:
+    - "make check 2>&1 | tee {evidence_dir}/{cycle}-check.log"
+    - "git diff > {evidence_dir}/{cycle}-diff.patch"
+  fact_check_tool: mcp__grok-search__web_search
+  escalate_after:
+    consecutive_idle_cycles: 3
+    same_error_signature: true
+```
+
+**Runtime behavior:** Sub-step of EXECUTE — fires only when a `when: failure, mode: reactive` discipline is matched. Captures evidence under `evidence_dir` (with `{evidence_dir}`/`{cycle}` interpolation), hashes error signature, fact-checks external libs via `fact_check_tool`, retries up to `auto_retry_attempts`. On exhaustion + `escalate_after` match, files a P1 finding to `raw/transcripts/` keyed by hash (future cycles dedup). `evidence_dir` MUST be in `.gitignore`. Schema reference: `templates/project-config.md` § Reactive debugging.
 
 **Section L — Discipline path scoping.**
 
@@ -280,6 +377,24 @@ If the user picks "scope manually":
 - Ask for exclude_paths (optional escape hatches)
 
 Default posture: if critical_paths (Section G) were declared AND TDD is in `prd_disciplines[]`, strongly recommend "scope via critical_paths." This is the primary use case for Section L — the trends worked example needs TDD mandatory only on `critical_paths.*.code` files.
+
+**Config emitted:**
+
+```yaml
+prd_disciplines:
+  - skill: superpowers:test-driven-development
+    when: execute
+    mode: mandatory
+    include_paths:
+      - packages/convex/convex/aiScoring*.ts
+    # exclude_paths optional — escape hatch from include_paths
+  - skill: superpowers:test-driven-development
+    when: execute
+    mode: advisory
+    # no include_paths → catch-all for everything else
+```
+
+**Runtime behavior:** Resolved at REFRESH per `{skill, when}` group. EXECUTE intersects changed-files-since-WORK with each entry's `include_paths` (omitted = catch-all), applies `exclude_paths`, picks first match per group. Different `{skill, when}` groups are independent — matching one does not suppress another. Backwards-compat: omitted `include_paths` keeps prior global-scope behavior. Warning emitted at REFRESH when `mode: mandatory` has no `include_paths`. Schema reference: `templates/project-config.md` § Cross-cutting disciplines.
 
 ### 3. Confirm and write
 

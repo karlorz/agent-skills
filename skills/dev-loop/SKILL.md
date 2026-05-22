@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.11.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.11.0: Sections G-L schemas (critical_paths, fact_check, idle_deep_research, browser_verification, reactive_debugging, discipline path scoping); step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research; first-match-wins discipline resolution. Pass `high` for aggressive mode.'
+version: "1.11.1"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.11.1: doc-only — compressed Sections G-L runtime blocks (single source of truth = setup/SKILL.md). v1.11.0: Sections G-L schemas (critical_paths, fact_check, idle_deep_research, browser_verification, reactive_debugging, discipline path scoping); step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research; first-match-wins discipline resolution. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -362,26 +362,15 @@ prd_disciplines:
        `REQUIRED_CHECKS = required_checks` list from config.
      If `ci_configured: false` or absent → `CI_DISCOVERY = none`,
      `REQUIRED_CHECKS = []`.
-     **Resolve critical_paths** — parse the `critical_paths` section from
-     config. If present, store as `CRITICAL_PATHS` session variable (dict
-     keyed by name, each with `code`, `vault`, `history_pins` sub-keys).
-     If absent or empty → `CRITICAL_PATHS = {}` (not an error — defaults to
-     equal priority for all files). Each `code` entry is a list of globs/paths
-     that the research agent and WORK step use for ranking and priority
-     escalation. Each `vault` entry is a list of concept/query page slugs
-     that QUERY biases toward.
-     **Resolve fact_check** — parse the `fact_check` section from config.
-     If `enabled: true`, validate that `web_tools.primary` resolves to an
-     installed MCP server (check available tool names). If absent, warn:
-     "fact_check enabled but web_tools.primary not found — web tier
-     disabled." Store as `FACT_CHECK_CAPS` containing:
-     - `source_order`: the priority list (always includes `local_repo`)
-     - `web_available`: bool — whether web tools are reachable
-     - `evidence_contract`: the evidence requirements
-     If `fact_check` section absent or `enabled: false` →
-     `FACT_CHECK_CAPS = {}` (no fact-checking, agents use local context).
-     Pass `FACT_CHECK_CAPS` to SPEC and PLAN steps so PRD skills know the
-     available source order and evidence requirements.
+     **Resolve `critical_paths`** — parse into `CRITICAL_PATHS` dict (name →
+     `{code, vault, history_pins}`). Absent or empty → `{}` (equal priority).
+     Schema: see `templates/project-config.md` § Critical paths. Setup flow:
+     `setup/SKILL.md` Section G.
+     **Resolve `fact_check`** — parse into `FACT_CHECK_CAPS` (`source_order`,
+     `web_available` bool after validating `web_tools.primary` against installed
+     MCP tools, `evidence_contract`). Absent or `enabled: false` → `{}`. Pass to
+     SPEC/PLAN steps. Schema: `templates/project-config.md` § Fact-check tier.
+     Setup flow: `setup/SKILL.md` Section H.
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
      reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
@@ -622,50 +611,32 @@ fact-checked. Output specs must include a `## Sources Used` section if
   work item done."
 
 **Discipline injection (sub-step of EXECUTE):**
-- **Resolution per {skill, when} group**: group `PRD_DISCIPLINES` by
-  `{skill, when}` pair. Within each group, intersect changed-files-since-WORK
-  with each entry's `include_paths` (if set), then apply `exclude_paths`
-  (if set). First-match-wins per group — walk entries in priority order,
-  stop at first match. If no `include_paths` set, matches all changed
-  files (catch-all). Different `{skill, when}` groups are independent —
-  matching one group (e.g., TDD on execute) does NOT suppress a different
-  group (e.g., security-audit on execute). Each matched group injects its
-  skill independently.
-- Changed files for fresh claimable work items: use the diff between
-  `release_branch` and current HEAD at cycle start. If no commits exist
-  yet (first cycle), scope to the files listed in the work item spec.
-- If any matching discipline has `when: execute`, pass its context
-  to the execute skill with the resolved `mode` (advisory/mandatory).
-- If execution encounters errors and any discipline has `when: failure`
-  with `mode: reactive`, intercept the failure before resuming:
+- **Resolution per `{skill, when}` group**: group `PRD_DISCIPLINES` by
+  `{skill, when}`. Within each group, intersect changed-files-since-WORK with
+  each entry's `include_paths` (omitted = catch-all), apply `exclude_paths`,
+  first-match-wins. Different groups are independent (matching TDD on execute
+  does not suppress security-audit on execute). Schema:
+  `templates/project-config.md` § Cross-cutting disciplines. Setup flow:
+  `setup/SKILL.md` Section L.
+- Changed files for fresh items: diff `release_branch`..HEAD at cycle start;
+  fall back to spec's referenced files on first cycle.
+- `when: execute` → pass discipline + resolved `mode` to the execute skill.
+- `when: failure` + `mode: reactive` → intercept failures (see reactive-debug
+  budget below).
 
-  **Reactive-debug budget (when `reactive_debugging` config is present and `enabled: true`):**
-  1. **Capture evidence**: run `reactive_debugging.evidence_capture` commands
-     with placeholder interpolation:
-     - `{evidence_dir}` → the configured `evidence_dir` path (created if
-       missing)
-     - `{cycle}` → the current cycle slug (e.g., `2026-05-22-work-slug`)
-     Create the evidence dir if it doesn't exist. The evidence dir must
-     be in `.gitignore` regardless of `knowledge_layer` — evidence
-     captures are transient session artifacts, not repo or vault content.
-  2. **Hash error signature**: extract top-3 stack frames + detected library
-     name (regex match against known frameworks: Convex, Hono, Vite, React,
-     Next.js, etc.). Compute a deterministic hash of this signature.
-  3. **Fact-check external libs**: if the stack trace contains an external
-     library name AND `reactive_debugging.fact_check_tool` is set, call the
-     tool with the error message before retrying. This catches version-
-     specific breakage.
-  4. **Retry**: invoke systematic-debugging, then re-run the failing step.
-     Up to `auto_retry_attempts` times total.
-  5. **Escalation**: if all retries exhausted AND `escalate_after` conditions
-     are met (consecutive idle cycles, same error signature), write a P1
-     finding to `raw/transcripts/` with `kind: bug` + error signature hash.
-     Future cycles dedup against this hash to prevent duplicate filings.
+  **Reactive-debug budget (when `reactive_debugging.enabled: true`):**
+  Capture evidence under `evidence_dir` (interpolating `{evidence_dir}`,
+  `{cycle}`); hash error signature (top-3 stack frames + library name);
+  fact-check external libs via `reactive_debugging.fact_check_tool` if set;
+  invoke systematic-debugging and retry up to `auto_retry_attempts`. On
+  exhaustion + `escalate_after` match, write a P1 finding to
+  `raw/transcripts/` keyed by error-signature hash (future cycles dedup).
+  `evidence_dir` MUST be in `.gitignore`. Schema:
+  `templates/project-config.md` § Reactive debugging. Setup flow:
+  `setup/SKILL.md` Section K.
 
-  **Without `reactive_debugging` config (legacy behavior):**
-  Invoke the reactive discipline (e.g., systematic-debugging), then resume.
-  No retry cap, no evidence capture, no escalation — legacy unbounded
-  retry behavior.
+  **Without `reactive_debugging` config (legacy):** invoke the reactive
+  discipline and resume — no retry cap, no evidence, no escalation.
 
 ### 6. REVIEW — code quality gate (conditional on `prd_pipeline` + `PRD_CAPS`)
 
@@ -689,35 +660,22 @@ the work item itself).
 
 ### 6a. BROWSER-VERIFY — browser verification gate (conditional on `browser_verification` config)
 
-**Skip if** `browser_verification` section is absent or `enabled: false`.
+**Skip if** `browser_verification` is absent, `enabled: false`, or no changed
+files match `browser_verification.trigger` globs.
 
-**Skip if** no changed files match `browser_verification.trigger` globs.
+**When triggered:**
+1. Verify each `prerequisites` command is healthy (e.g., `curl -fsS <base_url>`).
+   Not healthy → block: "Browser verification blocked — prerequisite <cmd>".
+2. Spawn `playwright-cli:browser-worker` (model: sonnet) with `base_url`,
+   `smoke_routes`, `reviser_workflow`. Reports pass/fail with console + a11y
+   findings.
+3. **Console-error gate**: any console error/warning → fail → return to EXECUTE.
+   The merge-blocker is console errors, not snapshot diffs.
+4. If `/playwright-cli` is too narrow, run `e2e_fallback` instead (exit 0 = pass).
 
-**If trigger matched:**
-
-1. **Prerequisite health check** — verify that each command in
-   `browser_verification.prerequisites` is healthy (e.g.,
-   `curl -fsS <base_url> >/dev/null`). If not running, block the gate:
-   "Browser verification blocked — prerequisite <command> not healthy.
-   Start it and re-run." Do NOT proceed to MERGE until resolved.
-
-2. **Driver dispatch** — spawn `/playwright-cli` agent (model: sonnet)
-   with the configured `base_url`, `smoke_routes`, and `reviser_workflow`:
-   ```
-   Agent(description: "Browser verification", subagent_type: "playwright-cli:browser-worker", model: "sonnet", prompt: "Verify browser health at <base_url>. Smoke routes: <routes>. Reviser workflow: <steps>. Check for console errors and a11y violations. Report: pass/fail with details.")
-   ```
-
-3. **Console-error gate** — if the agent reports console errors or
-   warnings during `list_console_messages`, **fail the gate**. Return to
-   EXECUTE for fix. The merge-blocker is console errors, not snapshot diffs.
-
-4. **E2E fallback** — if `/playwright-cli` is too narrow for the change
-   (e.g., complex form interactions), run `e2e_fallback` command instead.
-   Exit code must be 0 to pass.
-
-**Gate outcome:**
-- Pass → proceed to MERGE
-- Fail → return to EXECUTE with findings, fix, re-run SIMPLIFY → BROWSER-VERIFY
+**Gate:** pass → MERGE; fail → EXECUTE → SIMPLIFY → BROWSER-VERIFY.
+Schema: `templates/project-config.md` § Browser verification. Setup flow:
+`setup/SKILL.md` Section J.
 
 ### 6b. MERGE — post-cycle commit + push/PR (conditional on pipeline)
 
@@ -1062,29 +1020,22 @@ instead:
    If it returns ranked recommendations, the next dev-loop cycle picks
    up the top item via the WORK step.
 
-4.5. **IDLE DEEP-RESEARCH** (conditional on `idle_deep_research.enabled`
-     AND research agent (step 4) returned no P2+ findings AND cooldown allows):
-   - Gate on `query_vault` in BACKEND_CAPS — skip entirely if no vault
-     (needs skillwiki for `wiki-add-task` and vault output).
-   - Pick next rotating topic from `idle_deep_research.topic_seeds`
-     (round-robin), biased toward topics matching
-     `CRITICAL_PATHS.*.code` if declared.
-   - Skip the topic if the vault already has a query page for it created
-     within `skip_if_recent_query_page_exists` days.
-   - Check daily cap: if `max_per_day` reached, skip this step.
-   - Invoke `/deep-research <topic>` with declared budget limits
-     (`budget.web_searches`, `budget.deep_fetches`, `budget.context7_calls`).
-   - Extract 1-3 actionable ideas from the research output →
-     `wiki-add-task` as `kind: idea` with `p_score_default: P3`.
-   - Mark cooldown timestamp for next eligible idle cycle.
-   - Log: "Idle deep-research: researched <topic>, captured <N> ideas."
+4.5. **IDLE DEEP-RESEARCH** (conditional on `idle_deep_research.enabled` AND
+     research step 4 returned no P2+ findings AND cooldown allows):
+   - Gate on `query_vault` in BACKEND_CAPS — skip if no vault.
+   - Pick next topic from `topic_seeds` (round-robin), biased toward
+     `CRITICAL_PATHS.*.code` matches.
+   - Skip if a vault query page for the topic was created within
+     `skip_if_recent_query_page_exists` days, or if `max_per_day` is hit.
+   - Invoke `/deep-research <topic>` honoring `budget.*` caps.
+   - Extract 1–3 actionable ideas → `wiki-add-task` with `kind: idea`,
+     `p_score_default: P3`.
+   - Mark cooldown timestamp; log: "Idle deep-research: <topic>, <N> ideas."
 
-   Skip this step entirely if `idle_deep_research` section is absent or
-   `enabled: false`. Also skip if research agent (step 4) returned
-   P2+ findings — there's claimable work, no need for idea-generation.
-   With `knowledge_layer: none`, the vault-based capture path is
-   unavailable — deep-research outputs go to `.claude/dev-loop-work/`
-   instead.
+   With `knowledge_layer: none`, the vault capture path is unavailable —
+   outputs go to `.claude/dev-loop-work/` instead.
+   Schema: `templates/project-config.md` § Idle deep-research. Setup flow:
+   `setup/SKILL.md` Section I.
 
 5. **Pick up P3 work if no P2+ items exist** (normal mode). After
    research completes, if the backlog contains only P3 items, pick the
@@ -1180,25 +1131,17 @@ setup.
 
 ## Pre-Push Gate (when PUSH applies)
 
-```
-simplify-worker passes? (model: sonnet)
-  ├── NO  → fix issues, re-run simplify-worker
-  └── YES → MERGE (if code changed)
-              ├── commit code changes (always)
-              ├── on release branch → git push directly
-              └── on feature branch → push + create PR
-                   ├── ci_configured: true  → spawn ci-health-worker (sonnet)
-                   │    ├── healthy/degraded → enable auto-merge (squash), CI must pass
-                   │    └── broken → skip auto-merge, surface as P2
-                   └── ci_configured: false → warn, no auto-merge
-           → run E2E (if applicable)
-              ├── any tier fails? → fix, re-run from simplify-worker
-              └── ALL PASS        → DEPLOY (if applicable)
-                                     ├── deploy fails? → report, do not retry auth
-                                     └── deploy OK     → PUSH: bump → commit → push → tag (CI publishes)
-                                                              └── CI green? → proceed to RETRO
-                                                                   └── CI red?  → fix workflow, re-push tag
-```
+| Gate | Condition | Pass | Fail |
+|------|-----------|------|------|
+| SIMPLIFY | simplify-worker review (sonnet) | MERGE (if code changed) | Fix issues, re-run |
+| MERGE | On release_branch | `git push` directly | — |
+| MERGE | On feature branch | Push + create PR | — |
+| MERGE (CI) | `ci_configured: true` | Spawn ci-health-worker (sonnet) → healthy/degraded: auto-merge (squash), broken: skip auto-merge | — |
+| MERGE (no CI) | `ci_configured: false` | Warn, no auto-merge | — |
+| E2E | `e2e_scripts` non-empty | DEPLOY (if applicable) | Fix, re-run from SIMPLIFY |
+| DEPLOY | `remote_hosts` / `deploy_script` set | PUSH | Report failure, do not retry auth |
+| PUSH | `publish_via` set | Bump → commit → push → tag (CI publishes) | — |
+| PUSH (verify) | CI after tag push | Green → RETRO | Red → fix workflow, re-push tag |
 
 A push that bypasses review is a broken release. Treat E2E and DEPLOY
 with the same discipline if the project has them.
