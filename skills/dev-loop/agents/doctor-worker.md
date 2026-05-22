@@ -1,6 +1,6 @@
 ---
 name: doctor-worker
-description: Use this agent when you need a dev-loop dependency drift check — reading skills/dev-loop/dependencies.yaml, probing installation paths for each external skill/agent reference, and emitting a structured JSON health classification. Typical triggers include dev-loop REFRESH step 0 dependency probe (every cycle) and setup-dev-loop install-hint generation. See "When to invoke" in the agent body.
+description: Use this agent when you need a dev-loop dependency drift check and auto-compact firing count probe — reading skills/dev-loop/dependencies.yaml plus the current session's ~/.claude/projects/<slug>/<uuid>.jsonl, then emitting a structured JSON health classification. Typical triggers include dev-loop REFRESH step 7 dependency + context-pressure probe (every cycle) and setup-dev-loop install-hint generation. See "When to invoke" in the agent body.
 model: sonnet
 color: yellow
 tools:
@@ -33,6 +33,10 @@ agent does not check).
 
 ## Probe algorithm
 
+This worker performs **two probes** per invocation and returns a combined JSON:
+
+### Probe 1 — dependency drift (primary)
+
 1. Read the YAML manifest. Extract two lists: `required[]` and `optional[]`.
 
 2. For each entry, compute candidate installation paths based on `kind`:
@@ -62,6 +66,37 @@ agent does not check).
    - `degraded` if `required` all present but any `optional[*].status == missing`
    - `healthy` otherwise
 
+### Probe 2 — auto-compact firing count (current session)
+
+The Claude Code harness emits `"isCompactSummary":true` markers in its session
+transcript when auto-compact fires. dev-loop reads this to surface context
+pressure that the controller cannot otherwise observe.
+
+1. Compute the slugged project path: take `$PWD` (or `repo_root` if passed),
+   replace every `/` with `-`. Example:
+   `/Users/karlchow/Desktop/code/agent-skills` → `-Users-karlchow-Desktop-code-agent-skills`.
+
+2. Resolve the project sessions dir: `~/.claude/projects/<slug>/`.
+   If it doesn't exist → return `compact_count: null, compact_probe_error: "no project session dir"`.
+
+3. Find the current session jsonl: newest file by mtime matching `*.jsonl`
+   in that dir. Bash:
+   `ls -t ~/.claude/projects/<slug>/*.jsonl 2>/dev/null | head -1`
+   If empty → `compact_count: null, compact_probe_error: "no session jsonl found"`.
+
+4. Count compaction events:
+   `grep -c '"isCompactSummary":true' <jsonl-path>`
+   Trim whitespace; treat empty / non-numeric output as `0`.
+
+5. Capture both `compact_count` (integer) and `session_jsonl_path` (string) in
+   the output for caller visibility.
+
+### Probe 3 — overall status combination
+
+Final `status` field reflects probe 1's classification (`healthy | degraded | broken`).
+Probe 2 is purely informational — it doesn't modify probe 1's status. The caller
+applies its own thresholds against `compact_count`.
+
 5. Emit JSON to stdout. No additional commentary, no markdown, no callouts.
 
 ## Output schema
@@ -77,8 +112,16 @@ agent does not check).
   ],
   "present_count": 22,
   "missing_count": 3,
-  "manifest_path": "skills/dev-loop/dependencies.yaml"
+  "manifest_path": "skills/dev-loop/dependencies.yaml",
+  "compact_count": 0,
+  "session_jsonl_path": "/Users/karlchow/.claude/projects/-Users-karlchow-Desktop-code-agent-skills/88f00a89-df84-46c6-bd07-091998380377.jsonl"
 }
+```
+
+When the compact probe fails (no session dir, no jsonl, grep error), substitute:
+```json
+"compact_count": null,
+"compact_probe_error": "no session jsonl found in ~/.claude/projects/<slug>/"
 ```
 
 ## Caller contract

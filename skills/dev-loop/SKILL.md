@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.13.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.13.0: remove /compact + /clear references — Claude Code controller cannot invoke either (user-only slash commands); auto-compact is harness-driven. Step 15 COMPACT deleted; Hard Rule 10 deleted; rules 11-22 renumbered to 10-21. v1.12.0: dep-drift detector — doctor-worker probes dependencies.yaml at REFRESH; required-missing blocks, optional-missing warns + DEP_DRIFT session var; wrapper-agent pattern documented. v1.11.x: G-L runtime compression; IDLE research subagent_type fix. Pass `high` for aggressive mode.'
+version: "1.14.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.14.0: doctor-worker now also probes ~/.claude/projects/<slug>/<uuid>.jsonl for isCompactSummary:true markers, returns compact_count; REFRESH thresholds (1=note, 2=stronger warn, 3=refuse) surface context-pressure; AUDIT step 13 surfaces Claude Code built-in Auto-Memory alongside claude-md-improver. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. v1.11.x: G-L runtime + research subagent_type. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -447,23 +447,33 @@ prd_disciplines:
    If `query_vault` not in BACKEND_CAPS, skip (no vault transcripts
    directory to scan).
 
-7. **Dependency doctor** — spawn `dev-loop:doctor-worker` (sonnet) to probe
-   external skill/agent references against installed paths. Skip when
-   `SKIP_DOCTOR=true` env var is set (escape hatch).
+7. **Dependency doctor + compact-pressure probe** — spawn
+   `dev-loop:doctor-worker` (sonnet). The worker runs two probes per call:
+   (a) probe `dependencies.yaml` installation paths, (b) probe the current
+   session's `~/.claude/projects/<slug>/<uuid>.jsonl` for
+   `"isCompactSummary":true` markers (auto-compact firings the harness
+   recorded). Skip when `SKIP_DOCTOR=true` env var is set.
 
    ```
-   Agent(description: "Dev-loop dep doctor", subagent_type: "dev-loop:doctor-worker", model: "sonnet", prompt: "Probe skills/dev-loop/dependencies.yaml. Report JSON: status (healthy|degraded|broken), missing_required[], missing_optional[].")
+   Agent(description: "Dev-loop dep + compact doctor", subagent_type: "dev-loop:doctor-worker", model: "sonnet", prompt: "Probe skills/dev-loop/dependencies.yaml AND auto-compact count for the current session. Report JSON with status, missing_required[], missing_optional[], compact_count, session_jsonl_path.")
    ```
 
-   Behavior on result:
-   - `broken` (any required dep missing) → **BLOCK the cycle.** Print each
-     missing required ref with install hint (e.g., "Install skillwiki:
-     `npm install -g skillwiki`"; "Install superpowers plugin via
-     `/plugin add ...`"). Do NOT proceed.
-   - `degraded` (required present, some optional missing) → warn once per
-     session per missing optional ref + its documented fallback. Store the
-     missing_optional set as `DEP_DRIFT` session variable.
-   - `healthy` → proceed silently. `DEP_DRIFT = {}`.
+   **Behavior on dependency status:**
+   - `broken` → BLOCK the cycle. Print missing required refs + install hints.
+   - `degraded` → warn once per missing optional ref; store `DEP_DRIFT` set.
+   - `healthy` → proceed.
+
+   **Behavior on `compact_count`:**
+   - `0` → silent (full context).
+   - `1` → one-line note: "Auto-compact has fired once this session. Earlier
+     observations may have lost detail; consider /clear at next natural
+     breakpoint."
+   - `2` → stronger warning: recommend ending this session after the current
+     cycle completes.
+   - `>= 3` → refuse to start the cycle without explicit user confirmation:
+     "Auto-compact has fired 3+ times — significant context loss. Start a
+     fresh session for reliable multi-step work."
+   - `null` (probe error) → log the error; do not block.
 
    Steps depending on optional capabilities (BROWSER-VERIFY 6a, GRILL 2b,
    IDLE step 4.5 deep-research, SAVE step 7 crystallize, AUDIT step 13,
@@ -914,7 +924,7 @@ but preserves the distillation intent.
 If a retro flagged `WorkflowShift?: yes`, note it in
 `compound.md` for future reference when a vault becomes available.
 
-### 13. AUDIT — `claude-md-management:claude-md-improver` (conditional, every 3 cycles)
+### 13. AUDIT — `claude-md-management:claude-md-improver` + auto-memory note (conditional, every 3 cycles)
 
 Run ONLY if any of:
 - Three cycles have completed since the last AUDIT run.
@@ -923,6 +933,24 @@ Run ONLY if any of:
 Skip otherwise. Running every cycle creates churn-y diffs and noise.
 The 3-cycle cadence aligns with DISTILL so consolidation happens in one
 phase.
+
+**Two complementary hygiene systems are now active per cycle:**
+
+1. **`claude-md-management:claude-md-improver`** — audits the project's
+   `CLAUDE.md` file. dev-loop invokes this skill at the cadence above.
+
+2. **Claude Code built-in Auto-Memory** — the harness maintains
+   `~/.claude/projects/<slug>/memory/MEMORY.md` per the user's CLAUDE.md
+   auto-memory instructions (user/feedback/project/reference entries).
+   The dev-loop controller does NOT invoke this — it's harness-managed
+   based on the user's auto-memory directives. dev-loop's role is to
+   *surface* the fact at AUDIT time: remind the user that a second
+   memory layer exists and may benefit from session-end review,
+   especially if recent cycles introduced new preferences or constraints.
+
+If `DEP_DRIFT` includes `claude-md-management:claude-md-improver`, skip
+its invocation and apply the documented fallback (skip AUDIT step;
+CLAUDE.md updates remain manual). The auto-memory surfacing still happens.
 
 ### 14. VERIFY — provenance integrity (conditional, every 3 cycles)
 
