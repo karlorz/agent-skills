@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.12.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.12.0: dep-drift detector — REFRESH spawns doctor-worker (sonnet) to probe dependencies.yaml; block on required-missing, warn + DEP_DRIFT session var on optional-missing; wrapper-agent pattern documented for skill-as-subagent adapters. v1.11.2: IDLE research Agent() declares subagent_type. v1.11.1: compressed Sections G-L runtime blocks. v1.11.0: Sections G-L schemas; step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research. Pass `high` for aggressive mode.'
+version: "1.13.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.13.0: remove /compact + /clear references — Claude Code controller cannot invoke either (user-only slash commands); auto-compact is harness-driven. Step 15 COMPACT deleted; Hard Rule 10 deleted; rules 11-22 renumbered to 10-21. v1.12.0: dep-drift detector — doctor-worker probes dependencies.yaml at REFRESH; required-missing blocks, optional-missing warns + DEP_DRIFT session var; wrapper-agent pattern documented. v1.11.x: G-L runtime compression; IDLE research subagent_type fix. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -26,11 +26,10 @@ autodiscovers conventions or asks the user to bootstrap one.
   exit with a one-line status — do not invent work.
 - **Resumable.** If a previous cycle left a work item mid-step, resume
   at the next unfinished step rather than restarting.
-- **Never `/clear` during a loop session.** It destroys cumulative
-  learning, retro state, and resume hints. `/clear` is a session-end
-  action only.
-- **`/compact` is allowed only at the COMPACT step** per the documented
-  thresholds.
+- **Context management is harness-driven.** Claude Code auto-fires
+  `/compact` at the context limit; the dev-loop controller cannot invoke
+  `/compact` or `/clear` (they are user-only slash commands). Do not
+  assume programmatic context management is available.
 
 ## Intensity Level
 
@@ -148,7 +147,7 @@ The current settings.json at `~/.claude/settings.json` has `"CLAUDE_CODE_SUBAGEN
 | PRD | Pluggable via `prd_layer` config — default `superpowers`, also `codestable`, `tdd`, `manual`, `none` | Brainstorm, spec, plan, execute, review |
 | Knowledge | Pluggable via `knowledge_layer` config — default `skillwiki`, also `none` | Ingest, validate, query, crystallize, distill, decide, lint, audit |
 | Quality | `simplify-worker` agent (model: sonnet, spawned inline) | Pre-push code review gate |
-| Hygiene | `claude-md-management:claude-md-improver`, `/compact` | Long-session context maintenance |
+| Hygiene | `claude-md-management:claude-md-improver` | Long-session context maintenance |
 | Interview | Pluggable via `interview` config — default `native`, optional `grill-with-docs` / `grill-me` | Setup bootstrap + per-work-item grilling |
 
 The knowledge layer is pluggable via `knowledge_layer` in the project config.
@@ -278,11 +277,8 @@ prd_disciplines:
 │ 13. AUDIT     claude-md-improver → CLAUDE.md updates        │
 │ 14. VERIFY    audit_vault cap → provenance integrity       │
 ├─────────────────────────────────────────────────────────────┤
-│ POSTLUDE — context hygiene (conditional)                    │
-│ 15. COMPACT   /compact if context >70% or 5+ cycles in      │
-├─────────────────────────────────────────────────────────────┤
 │ IDLE DISCOVERY (when CORE finds no claimable work)          │
-│  Skip to POSTLUDE steps 11–15 regardless of cadence.        │
+│  Skip to POSTLUDE steps 11–14 regardless of cadence.        │
 │  Then run maintenance based on BACKEND_CAPS:               │
 │  - lint_vault cap: wiki-lint/audit/crystallize/distill     │
 │  - no lint_vault: git gc, prune branches, project lint     │
@@ -942,15 +938,6 @@ spec.md, plan.md (or inline-justified skip), and retro.md. Flag
 incomplete work items. Quick structural check — no provenance to verify
 without a vault.
 
-### 15. COMPACT — `/compact` (conditional, context-driven)
-
-Run ONLY if any of:
-- Context window utilization is above ~70%.
-- Five or more cycles have run in the current session.
-- The session has crossed the daily-end checkpoint.
-
-`/clear` remains forbidden mid-session.
-
 ## Idle Discovery (when CORE finds no claimable work)
 
 When QUERY returns no claimable work and nothing is in progress, the
@@ -1246,52 +1233,51 @@ stale local state:
    proj-work redirect fails, use `wiki-ingest` manually. When
    `query_vault` not in BACKEND_CAPS: create the file locally in the
    work-item directory instead.
-10. **`/clear` is session-end only.** `/compact` is the in-loop tool.
-11. **Consolidation is every 3 cycles, not per-cycle.** DISTILL, AUDIT,
+10. **Consolidation is every 3 cycles, not per-cycle.** DISTILL, AUDIT,
     VERIFY share the 3-cycle cadence and run as a single phase.
-12. **Tier 1 is project, Tier 2 is global.** Project retros stay in
+11. **Tier 1 is project, Tier 2 is global.** Project retros stay in
     `projects/{slug}/`. Generalized patterns lift to `concepts/` only
     via DISTILL.
-13. **Publishing follows config.** `publish_via: ci-tag-trigger` is the
+12. **Publishing follows config.** `publish_via: ci-tag-trigger` is the
     safe default. Local `npm publish` prompts for auth and breaks
     `/loop` idempotency.
-14. **Idle cycles run maintenance.** When CORE finds no claimable work,
+13. **Idle cycles run maintenance.** When CORE finds no claimable work,
     run consolidation and maintenance instead of exiting idle. Never
     waste a cycle. When `lint_vault` in BACKEND_CAPS: run skillwiki
     maintenance skills. Otherwise: run git-based housekeeping.
-15. **Counts are not a contract.** E2E success is `exit 0`, not a magic
+14. **Counts are not a contract.** E2E success is `exit 0`, not a magic
     number of assertions. Discover counts at cycle start; never
     hardcode them in this skill.
-16. **Fix friction in-cycle.** When a retro identifies a code-fixable
+15. **Fix friction in-cycle.** When a retro identifies a code-fixable
     friction (e.g., lint --fix creating duplicates, missing schema),
     implement the fix in the same cycle rather than filing it as
     backlog. Backlog is for deferred decisions, not for known code
     fixes. Filing a known fix as backlog and re-discovering it in
     future cycles is waste.
-17. **Verify CI after push.** After PUSH (step 10), check CI status
+16. **Verify CI after push.** After PUSH (step 10), check CI status
     with `gh run list --limit 1` and `gh run watch` if in-progress.
     Do NOT proceed to RETRO while CI is failing. If CI fails, inspect
     `gh run view <id> --log-failed`, fix the workflow, and re-push
     the tag.
-18. **Use local CLI, not global** when `lint_vault` in BACKEND_CAPS.
+17. **Use local CLI, not global** when `lint_vault` in BACKEND_CAPS.
     When the project has a local build of skillwiki (or a
     `cli_entry_override` in config), prefer it over the globally
     installed `skillwiki` binary. A stale global version produces false
     lint warnings and missing schema detections. Use `npx skillwiki` or
     the config override, not `skillwiki` directly. When `lint_vault`
     not in BACKEND_CAPS: not applicable (no skillwiki binary needed).
-19. **Respect `BACKEND_CAPS`.** Each step checks capability membership
+18. **Respect `BACKEND_CAPS`.** Each step checks capability membership
     before invoking backend-specific operations. When a capability is
     absent, use the documented git-based alternative or document why
     the step is intentionally skipped. Never silently fail — the user
     must see which steps were skipped and why. When new backends are
     added, they declare capabilities in the config; steps pick them
     up automatically.
-20. **Block on skill-source drift.** If REFRESH detects that the cached
+19. **Block on skill-source drift.** If REFRESH detects that the cached
     SKILL.md differs from the source but the user hasn't reloaded
     plugins, block the cycle. Running stale skill logic silently is
     worse than stopping and asking the user to `/reload-plugins`.
-21. **Execution subagents always run on sonnet.** When `subagent_dispatch`
+20. **Execution subagents always run on sonnet.** When `subagent_dispatch`
     in PRD_CAPS, every subagent spawned during EXECUTE (implementer,
     spec reviewer, code quality reviewer) must include
     `model: "sonnet"`. The superpowers:subagent-driven-development
@@ -1299,7 +1285,7 @@ stale local state:
     roles benefit from the parent model. If `CLAUDE_CODE_SUBAGENT_MODEL`
     is set to a non-empty value, it globally overrides per-agent model
     parameters — it must remain empty (`""`) for this rule to work.
-22. **MERGE commits code, then creates PRs or pushes directly.** The
+21. **MERGE commits code, then creates PRs or pushes directly.** The
     MERGE step always commits code changes (regardless of branch), then
     either creates a PR (feature branch) or pushes directly (release
     branch). It never force-pushes or directly merges a feature branch
