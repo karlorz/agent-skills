@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .claude/settings.local.json
+.claude/scheduled_tasks.json
+.claude/dev-loop.config.md
 skills/playwright-cli/.playwright-cli/
 logs/
-.claude/scheduled_tasks.json
