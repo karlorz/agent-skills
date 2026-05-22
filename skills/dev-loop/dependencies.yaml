@@ -1,0 +1,165 @@
+# dev-loop external dependency manifest
+# Consumed by dev-loop:doctor-worker at REFRESH and during setup-dev-loop.
+# See SKILL.md "Wrapper Agents for Skill-as-Subagent Adapters" for the
+# adapter pattern when a third-party skill needs subagent isolation.
+
+required:
+  - kind: skill
+    ref: skillwiki:proj-work
+    capability: create_work_item
+    used_by: ["WORK step 2"]
+    # no fallback — blocks cycle
+
+  - kind: skill
+    ref: skillwiki:wiki-query
+    capability: query_vault
+    used_by: ["QUERY step 1"]
+    # required when knowledge_layer=skillwiki; gated by BACKEND_CAPS
+
+optional:
+  # --- PRD layer (superpowers) ---
+  - kind: skill
+    ref: superpowers:brainstorming
+    capability: brainstorm
+    used_by: ["SPEC step 3"]
+    fallback: "inline minimal spec from QUERY results + work item description"
+
+  - kind: skill
+    ref: superpowers:writing-plans
+    capability: plan
+    used_by: ["PLAN step 4"]
+    fallback: "inline plan derived from spec"
+
+  - kind: skill
+    ref: superpowers:subagent-driven-development
+    capability: execute_with_subagent_dispatch
+    used_by: ["EXECUTE step 5"]
+    fallback: "inline execute, no subagent dispatch"
+
+  - kind: skill
+    ref: superpowers:test-driven-development
+    capability: tdd_discipline
+    used_by: ["EXECUTE step 5 (when prd_disciplines declares it)"]
+    fallback: "advisory only; tests written without red-green-refactor discipline"
+
+  - kind: skill
+    ref: superpowers:requesting-code-review
+    capability: review (tdd pipeline)
+    used_by: ["REVIEW step 6 (tdd-first pipeline)"]
+    fallback: "fall back to dev-loop:simplify-worker"
+
+  - kind: skill
+    ref: superpowers:systematic-debugging
+    capability: reactive_debugging
+    used_by: ["EXECUTE step 5 on failure (when discipline declares it)"]
+    fallback: "inline error inspection, no systematic debugging discipline"
+
+  # --- Knowledge layer (skillwiki — extra capabilities beyond required) ---
+  - kind: skill
+    ref: skillwiki:wiki-crystallize
+    capability: crystallize
+    used_by: ["SAVE step 7", "IDLE maintenance"]
+    fallback: "write session insights to work-item insights.md"
+
+  - kind: skill
+    ref: skillwiki:wiki-lint
+    capability: lint_vault
+    used_by: ["IDLE maintenance"]
+    fallback: "skip vault lint; run git gc / project lint instead"
+
+  - kind: skill
+    ref: skillwiki:wiki-audit
+    capability: audit_vault
+    used_by: ["VERIFY step 14", "IDLE maintenance"]
+    fallback: "verify work-item directory completeness instead of vault provenance"
+
+  - kind: skill
+    ref: skillwiki:proj-distill
+    capability: distill
+    used_by: ["DISTILL step 12"]
+    fallback: "grep local retros for recurring patterns into compound.md"
+
+  - kind: skill
+    ref: skillwiki:proj-decide
+    capability: adr
+    used_by: ["DISTILL step 12 on WorkflowShift?"]
+    fallback: "append decision note to local adrs.md"
+
+  - kind: skill
+    ref: skillwiki:wiki-add-task
+    capability: ad_hoc_capture
+    used_by: ["IDLE step 4.5", "retro auto-capture"]
+    fallback: "append to .claude/dev-loop-work/captures.md"
+
+  - kind: skill
+    ref: skillwiki:wiki-ingest
+    capability: source_ingest
+    used_by: ["N9 reingest protocol"]
+    fallback: "create raw file manually"
+
+  - kind: skill
+    ref: skillwiki:wiki-archive
+    capability: archive
+    used_by: ["N9 content drift handling", "cycle completion cleanup"]
+    fallback: "skip archive; leave stale raw files in place"
+
+  - kind: skill
+    ref: skillwiki:proj-init
+    capability: project_workspace_bootstrap
+    used_by: ["Bootstrap Mode step B"]
+    fallback: "skip vault project init; use git-local work-item dirs"
+
+  # --- Interview layer ---
+  - kind: skill
+    ref: grill-with-docs
+    capability: setup_glossary + work_item_interview_upgrade
+    used_by: ["setup-dev-loop Section D", "GRILL step 2b"]
+    fallback: "native 3-question interview (built-in)"
+
+  - kind: skill
+    ref: grill-me
+    capability: work_item_interview_upgrade
+    used_by: ["GRILL step 2b"]
+    fallback: "native 3-question interview (built-in)"
+
+  # --- Quality / hygiene ---
+  - kind: skill
+    ref: claude-md-management:claude-md-improver
+    capability: claude_md_audit
+    used_by: ["AUDIT step 13"]
+    fallback: "skip AUDIT step; CLAUDE.md updates remain manual"
+
+  # --- Research / browser ---
+  - kind: skill
+    ref: deep-research:deep-research
+    capability: deep_research
+    used_by: ["IDLE step 4.5"]
+    fallback: "skip IDLE deep-research entirely"
+
+  - kind: agent
+    ref: playwright-cli:browser-worker
+    capability: browser_verify
+    used_by: ["BROWSER-VERIFY step 6a"]
+    fallback: "skip step 6a; rely on E2E fallback command if configured"
+
+  # --- dev-loop self-references (always present when dev-loop loaded) ---
+  - kind: agent
+    ref: dev-loop:simplify-worker
+    capability: code_review_gate
+    used_by: ["SIMPLIFY step 6", "Pre-push gate"]
+    fallback: "manual code review"
+    self: true
+
+  - kind: agent
+    ref: dev-loop:ci-health-worker
+    capability: ci_health_check
+    used_by: ["MERGE step 6b CI gate", "IDLE step 3b"]
+    fallback: "inline gh api fallback (less structured health classification)"
+    self: true
+
+  - kind: agent
+    ref: dev-loop:research-worker
+    capability: research_scan
+    used_by: ["IDLE step 4"]
+    fallback: "inline Skill('dev-loop:research') invocation in parent session"
+    self: true

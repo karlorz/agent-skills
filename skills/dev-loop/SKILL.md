@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.11.2"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.11.2: fix — IDLE research Agent() now declares subagent_type: dev-loop:research-worker (was falling back to general-purpose). v1.11.1: compressed Sections G-L runtime blocks (single source of truth = setup/SKILL.md). v1.11.0: Sections G-L schemas; step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research; first-match-wins discipline resolution. Pass `high` for aggressive mode.'
+version: "1.12.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.12.0: dep-drift detector — REFRESH spawns doctor-worker (sonnet) to probe dependencies.yaml; block on required-missing, warn + DEP_DRIFT session var on optional-missing; wrapper-agent pattern documented for skill-as-subagent adapters. v1.11.2: IDLE research Agent() declares subagent_type. v1.11.1: compressed Sections G-L runtime blocks. v1.11.0: Sections G-L schemas; step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -451,6 +451,31 @@ prd_disciplines:
    If `query_vault` not in BACKEND_CAPS, skip (no vault transcripts
    directory to scan).
 
+7. **Dependency doctor** — spawn `dev-loop:doctor-worker` (sonnet) to probe
+   external skill/agent references against installed paths. Skip when
+   `SKIP_DOCTOR=true` env var is set (escape hatch).
+
+   ```
+   Agent(description: "Dev-loop dep doctor", subagent_type: "dev-loop:doctor-worker", model: "sonnet", prompt: "Probe skills/dev-loop/dependencies.yaml. Report JSON: status (healthy|degraded|broken), missing_required[], missing_optional[].")
+   ```
+
+   Behavior on result:
+   - `broken` (any required dep missing) → **BLOCK the cycle.** Print each
+     missing required ref with install hint (e.g., "Install skillwiki:
+     `npm install -g skillwiki`"; "Install superpowers plugin via
+     `/plugin add ...`"). Do NOT proceed.
+   - `degraded` (required present, some optional missing) → warn once per
+     session per missing optional ref + its documented fallback. Store the
+     missing_optional set as `DEP_DRIFT` session variable.
+   - `healthy` → proceed silently. `DEP_DRIFT = {}`.
+
+   Steps depending on optional capabilities (BROWSER-VERIFY 6a, GRILL 2b,
+   IDLE step 4.5 deep-research, SAVE step 7 crystallize, AUDIT step 13,
+   N9 archive) check `DEP_DRIFT` membership before invoking the external
+   ref and apply the documented fallback if drifted.
+
+   Schema: `dependencies.yaml`. Probe logic: `agents/doctor-worker.md`.
+
 ### 1. QUERY — context check (mandatory)
 
 **If `query_vault` in BACKEND_CAPS:**
@@ -536,8 +561,10 @@ content.
 
 **Backend resolution (from REFRESH):**
 - `native` → invoke inline AskUserQuestion (see Interview Engine section)
-- `grill-with-docs` → invoke `Skill("grill-with-docs")` in main session
-- `grill-me` → invoke `Skill("grill-me")` in main session
+- `grill-with-docs` → invoke `Skill("grill-with-docs")` in main session.
+  If `grill-with-docs` is in `DEP_DRIFT`, fall back to `native`.
+- `grill-me` → invoke `Skill("grill-me")` in main session.
+  If `grill-me` is in `DEP_DRIFT`, fall back to `native`.
 
 **IMPORTANT**: GRILL MUST run inline in the main session. Do NOT spawn a subagent
 for this step. AskUserQuestion is broken in subagents. The Skill tool works in the
@@ -662,6 +689,9 @@ the work item itself).
 
 **Skip if** `browser_verification` is absent, `enabled: false`, or no changed
 files match `browser_verification.trigger` globs.
+
+**Skip if** `playwright-cli:browser-worker` is in `DEP_DRIFT` — apply
+documented fallback (skip step entirely, or run `e2e_fallback` if configured).
 
 **When triggered:**
 1. Verify each `prerequisites` command is healthy (e.g., `curl -fsS <base_url>`).
@@ -1023,6 +1053,8 @@ instead:
 4.5. **IDLE DEEP-RESEARCH** (conditional on `idle_deep_research.enabled` AND
      research step 4 returned no P2+ findings AND cooldown allows):
    - Gate on `query_vault` in BACKEND_CAPS — skip if no vault.
+   - **Gate on `deep-research:deep-research` not in `DEP_DRIFT`** — skip
+     entirely if drifted (no fallback available for deep research).
    - Pick next topic from `topic_seeds` (round-robin), biased toward
      `CRITICAL_PATHS.*.code` matches.
    - Skip if a vault query page for the topic was created within
@@ -1273,6 +1305,48 @@ stale local state:
     branch). It never force-pushes or directly merges a feature branch
     into the release branch. This preserves branch protection, CI gates,
     and review workflows.
+
+## Wrapper Agents for Skill-as-Subagent Adapters
+
+When a third-party skill needs **subagent isolation** (clean context, model
+pinning, no parent context pollution) but its owning plugin doesn't ship a
+registered agent, create a thin wrapper in `skills/dev-loop/agents/<name>.md`.
+The wrapper is registered as an agent (auto-discovered from the `agents/`
+directory) while its body delegates to the foreign skill via inline `Skill()`
+invocation.
+
+**Reference exemplar:** `agents/research.md` (name: `research-worker`,
+model: sonnet) wraps `research/SKILL.md` so IDLE step 4 can dispatch the
+scan as a subagent — keeping the parent session context clean while pinning
+the work to sonnet.
+
+**When to create a wrapper:**
+- The skill is expensive in tokens and should run isolated from parent context.
+- The skill is mechanical (search/probe/summarize) and benefits from sonnet pinning.
+- The owning plugin hasn't shipped (or won't ship) an agent registration.
+
+**Wrapper template** (~30 lines):
+
+```markdown
+---
+name: <adapter-name>-worker
+description: Wrapper that delegates to <foreign-skill> with subagent isolation. Typical triggers include ...
+model: sonnet
+tools: [Read, Bash, Grep, Glob, Write, Edit]
+---
+
+# <adapter-name>-worker
+
+Invoke `Skill("<foreign-skill>")` with the caller's prompt as argument.
+Report the skill's output verbatim. Apply caller-specified guards (read-only mode,
+budget caps) before invoking.
+```
+
+After creation, reference the wrapper in `dependencies.yaml` (kind: agent,
+`self: true`) and in any SKILL.md call sites via `subagent_type: "dev-loop:<adapter-name>-worker"`.
+
+Cost: one ~30-line file per adapter. Benefit: full subagent isolation
+without waiting on upstream cooperation.
 
 ## Obsidian Integration (requires `query_vault` in BACKEND_CAPS)
 

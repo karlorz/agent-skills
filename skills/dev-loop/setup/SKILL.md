@@ -31,6 +31,21 @@ Look at the current repo to understand its starting state:
 - Installed skills — `ls ~/.claude/skills/` for available PRD backends
 - Installed interview backends — check for `grill-with-docs`, `grill-me` under `~/.claude/skills/`
 - `skillwiki path` — is a vault configured?
+- **Dependency doctor** — spawn `dev-loop:doctor-worker` (sonnet) to enumerate
+  missing optional plugins:
+
+  ```
+  Agent(description: "Setup dep doctor", subagent_type: "dev-loop:doctor-worker", model: "sonnet", prompt: "Probe skills/dev-loop/dependencies.yaml. Report JSON.")
+  ```
+
+  Use the `missing_optional[]` output to drive install hints in Sections D
+  (grill-with-docs), E (work-item interview backends), H (web search MCP for
+  fact-check), I (deep-research), and J (playwright-cli). Each install hint
+  pairs the missing ref with its documented fallback so users can decide:
+  install for richer behavior, or accept the fallback.
+
+  If `status: broken` (any required dep missing), abort setup with the
+  required install commands — dev-loop can't run without them.
 
 ### 2. Present findings and ask
 
