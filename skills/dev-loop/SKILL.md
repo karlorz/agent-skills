@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-version: "1.16.3"
+version: "1.16.4"
 description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.15.0: pluggable multi-backend code review — CODE_REVIEW_BACKENDS resolved at REFRESH from new code_review config block; REVIEW step 6 spawns simplify-worker (always) + optional codex-review-worker (per-intensity opt-in) in parallel; new wrapper agent dev-loop:codex-review-worker delegates to codex:codex-rescue. v1.14.0: auto-compact firing probe via isCompactSummary:true markers; AUDIT auto-memory surfacing. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
@@ -1048,7 +1048,7 @@ If a retro flagged `WorkflowShift?: yes`, note it in `compound.md`
 **in the same cycle** for future reference when a vault becomes
 available — do not defer to a later DISTILL run.
 
-### 13. AUDIT — `claude-md-management:claude-md-improver` + auto-memory note (conditional, every 3 cycles)
+### 13. AUDIT — `claude-md-management:claude-md-improver` + auto-memory note (conditional — every 3 cycles OR on `ClaudeMd?: yes`)
 
 Run ONLY if any of:
 - Three cycles have completed since the last AUDIT run.
