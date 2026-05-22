@@ -415,13 +415,42 @@ prd_disciplines:
 
 > Explainer: dev-loop's REVIEW step always runs `simplify-worker` (sonnet) as the base code reviewer. Optionally, a second reviewer can run in parallel — `codex:codex-rescue` via the `dev-loop:codex-review-worker` wrapper — to provide an independent out-of-distribution second opinion. Two reviewers, two independent reads, no auto-reconciliation. Opt-in per intensity (normal / high) to avoid cost surprises.
 
-Detect: probe whether the Codex plugin is installed by checking for
-`~/.claude/plugins/cache/openai-codex/codex/*/agents/codex-rescue.md` OR
-`~/.claude/agents/codex-rescue.md`. The setup step's doctor-worker run
-(Section 1 Explore) already reports `codex:codex-rescue` presence — reuse that.
+Detect: probe whether the Codex **runtime** is usable via the companion's
+own self-check (not a file-existence guess).
 
-If Codex is NOT installed → skip this section with install hint:
-"Install the Codex plugin to enable Codex code review: `/plugin add openai-codex` (or check the marketplace for the current install path). For now, dev-loop will run simplify-worker only."
+1. Glob `~/.claude/plugins/cache/*/codex/*/scripts/codex-companion.mjs` to
+   locate the companion script. If zero matches, treat as not-installed
+   and skip Section M with the install hint below.
+2. Run `node <companion-path> setup --json`. Parse the JSON. If the
+   command fails (non-zero exit, missing `node`, permissions error,
+   etc.), treat as not-installed per step 5 below — do not crash the
+   setup flow.
+3. Treat as **Codex-available** iff `ready === true` AND
+   `codex.available === true`.
+4. If `ready === false` AND `auth.loggedIn === false`, surface the
+   auth-specific hint instead of the generic install hint: "Codex
+   installed but not authenticated — run `codex login` then re-run
+   `/setup-dev-loop`."
+5. Any other failure (JSON parse error, missing fields, non-zero exit) →
+   treat as not-installed and skip Section M.
+
+Why runtime probe: filesystem checks for `agents/codex-rescue.md` give
+false negatives when the agent file isn't cached locally even though
+`codex-cli` is installed and authenticated. The companion's
+`setup --json` output is the authoritative signal — same classification
+the Codex runtime uses when accepting code-review work.
+
+The doctor-worker filesystem probe (Section 1 Explore / REFRESH step 7)
+still drives `DEP_DRIFT` for generic dependency health. Section M uses
+the runtime probe because it answers a stricter question ("is the
+runtime usable?") than doctor-worker's generic question ("is the agent
+file present?"). Do not reuse doctor-worker's filesystem result here.
+
+If Codex is NOT installed (no companion script found) → skip this
+section with install hint: "Install the Codex plugin to enable Codex
+code review: `/plugin add openai-codex` (or check the marketplace for
+the current install path). For now, dev-loop will run simplify-worker
+only."
 
 If Codex IS installed → present 2 toggles:
 
