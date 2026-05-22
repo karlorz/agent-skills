@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.11.1"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.11.1: doc-only — compressed Sections G-L runtime blocks (single source of truth = setup/SKILL.md). v1.11.0: Sections G-L schemas (critical_paths, fact_check, idle_deep_research, browser_verification, reactive_debugging, discipline path scoping); step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research; first-match-wins discipline resolution. Pass `high` for aggressive mode.'
+version: "1.11.2"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.11.2: fix — IDLE research Agent() now declares subagent_type: dev-loop:research-worker (was falling back to general-purpose). v1.11.1: compressed Sections G-L runtime blocks (single source of truth = setup/SKILL.md). v1.11.0: Sections G-L schemas; step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research; first-match-wins discipline resolution. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -1010,7 +1010,7 @@ instead:
    this skill directory. Code and vault health scanning is mechanical
    analysis; Sonnet handles it at lower cost without quality loss.
    ```
-   Agent(description: "Dev-loop research", model: "sonnet", prompt: "Run research cycle with intensity: <normal|high>. BACKEND_CAPS: <caps>. VAULT_TYPES: <types>. CRITICAL_PATHS: <paths>. Scan code health and vault health per research/SKILL.md.")
+   Agent(description: "Dev-loop research", subagent_type: "dev-loop:research-worker", model: "sonnet", prompt: "Run research cycle with intensity: <normal|high>. BACKEND_CAPS: <caps>. VAULT_TYPES: <types>. CRITICAL_PATHS: <paths>. Scan code health and vault health per research/SKILL.md.")
    ```
    Pass intensity through (`normal` or `high`). Also pass
    `BACKEND_CAPS`, `VAULT_TYPES`, and `CRITICAL_PATHS` (derived from
