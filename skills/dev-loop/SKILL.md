@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-version: "1.16.2"
+version: "1.16.3"
 description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.15.0: pluggable multi-backend code review — CODE_REVIEW_BACKENDS resolved at REFRESH from new code_review config block; REVIEW step 6 spawns simplify-worker (always) + optional codex-review-worker (per-intensity opt-in) in parallel; new wrapper agent dev-loop:codex-review-worker delegates to codex:codex-rescue. v1.14.0: auto-compact firing probe via isCompactSummary:true markers; AUDIT auto-memory surfacing. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
@@ -1018,7 +1018,7 @@ Skip rules:
 Idle cycles and non-completing cycles never archive — `closes:` is a
 completion-trigger, not a per-cycle action.
 
-### 12. DISTILL — concept promotion / ADRs (conditional, every 3 cycles)
+### 12. DISTILL — concept promotion / ADRs (conditional — mixed cadence; see sub-sections)
 
 **If `distill` in BACKEND_CAPS (skillwiki path):**
 
@@ -1031,8 +1031,10 @@ recurring patterns (≥2 occurrences across cycles), and writes a vault
 concept page at `concepts/dev-loop-<slug>.md` with provenance pointing
 back to the source retros.
 
-ADR (workflow decisions) — run `skillwiki:proj-decide` if a retro this
-cycle flagged `WorkflowShift?: yes`. Writes an ADR under
+ADR (workflow decisions) — run `skillwiki:proj-decide` **in the same
+cycle that flagged it** if the retro set `WorkflowShift?: yes`. ADR
+write does NOT wait for the 3-cycle DISTILL cadence — capture while
+the context is fresh. Writes an ADR under
 `projects/{slug}/architecture/decisions/`. ADRs that generalize also
 get a corresponding concept page in the global wiki.
 
@@ -1042,8 +1044,9 @@ patterns (same ≥2 occurrence threshold). Append findings to
 `.claude/dev-loop-work/compound.md` — a persistent file that
 accumulates cross-cycle patterns. Not as rich as a vault concept page,
 but preserves the distillation intent.
-If a retro flagged `WorkflowShift?: yes`, note it in
-`compound.md` for future reference when a vault becomes available.
+If a retro flagged `WorkflowShift?: yes`, note it in `compound.md`
+**in the same cycle** for future reference when a vault becomes
+available — do not defer to a later DISTILL run.
 
 ### 13. AUDIT — `claude-md-management:claude-md-improver` + auto-memory note (conditional, every 3 cycles)
 
