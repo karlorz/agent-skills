@@ -66,6 +66,15 @@ Parse args for `high` (case-insensitive). Default: `normal`.
 
 Skip if `cli_backend` unavailable.
 
+### A0. Critical-Path Ranking Bias
+
+If `CRITICAL_PATHS` session variable is non-empty, apply ranking bias:
+- Coverage gaps in files matching `CRITICAL_PATHS.*.code` globs are
+  promoted one priority tier above their calculated score (e.g., P2 → P1).
+- This ensures hot-spot files get attention before equivalent-severity
+  findings in non-critical paths.
+- The bias applies AFTER scoring, as a post-rank adjustment.
+
 ### A1. Coverage Gaps
 - Source files in `{cli_src}/` without matching `{cli_test}/` tests
 - Missing behavioral conventions (`--human`, exit codes)
@@ -114,6 +123,22 @@ If `vault_backend`:
 - Scan `{vault}/log.md` for `Improve:` actions
 - Check `{vault}/projects/{slug}/compound/` for pending work
 - Retro actions → direct work-item candidates
+
+## Idle Deep-Research Handoff
+
+When this research agent returns **no P2+ findings** (truly idle), the
+parent dev-loop may invoke `/deep-research` per the `idle_deep_research`
+config section (see IDLE DISCOVERY step 3.5 in SKILL.md).
+
+This agent's role in the handoff:
+1. Report the idle state clearly: "Research idle — no P2+ findings."
+2. The parent loop then decides whether to invoke deep-research based
+   on `idle_deep_research.enabled`, cooldown, and daily cap.
+3. Deep-research is a separate skill invocation — this agent does NOT
+   call it directly. The handoff is at the dev-loop orchestration layer.
+
+If the research agent returns P2+ findings, deep-research is skipped —
+there's claimable work to pick up.
 
 ## Synthesize
 

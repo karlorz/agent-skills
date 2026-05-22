@@ -1,7 +1,7 @@
 {
   "name": "dev-loop",
-  "version": "1.10.4",
-  "description": "Generic single-pass PRD + skillwiki dev cycle engine. MERGE CI gate uses ci-health-worker agent (sonnet) instead of inline gh api — structured healthy/degraded/broken classification before auto-merge. IDLE CI health agent (sonnet). Execution subagents hard-wired to sonnet. Simplify-worker agent for code review gate. Pluggable interview phase (native / grill-with-docs / grill-me). /setup-dev-loop scaffolds all 6 config sections including CI setup (Section F). Pluggable knowledge backends, drift guard, project-agnostic.",
+  "version": "1.11.0",
+  "description": "Generic single-pass PRD + skillwiki dev cycle engine. MERGE CI gate uses ci-health-worker agent (sonnet) instead of inline gh api — structured healthy/degraded/broken classification before auto-merge. IDLE CI health agent (sonnet). Execution subagents hard-wired to sonnet. Simplify-worker agent for code review gate. Pluggable interview phase (native / grill-with-docs / grill-me). /setup-dev-loop scaffolds all 12 config sections (Sections A-L) including critical_paths, fact_check, idle_deep_research, browser_verification, reactive_debugging, discipline path scoping. Pluggable knowledge backends, drift guard, project-agnostic.",
   "author": {
     "name": "kalrorz"
   },

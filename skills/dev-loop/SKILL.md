@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.10.4"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. New: MERGE step with CI discovery (runtime via GitHub API or explicit config); IDLE CI health agent (sonnet); /setup-dev-loop Section F. Pass `high` for aggressive mode.'
+version: "1.11.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.11.0: Sections G-L schemas (critical_paths, fact_check, idle_deep_research, browser_verification, reactive_debugging, discipline path scoping); step 6a BROWSER-VERIFY; IDLE step 4.5 deep-research; first-match-wins discipline resolution. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -69,6 +69,7 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 4. PLAN | Parent session | inherit | Architecture design, dependency mapping — benefits from parent model |
 | 5. EXECUTE (subagents) | Implementation subagents | `sonnet` | Mechanical coding from plan — following spec, no architectural judgment |
 | 6. SIMPLIFY | simplify-worker | `sonnet` | Code review: search, compare, pattern match — integration-level judgment |
+| 6a. BROWSER-VERIFY | playwright-cli:browser-worker | `sonnet` | Browser health check — smoke routes, console errors, a11y violations |
 | 6b. MERGE | gh CLI (inline) + ci-health-worker | inline + `sonnet` | PR creation (inline) + CI health gate (ci-health-worker agent) |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
 | IDLE: CI health | ci-health-worker | `sonnet` | GitHub Actions run inspection, required-check verification — mechanical API queries |
@@ -331,7 +332,14 @@ prd_disciplines:
      present; otherwise derive defaults from `prd_layer`. Store the set
      of PRD capabilities and registered skill names as `PRD_CAPS`.
      Resolve `prd_pipeline` (default per `prd_layer`, override from config).
-     Store as `PRD_PIPELINE`. Resolve `prd_disciplines` if declared.
+     Store as `PRD_PIPELINE`. Resolve `prd_disciplines` if declared:
+     parse `include_paths` and `exclude_paths` on each discipline entry
+     (both are optional — omit for global scope). Warn if a discipline has
+     `mode: mandatory` without `include_paths`: "<skill> is mandatory
+     globally — consider scoping with include_paths." This is a warning,
+     not an error — the discipline still runs. Backwards compat: omitted
+     `include_paths` = matches all changed files (current behavior).
+     Store disciplines in priority order as `PRD_DISCIPLINES`.
      **Resolve interview backends** — parse the `interview` section from
      config. If absent → `setup_interview` and `work_item_interview` both
      absent from BACKEND_CAPS (loop runs fully automated). If present:
@@ -354,6 +362,26 @@ prd_disciplines:
        `REQUIRED_CHECKS = required_checks` list from config.
      If `ci_configured: false` or absent → `CI_DISCOVERY = none`,
      `REQUIRED_CHECKS = []`.
+     **Resolve critical_paths** — parse the `critical_paths` section from
+     config. If present, store as `CRITICAL_PATHS` session variable (dict
+     keyed by name, each with `code`, `vault`, `history_pins` sub-keys).
+     If absent or empty → `CRITICAL_PATHS = {}` (not an error — defaults to
+     equal priority for all files). Each `code` entry is a list of globs/paths
+     that the research agent and WORK step use for ranking and priority
+     escalation. Each `vault` entry is a list of concept/query page slugs
+     that QUERY biases toward.
+     **Resolve fact_check** — parse the `fact_check` section from config.
+     If `enabled: true`, validate that `web_tools.primary` resolves to an
+     installed MCP server (check available tool names). If absent, warn:
+     "fact_check enabled but web_tools.primary not found — web tier
+     disabled." Store as `FACT_CHECK_CAPS` containing:
+     - `source_order`: the priority list (always includes `local_repo`)
+     - `web_available`: bool — whether web tools are reachable
+     - `evidence_contract`: the evidence requirements
+     If `fact_check` section absent or `enabled: false` →
+     `FACT_CHECK_CAPS = {}` (no fact-checking, agents use local context).
+     Pass `FACT_CHECK_CAPS` to SPEC and PLAN steps so PRD skills know the
+     available source order and evidence requirements.
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
      reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
@@ -448,6 +476,11 @@ Search the vault (resolved from `vault` config field) for prior specs,
 plans, concepts, decisions overlapping the task. Feed results into the
 PRD skill's exploration step. Skip if `vault` is empty.
 
+**Critical-path vault bias:** If `CRITICAL_PATHS` is non-empty, include
+the slugs listed under `CRITICAL_PATHS.*.vault` as priority search terms
+in the vault query. Results matching critical-path vault pages are
+ranked above general results.
+
 **Uncited raw check (mandatory when `query_vault` in BACKEND_CAPS):** After wiki-query,
 scan for uncited raw articles that have no downstream concept page
 citations. If found, treat them as claimable work items alongside any
@@ -474,6 +507,14 @@ proj-work validates frontmatter (see its SKILL.md for required fields:
 `title`, `name`, `description`, `kind`, `status`, `priority: high|medium|low`,
 `project: "[[slug]]"` wikilink format, timestamps, provenance).
 
+**Critical-path priority escalation:** After creating the work item, check
+whether the work item description, spec, or any referenced files match a
+glob or path under `CRITICAL_PATHS.*.code`. For resuming work items
+(check for prior commits), also intersect changed files with critical
+paths. If matched, automatically set the work item's `priority: high`
+regardless of the original priority. Log the escalation: "Priority
+escalated to high — touches critical path: <name>."
+
 **If `create_work_item` not in BACKEND_CAPS (git-local path):**
 Create a local work item under `.claude/dev-loop-work/YYYY-MM-DD-{work-slug}/`
 in the project repo. Create `spec.md` and `plan.md` in that directory.
@@ -483,6 +524,10 @@ a simple YAML header with `title`, `status`, `kind`, and `created` date.
 **Gitignore:** `.claude/dev-loop-work/` contains session artifacts, not
 repo content. Ensure it's listed in `.gitignore` when running in `none`
 mode. The project-config template includes a Gitignore section for this.
+When `reactive_debugging` config is present, also ensure
+`reactive_debugging.evidence_dir` (default `.claude/dev-loop-debug/`)
+is in `.gitignore` — evidence captures are session artifacts, not repo
+content.
 
 ### 2b. GRILL — interview phase (conditional on `interview` config + ambiguity)
 
@@ -527,6 +572,17 @@ This feeds directly into the SPEC step.
 - **Neither in PRD_CAPS:** Inline spec from QUERY results + work item
   description. Output: `spec.md` (minimal).
 
+**Fact-check integration:** If `FACT_CHECK_CAPS` is non-empty, pass the
+source order and evidence contract to the invoked PRD skill. The PRD skill
+should consult sources in declared order (local_repo → context7 → vault →
+web) when writing specs that involve version-sensitive claims, API
+contracts, or deprecation notices. Also pass configured `triggers` —
+free-text patterns that, when matched in the work item description,
+force fact-checking even for otherwise simple specs. This ensures
+version claims, CVE checks, and deprecation notices always get
+fact-checked. Output specs must include a `## Sources Used` section if
+`evidence_contract.require_sources_used_section` is true.
+
 ### 4. PLAN — plan artifact (conditional on `prd_pipeline` + `PRD_CAPS`)
 
 **If `plan` step is NOT in the active pipeline template:** skip to step 5.
@@ -535,6 +591,10 @@ This feeds directly into the SPEC step.
 
 - **`plan` in PRD_CAPS:** Invoke the registered plan skill with `spec.md`.
   Output: `plan.md` at redirect path.
+  Pass `FACT_CHECK_CAPS` (source order, web available, evidence contract)
+  same as SPEC — the plan skill consults the same source order when
+  making architectural decisions about library versions, API contracts,
+  or deprecation risks.
 - **`plan` not in PRD_CAPS:** Inline plan from `spec.md`. Output:
   `plan.md` (minimal, derived from spec).
 
@@ -562,11 +622,50 @@ This feeds directly into the SPEC step.
   work item done."
 
 **Discipline injection (sub-step of EXECUTE):**
-- If any `prd_disciplines` entry has `when: execute`, pass its context
-  to the execute skill as advisory guidance.
+- **Resolution per {skill, when} group**: group `PRD_DISCIPLINES` by
+  `{skill, when}` pair. Within each group, intersect changed-files-since-WORK
+  with each entry's `include_paths` (if set), then apply `exclude_paths`
+  (if set). First-match-wins per group — walk entries in priority order,
+  stop at first match. If no `include_paths` set, matches all changed
+  files (catch-all). Different `{skill, when}` groups are independent —
+  matching one group (e.g., TDD on execute) does NOT suppress a different
+  group (e.g., security-audit on execute). Each matched group injects its
+  skill independently.
+- Changed files for fresh claimable work items: use the diff between
+  `release_branch` and current HEAD at cycle start. If no commits exist
+  yet (first cycle), scope to the files listed in the work item spec.
+- If any matching discipline has `when: execute`, pass its context
+  to the execute skill with the resolved `mode` (advisory/mandatory).
 - If execution encounters errors and any discipline has `when: failure`
-  with `mode: reactive`, interrupt EXECUTE, invoke the reactive discipline
-  (e.g., systematic-debugging), then resume.
+  with `mode: reactive`, intercept the failure before resuming:
+
+  **Reactive-debug budget (when `reactive_debugging` config is present and `enabled: true`):**
+  1. **Capture evidence**: run `reactive_debugging.evidence_capture` commands
+     with placeholder interpolation:
+     - `{evidence_dir}` → the configured `evidence_dir` path (created if
+       missing)
+     - `{cycle}` → the current cycle slug (e.g., `2026-05-22-work-slug`)
+     Create the evidence dir if it doesn't exist. The evidence dir must
+     be in `.gitignore` regardless of `knowledge_layer` — evidence
+     captures are transient session artifacts, not repo or vault content.
+  2. **Hash error signature**: extract top-3 stack frames + detected library
+     name (regex match against known frameworks: Convex, Hono, Vite, React,
+     Next.js, etc.). Compute a deterministic hash of this signature.
+  3. **Fact-check external libs**: if the stack trace contains an external
+     library name AND `reactive_debugging.fact_check_tool` is set, call the
+     tool with the error message before retrying. This catches version-
+     specific breakage.
+  4. **Retry**: invoke systematic-debugging, then re-run the failing step.
+     Up to `auto_retry_attempts` times total.
+  5. **Escalation**: if all retries exhausted AND `escalate_after` conditions
+     are met (consecutive idle cycles, same error signature), write a P1
+     finding to `raw/transcripts/` with `kind: bug` + error signature hash.
+     Future cycles dedup against this hash to prevent duplicate filings.
+
+  **Without `reactive_debugging` config (legacy behavior):**
+  Invoke the reactive discipline (e.g., systematic-debugging), then resume.
+  No retry cap, no evidence capture, no escalation — legacy unbounded
+  retry behavior.
 
 ### 6. REVIEW — code quality gate (conditional on `prd_pipeline` + `PRD_CAPS`)
 
@@ -579,6 +678,46 @@ This feeds directly into the SPEC step.
   No bypass for `mode: mandatory` disciplines.
 - **`review` not in PRD_CAPS:** Manual code review (or skip for
   vault-only work where no code was touched).
+
+**Evidence-contract gate (sub-step of REVIEW):** If `FACT_CHECK_CAPS`
+is non-empty and `evidence_contract.require_sources_used_section` is true,
+the simplify-worker checks that non-trivial SPEC/PLAN outputs include a
+`## Sources Used` section. Missing section → flag as review finding,
+require addition before proceeding. This applies only to outputs that
+consulted external sources (web search, context7, vault queries beyond
+the work item itself).
+
+### 6a. BROWSER-VERIFY — browser verification gate (conditional on `browser_verification` config)
+
+**Skip if** `browser_verification` section is absent or `enabled: false`.
+
+**Skip if** no changed files match `browser_verification.trigger` globs.
+
+**If trigger matched:**
+
+1. **Prerequisite health check** — verify that each command in
+   `browser_verification.prerequisites` is healthy (e.g.,
+   `curl -fsS <base_url> >/dev/null`). If not running, block the gate:
+   "Browser verification blocked — prerequisite <command> not healthy.
+   Start it and re-run." Do NOT proceed to MERGE until resolved.
+
+2. **Driver dispatch** — spawn `/playwright-cli` agent (model: sonnet)
+   with the configured `base_url`, `smoke_routes`, and `reviser_workflow`:
+   ```
+   Agent(description: "Browser verification", subagent_type: "playwright-cli:browser-worker", model: "sonnet", prompt: "Verify browser health at <base_url>. Smoke routes: <routes>. Reviser workflow: <steps>. Check for console errors and a11y violations. Report: pass/fail with details.")
+   ```
+
+3. **Console-error gate** — if the agent reports console errors or
+   warnings during `list_console_messages`, **fail the gate**. Return to
+   EXECUTE for fix. The merge-blocker is console errors, not snapshot diffs.
+
+4. **E2E fallback** — if `/playwright-cli` is too narrow for the change
+   (e.g., complex form interactions), run `e2e_fallback` command instead.
+   Exit code must be 0 to pass.
+
+**Gate outcome:**
+- Pass → proceed to MERGE
+- Fail → return to EXECUTE with findings, fix, re-run SIMPLIFY → BROWSER-VERIFY
 
 ### 6b. MERGE — post-cycle commit + push/PR (conditional on pipeline)
 
@@ -631,11 +770,15 @@ directly on the default branch. Report: "Changes committed and pushed to
    - If push fails (network, permissions), report and continue — do not block the cycle on merge.
 
 **Pipeline integration:**
-- `full` pipeline: MERGE after REVIEW, before SAVE
-- `tdd-first` pipeline: MERGE after REVIEW
-- `single-pass` pipeline: MERGE after REVIEW
-- `debug-only` pipeline: MERGE after EXECUTE
+- `full` pipeline: REVIEW → BROWSER-VERIFY → MERGE → SAVE
+- `tdd-first` pipeline: REVIEW → BROWSER-VERIFY → MERGE
+- `single-pass` pipeline: REVIEW → BROWSER-VERIFY → MERGE
+- `debug-only` pipeline: MERGE after EXECUTE (skip BROWSER-VERIFY)
 - `manual` pipeline: skip (user drives)
+
+BROWSER-VERIFY only runs when `browser_verification` config exists and
+changed files match trigger globs. For pipelines that skip it, MERGE
+follows REVIEW directly.
 
 **MERGE does not replace PUSH.** MERGE commits code and creates a PR (or
 pushes directly on the release branch). PUSH (step 10) handles publishing
@@ -909,14 +1052,40 @@ instead:
    this skill directory. Code and vault health scanning is mechanical
    analysis; Sonnet handles it at lower cost without quality loss.
    ```
-   Agent(description: "Dev-loop research", model: "sonnet", prompt: "Run research cycle with intensity: <normal|high>. BACKEND_CAPS: <caps>. VAULT_TYPES: <types>. Scan code health and vault health per research/SKILL.md.")
+   Agent(description: "Dev-loop research", model: "sonnet", prompt: "Run research cycle with intensity: <normal|high>. BACKEND_CAPS: <caps>. VAULT_TYPES: <types>. CRITICAL_PATHS: <paths>. Scan code health and vault health per research/SKILL.md.")
    ```
    Pass intensity through (`normal` or `high`). Also pass
-   `BACKEND_CAPS` and `VAULT_TYPES` (derived from config at REFRESH)
-   so the research agent can skip Track B when `query_vault` not in
+   `BACKEND_CAPS`, `VAULT_TYPES`, and `CRITICAL_PATHS` (derived from
+   config at REFRESH) so the research agent can apply critical-path
+   ranking bias (Track A0) and skip Track B when `query_vault` not in
    BACKEND_CAPS.
    If it returns ranked recommendations, the next dev-loop cycle picks
    up the top item via the WORK step.
+
+4.5. **IDLE DEEP-RESEARCH** (conditional on `idle_deep_research.enabled`
+     AND research agent (step 4) returned no P2+ findings AND cooldown allows):
+   - Gate on `query_vault` in BACKEND_CAPS — skip entirely if no vault
+     (needs skillwiki for `wiki-add-task` and vault output).
+   - Pick next rotating topic from `idle_deep_research.topic_seeds`
+     (round-robin), biased toward topics matching
+     `CRITICAL_PATHS.*.code` if declared.
+   - Skip the topic if the vault already has a query page for it created
+     within `skip_if_recent_query_page_exists` days.
+   - Check daily cap: if `max_per_day` reached, skip this step.
+   - Invoke `/deep-research <topic>` with declared budget limits
+     (`budget.web_searches`, `budget.deep_fetches`, `budget.context7_calls`).
+   - Extract 1-3 actionable ideas from the research output →
+     `wiki-add-task` as `kind: idea` with `p_score_default: P3`.
+   - Mark cooldown timestamp for next eligible idle cycle.
+   - Log: "Idle deep-research: researched <topic>, captured <N> ideas."
+
+   Skip this step entirely if `idle_deep_research` section is absent or
+   `enabled: false`. Also skip if research agent (step 4) returned
+   P2+ findings — there's claimable work, no need for idea-generation.
+   With `knowledge_layer: none`, the vault-based capture path is
+   unavailable — deep-research outputs go to `.claude/dev-loop-work/`
+   instead.
+
 5. **Pick up P3 work if no P2+ items exist** (normal mode). After
    research completes, if the backlog contains only P3 items, pick the
    top P3 item and execute it using the trivial cycle fast-path. In

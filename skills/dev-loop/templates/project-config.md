@@ -98,7 +98,16 @@ when they apply and whether they are advisory, mandatory, or reactive.
 prd_disciplines:
   - skill: superpowers:test-driven-development
     when: execute       # apply during EXECUTE step
-    mode: advisory      # the execute skill decides how to use it
+    mode: mandatory     # hard gate — must follow TDD
+    include_paths:                    # NEW — only fires when changed files match
+      - <glob-or-path>                # e.g., packages/convex/convex/resumes.ts
+    # exclude_paths: [...]            # NEW — escape hatch, files to skip even when
+                                      # they'd match include_paths
+  - skill: superpowers:test-driven-development
+    when: execute
+    mode: advisory      # applies to all other files — catch-all
+    # no include_paths → matches all files NOT matched by a stricter discipline
+    # above. Engine resolves first-match-wins.
   - skill: superpowers:systematic-debugging
     when: failure       # invoke when EXECUTE encounters errors
     mode: reactive      # interrupt EXECUTE, invoke debugging, resume
@@ -106,6 +115,280 @@ prd_disciplines:
 
 `when` values: `execute`, `review`, `failure`, `always`
 `mode` values: `advisory` (skill decides), `mandatory` (hard gate), `reactive` (interrupt on trigger)
+`include_paths` (NEW, optional): list of globs or file paths — discipline only fires when changed files match. Omit for global scope.
+`exclude_paths` (NEW, optional): list of globs or file paths — escape hatch from `include_paths`. Applied after include_paths. Only meaningful when `include_paths` is set.
+
+### Discipline resolution: first-match-wins
+
+When multiple disciplines share the same `{skill, when}` pair, the engine
+intersects changed files with each discipline's paths. First match wins:
+
+1. Start from the top of `prd_disciplines[]`.
+2. For each discipline matching the current step's `when`:
+   - If `include_paths` is set → intersect with changed files.
+   - If any changed file matches → **this discipline applies, stop.**
+   - If `include_paths` is NOT set → matches all files (catch-all). Stop.
+3. If no discipline matches → no discipline injected for this step.
+
+**Example resolution:**
+
+```yaml
+prd_disciplines:
+  - skill: superpowers:test-driven-development
+    when: execute
+    mode: mandatory
+    include_paths: [packages/convex/convex/aiScoring*.ts]    # TDD mandatory here
+  - skill: superpowers:test-driven-development
+    when: execute
+    mode: advisory                                            # TDD advisory everywhere else
+```
+
+A change to `aiScoringUtils.ts` → matches first entry → `mode: mandatory`.
+A change to `README.md` → skips first entry (path mismatch), falls to second → `mode: advisory`.
+
+**Backwards compatibility:** `include_paths` and `exclude_paths` are both optional.
+Omitting both preserves the current global behavior — the discipline applies to
+all files. Existing configs continue to work unchanged.
+
+**Friction guard:** a discipline with `mode: mandatory` and no `include_paths`
+triggers a warning at REFRESH: "`mandatory` discipline <skill> has no
+`include_paths` — this creates a global hard gate. Consider scoping it to
+critical paths." The discipline still runs — this is a warning, not an error.
+
+## Critical paths (optional)
+
+Declares project hot-spots — code files, vault concept pages, and history
+incidents that matter more than average files. The dev-loop engine uses
+critical paths for:
+
+- **REFRESH**: load into `CRITICAL_PATHS` session variable (missing → empty dict)
+- **QUERY**: bias wiki-query toward listed vault pages first
+- **IDLE research Track A**: rank coverage gaps in `code:` paths above other
+  source files
+- **WORK**: when a claimable item touches a path under any `critical_paths.*.code`,
+  mark the work item `priority: high` automatically
+
+```yaml
+critical_paths:
+  <name>:
+    code: [<glob-or-path>, ...]           # source files this path covers
+    vault: [<concept-or-query-page-slug>, ...]  # vault pages to bias toward
+    history_pins: [<free-text incident reference>, ...]  # dated incident references
+```
+
+**Example:**
+
+```yaml
+critical_paths:
+  resume_search:
+    code:
+      - packages/convex/convex/resumes.ts
+      - packages/convex/convex/search.ts
+    vault:
+      - resume-search-architecture
+    history_pins:
+      - "2026-03-14: 16 MiB byte-limit incident on resume import"
+  ai_scoring:
+    code:
+      - packages/convex/convex/aiScoring*.ts
+    vault:
+      - llm-primary-scoring
+    history_pins:
+      - "PR #674: LLM-primary scoring switch"
+```
+
+Omit the section entirely or leave it empty (`critical_paths: {}`) if the
+project has no hot-spots. The engine defaults to equal priority for all files.
+
+## Fact-check tier (optional)
+
+Controls how dev-loop agents access external knowledge sources when writing
+specs, plans, or debugging. Without this section, agents rely on local repo
+context and vault queries only — no web access.
+
+```yaml
+fact_check:
+  enabled: true
+  source_order:                     # priority order for fact lookups
+    - local_repo                    # search codebase first
+    - context7                      # Context7 library docs (if installed)
+    - vault_query                   # skillwiki vault (if available)
+    - web_search                    # web search via configured tool
+  web_tools:
+    primary: <mcp-tool-name>        # e.g., mcp__grok-search__web_search
+    deep_fetch: <mcp-tool-name>     # e.g., mcp__grok-search__web_fetch
+    site_map: <mcp-tool-name>       # e.g., mcp__grok-search__web_map
+    plan_first: <mcp-tool-name>     # e.g., mcp__grok-search__plan_intent
+  triggers:
+    - <free-text trigger>           # e.g., "version claims", "CVE checks", "deprecation notices"
+  evidence_contract:
+    require_sources_used_section: true   # outputs must cite sources
+    cite_session_id: true               # for reproducibility
+```
+
+**Source order explanation:**
+- `local_repo` — search codebase with grep/glob before hitting external services
+- `context7` — use Context7 MCP for library/framework docs (fast, free, versioned)
+- `vault_query` — check the skillwiki vault for prior decisions and concepts
+- `web_search` — live web search as a last resort (costly, may be rate-limited)
+
+**Web tool backends:**
+Any MCP server exposing `web_search`, `web_fetch`, `site_map` tools works.
+Common choices:
+- `mcp__grok-search__*` — xAI Grok (real-time-friendly, X integration)
+- Built-in `WebSearch` / `WebFetch` — Claude Code's native web tools
+- `perplexity-mcp` — Perplexity-based search
+- `brave-search-mcp` — Brave Search API
+
+**Evidence contract:** When `require_sources_used_section: true`, any
+SPEC/PLAN output that used external sources must include a `## Sources Used`
+section. The simplify-worker checks for this on non-trivial outputs.
+
+Omit the section or set `enabled: false` to skip fact-checking — agents
+work from local context only. Missing `web_tools` entries are detected at
+REFRESH and the web tier is skipped with a warning.
+
+## Idle deep-research (optional)
+
+When the IDLE DISCOVERY mechanical scan returns no P2+ findings, the loop
+exits idle — wasting cron cycles. Idle deep-research turns dead cycles
+into a vault-resident research backlog by invoking `/deep-research` on
+rotating topics.
+
+```yaml
+idle_deep_research:
+  enabled: true
+  skill: deep-research                 # /deep-research skill
+  trigger:
+    when: idle_after_mechanical_scan   # fires only when truly idle
+    if: no_p2_or_higher_findings       # safety: don't burn budget if there's P2+ work
+    cooldown: every_3rd_idle_cycle     # prevents budget burn on back-to-back idles
+    max_per_day: 4                     # absolute cap across all cycles
+  topic_seeds: [<free-text topic>, ...]  # rotating research topics
+  topic_selection:
+    bias_toward: critical_paths        # prefer topics matching critical_paths.*.code
+    skip_if_recent_query_page_exists: 14d  # skip topic if vault has recent query page
+  output_mode: vault                   # writes queries/<slug>.md
+  budget:
+    web_searches: 3
+    deep_fetches: 3
+    context7_calls: 3
+  followups:
+    on_finding: capture_to_vault_then_create_work_item  # ideas become claimable work
+    p_score_default: P3               # deep-research findings start at P3
+```
+
+**How it works:**
+1. When IDLE DISCOVERY step 3 (mechanical research) returns no P2+ findings,
+   check if `idle_deep_research.enabled` and cooldown allows.
+2. Pick the next rotating topic from `topic_seeds` (round-robin), biased
+   toward topics matching `critical_paths.*.code` if declared.
+3. Skip the topic if the vault already has a query page for it created
+   within `skip_if_recent_query_page_exists` days.
+4. Invoke `/deep-research <topic> --vault` with the declared budget.
+5. Extract 1-3 actionable ideas → `wiki-add-task` as `kind: idea`.
+6. Mark the cooldown timestamp for the next eligible idle cycle.
+
+**Why this matters:** Long-running cron loops (e.g., `*/15 * * * *`)
+generate 96 cycles/day. Without idea-generation, ~70% of those are no-op
+idle exits. Wiring `/deep-research` turns dead cycles into compounding
+research backlog.
+
+Omit the section or set `enabled: false` to disable — idle cycles exit
+after maintenance with no research.
+
+## Browser verification (optional)
+
+Automated browser verification gate for projects with browser-facing code.
+Runs between SIMPLIFY and MERGE to catch browser regressions (a11y
+violations, console errors, broken routes) before they reach the PR.
+
+```yaml
+browser_verification:
+  enabled: true
+  trigger:                          # path globs that fire the gate
+    - "apps/**/*.tsx"
+    - "apps/**/*.css"
+  prerequisites:                     # commands that must be running before gate
+    - "make dev"                     # e.g., start dev server
+  driver: playwright-cli             # /playwright-cli skill
+  base_url: http://localhost:5173
+  smoke_routes:                      # routes to verify
+    - /
+    - /dashboard
+  reviser_workflow:                   # ordered MCP tool calls
+    - take_snapshot
+    - list_console_messages
+    - evaluate_script
+  e2e_fallback: <command>            # full e2e when /playwright-cli too narrow
+```
+
+**How it works:**
+1. **Trigger check**: Only fires when changed files match `trigger` globs.
+   If no changed files match, the gate is skipped entirely.
+2. **Prerequisite check**: Before running, verify that prerequisites are
+   healthy (e.g., `curl -fsS <base_url> >/dev/null`). If not running,
+   block the gate with an actionable message.
+3. **Driver dispatch**: Spawn `/playwright-cli` agent (model: sonnet)
+   with smoke routes and reviser workflow.
+4. **Console-error gate**: Console errors/warnings during
+   `list_console_messages` → **fail gate**, return to EXECUTE for fix.
+   The merge-blocker is console errors, not snapshot diffs.
+5. **E2E fallback**: If `/playwright-cli` is too narrow for the change,
+   run `e2e_fallback` command instead.
+
+Omit the section or set `enabled: false` to disable — no browser
+verification gate runs.
+
+## Reactive debugging (optional)
+
+Controls how dev-loop handles EXECUTE failures — retry budget, evidence
+capture, fact-checking of external-lib errors, and escalation policy.
+Without this section, reactive debugging is unbounded: agents may retry
+indefinitely on the same error.
+
+```yaml
+reactive_debugging:
+  enabled: true
+  auto_retry_attempts: 2              # max retries before escalation
+  evidence_dir: .claude/dev-loop-debug/
+  evidence_capture:                    # commands run on each failure
+    - "make check 2>&1 | tee {evidence_dir}/{cycle}.log"
+    - "git diff --stat"
+    - "git log --oneline -5"
+  fact_check_tool: <mcp-tool>         # e.g., mcp__grok-search__web_search
+  escalate_after:
+    consecutive_idle_cycles: 3         # escalate if failing across cycles
+    same_error_signature: true         # dedup by stack-trace hash
+  escalation_action: surface_p1_finding  # next idle picks it up as P1
+```
+
+**How it works:**
+1. When EXECUTE fails, invoke `prd_disciplines[].when: failure` (existing).
+2. **Before retry**: capture evidence per `evidence_capture` commands, hash
+   the error signature (top-3 stack frames + library name).
+3. **Fact-check external libs**: if the stack trace contains an external
+   library name (Convex/Hono/Vite/etc.) AND `fact_check_tool` is set,
+   call the tool with the error message before retrying. This catches
+   version-specific breakage without burning the whole retry budget.
+4. **Retry up to `auto_retry_attempts`**: if still failing, fall through
+   to escalation.
+5. **Escalation**: write a P1 finding to `raw/transcripts/` with
+   `kind: bug` + error signature hash. Future cycles can dedup against
+   this hash to prevent the same bug being filed N times.
+
+**Evidence dir gitignore:** The evidence dir (`.claude/dev-loop-debug/`
+by default) must be in `.gitignore` regardless of `knowledge_layer`.
+Evidence captures are transient session artifacts, not repo or vault
+content — they should never be committed.
+
+**Signature hashing:** Top-3 frames from the stack trace + detected
+library name (regex match against known frameworks). This is a
+deterministic hash that identifies "the same error" across retries and
+cycles, preventing duplicate escalation.
+
+Omit the section or set `enabled: false` to disable — reactive debugging
+runs with unbounded retries (legacy behavior).
 
 ## Knowledge layer
 
