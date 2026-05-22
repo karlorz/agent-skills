@@ -142,11 +142,18 @@ optional:
     used_by: ["BROWSER-VERIFY step 6a"]
     fallback: "skip step 6a; rely on E2E fallback command if configured"
 
+  # --- Code review (multi-backend, since v1.15.0) ---
+  - kind: agent
+    ref: codex:codex-rescue
+    capability: codex_code_review_backend
+    used_by: ["REVIEW step 6 when code_review.codex.enabled_in_<intensity>: true"]
+    fallback: "drop codex-review-worker from CODE_REVIEW_BACKENDS; simplify-worker reviews alone"
+
   # --- dev-loop self-references (always present when dev-loop loaded) ---
   - kind: agent
     ref: dev-loop:simplify-worker
     capability: code_review_gate
-    used_by: ["SIMPLIFY step 6", "Pre-push gate"]
+    used_by: ["SIMPLIFY step 6", "Pre-push gate", "REVIEW step 6 base backend"]
     fallback: "manual code review"
     self: true
 
@@ -162,4 +169,18 @@ optional:
     capability: research_scan
     used_by: ["IDLE step 4"]
     fallback: "inline Skill('dev-loop:research') invocation in parent session"
+    self: true
+
+  - kind: agent
+    ref: dev-loop:codex-review-worker
+    capability: codex_code_review_wrapper
+    used_by: ["REVIEW step 6 when codex backend enabled"]
+    fallback: "drop from CODE_REVIEW_BACKENDS; simplify-worker reviews alone"
+    self: true
+
+  - kind: agent
+    ref: dev-loop:doctor-worker
+    capability: dependency_and_compact_probe
+    used_by: ["REFRESH step 7", "setup-dev-loop step 1"]
+    fallback: "skip both probes; cycle proceeds without drift detection"
     self: true

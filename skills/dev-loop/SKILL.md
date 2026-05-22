@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.14.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.14.0: doctor-worker now also probes ~/.claude/projects/<slug>/<uuid>.jsonl for isCompactSummary:true markers, returns compact_count; REFRESH thresholds (1=note, 2=stronger warn, 3=refuse) surface context-pressure; AUDIT step 13 surfaces Claude Code built-in Auto-Memory alongside claude-md-improver. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. v1.11.x: G-L runtime + research subagent_type. Pass `high` for aggressive mode.'
+version: "1.15.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.15.0: pluggable multi-backend code review — CODE_REVIEW_BACKENDS resolved at REFRESH from new code_review config block; REVIEW step 6 spawns simplify-worker (always) + optional codex-review-worker (per-intensity opt-in) in parallel; new wrapper agent dev-loop:codex-review-worker delegates to codex:codex-rescue. v1.14.0: auto-compact firing probe via isCompactSummary:true markers; AUDIT auto-memory surfacing. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -367,6 +367,19 @@ prd_disciplines:
      MCP tools, `evidence_contract`). Absent or `enabled: false` → `{}`. Pass to
      SPEC/PLAN steps. Schema: `templates/project-config.md` § Fact-check tier.
      Setup flow: `setup/SKILL.md` Section H.
+     **Resolve `code_review`** — parse the `code_review` block (since v1.15.0).
+     Build `CODE_REVIEW_BACKENDS` session list (order: always-on backends
+     first, optional backends appended per intensity gate):
+     - Always include `dev-loop:simplify-worker` (base backend).
+     - If `intensity == normal` AND `code_review.codex.enabled_in_normal: true`
+       AND `dev-loop:codex-review-worker` ∉ `DEP_DRIFT` AND
+       `codex:codex-rescue` ∉ `DEP_DRIFT` → append `dev-loop:codex-review-worker`.
+     - If `intensity == high` AND `code_review.codex.enabled_in_high: true`
+       AND both refs not in `DEP_DRIFT` → append `dev-loop:codex-review-worker`.
+     - If `code_review` block absent → defaults to base-only (preserves
+       pre-v1.15.0 behavior).
+     Schema: `templates/project-config.md` § Code review. Setup flow:
+     `setup/SKILL.md` Section M.
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
      reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
@@ -683,13 +696,32 @@ fact-checked. Output specs must include a `## Sources Used` section if
 - **`review` not in PRD_CAPS:** Manual code review (or skip for
   vault-only work where no code was touched).
 
+**Multi-backend execution (since v1.15.0):** Iterate over `CODE_REVIEW_BACKENDS`
+(resolved at REFRESH). Spawn every backend in **parallel** via independent
+`Agent()` calls with `model: "sonnet"`; each receives the same diff context.
+Concatenate findings under per-backend section headers:
+
+```
+## simplify-worker findings
+<simplify report>
+
+## codex-review-worker findings
+<codex report — only if codex backend enabled and not in DEP_DRIFT>
+```
+
+The controller reads both, fixes findings from each before continuing.
+No auto-reconciliation — divergent findings are the value of having two
+reviewers. If `CODE_REVIEW_BACKENDS` has only one entry (default behavior),
+this collapses to the pre-v1.15.0 single-spawn case with no overhead.
+
 **Evidence-contract gate (sub-step of REVIEW):** If `FACT_CHECK_CAPS`
 is non-empty and `evidence_contract.require_sources_used_section` is true,
 the simplify-worker checks that non-trivial SPEC/PLAN outputs include a
 `## Sources Used` section. Missing section → flag as review finding,
 require addition before proceeding. This applies only to outputs that
 consulted external sources (web search, context7, vault queries beyond
-the work item itself).
+the work item itself). The codex backend does not check this contract —
+its lane is correctness/security/OOD, not provenance.
 
 ### 6a. BROWSER-VERIFY — browser verification gate (conditional on `browser_verification` config)
 

@@ -27,8 +27,8 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.14.0: doctor-worker probes auto-compact firings via isCompactSummary:true in session jsonl; REFRESH thresholds (1=note, 2=warn, 3=refuse) surface context pressure; AUDIT surfaces CC built-in Auto-Memory alongside claude-md-improver. v1.13.0: removed /compact + /clear refs (harness-driven). v1.12.0: dep-drift detector via dev-loop:doctor-worker; required-missing blocks, optional-missing warns + DEP_DRIFT drives fallback paths; wrapper-agent pattern documented. MERGE CI gate uses ci-health-worker. Execution subagents hard-wired to sonnet. Simplify-worker code review gate. /setup-dev-loop scaffolds 12 config sections (A-L). Pluggable knowledge backends, drift guard, project-agnostic.",
-      "version": "1.14.0",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.15.0: pluggable multi-backend code review — CODE_REVIEW_BACKENDS at REFRESH; REVIEW step spawns simplify-worker + optional codex-review-worker in parallel; per-intensity opt-in via setup interview Section M. v1.14.0: auto-compact firing probe via isCompactSummary:true in session jsonl; AUDIT surfaces CC built-in Auto-Memory. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. MERGE CI gate uses ci-health-worker. Execution subagents hard-wired to sonnet. /setup-dev-loop scaffolds 13 config sections (A-M). Pluggable knowledge backends, drift guard, project-agnostic.",
+      "version": "1.15.0",
       "category": "automation",
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "ci-health-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery"]
     },

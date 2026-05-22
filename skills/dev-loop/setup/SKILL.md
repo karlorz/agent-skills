@@ -411,6 +411,39 @@ prd_disciplines:
 
 **Runtime behavior:** Resolved at REFRESH per `{skill, when}` group. EXECUTE intersects changed-files-since-WORK with each entry's `include_paths` (omitted = catch-all), applies `exclude_paths`, picks first match per group. Different `{skill, when}` groups are independent — matching one does not suppress another. Backwards-compat: omitted `include_paths` keeps prior global-scope behavior. Warning emitted at REFRESH when `mode: mandatory` has no `include_paths`. Schema reference: `templates/project-config.md` § Cross-cutting disciplines.
 
+**Section M — Code review backends (since v1.15.0).**
+
+> Explainer: dev-loop's REVIEW step always runs `simplify-worker` (sonnet) as the base code reviewer. Optionally, a second reviewer can run in parallel — `codex:codex-rescue` via the `dev-loop:codex-review-worker` wrapper — to provide an independent out-of-distribution second opinion. Two reviewers, two independent reads, no auto-reconciliation. Opt-in per intensity (normal / high) to avoid cost surprises.
+
+Detect: probe whether the Codex plugin is installed by checking for
+`~/.claude/plugins/cache/openai-codex/codex/*/agents/codex-rescue.md` OR
+`~/.claude/agents/codex-rescue.md`. The setup step's doctor-worker run
+(Section 1 Explore) already reports `codex:codex-rescue` presence — reuse that.
+
+If Codex is NOT installed → skip this section with install hint:
+"Install the Codex plugin to enable Codex code review: `/plugin add openai-codex` (or check the marketplace for the current install path). For now, dev-loop will run simplify-worker only."
+
+If Codex IS installed → present 2 toggles:
+
+> "Enable Codex code review for **normal**-intensity cycles? Each REVIEW step will spawn codex-review-worker in parallel with simplify-worker. Adds latency + Codex cost; useful for catching issues simplify-worker misses (logic errors, security, OOD code paths). Default: no."
+
+> "Enable Codex code review for **high**-intensity cycles (`/dev-loop high`)? High mode already raises aggressiveness; enabling here turns 'aggressive' into 'two independent reviewers per cycle.' Default: no."
+
+Default posture: propose no/no even when Codex is installed — opt-in is the safe default; the user can toggle freely later by editing config. If the user accepts both, surface a one-line cost reminder.
+
+**Config emitted:**
+
+```yaml
+code_review:
+  parallel: true
+  codex:
+    enabled_in_normal: false   # or true if user opted in
+    enabled_in_high: false     # or true if user opted in
+    agent: dev-loop:codex-review-worker
+```
+
+**Runtime behavior:** Loaded at REFRESH into `CODE_REVIEW_BACKENDS` session list. Always includes `dev-loop:simplify-worker`. Appends `dev-loop:codex-review-worker` when (a) current intensity's `enabled_in_*` flag is true AND (b) neither `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in `DEP_DRIFT`. REVIEW step 6 spawns each backend in parallel with `model: "sonnet"`; findings are concatenated under per-backend section headers. No auto-reconciliation. Schema reference: `templates/project-config.md` § Code review.
+
 ### 3. Confirm and write
 
 Show the user a draft of `./.claude/dev-loop.config.md` covering all twelve sections (PRD, knowledge, release, interview, glossary, CI setup, critical paths, fact-check tier, idle deep-research, browser verification, reactive debugging, discipline path scoping). Let them edit before writing.

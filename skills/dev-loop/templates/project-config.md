@@ -390,6 +390,45 @@ cycles, preventing duplicate escalation.
 Omit the section or set `enabled: false` to disable — reactive debugging
 runs with unbounded retries (legacy behavior).
 
+## Code review (optional, since v1.15.0)
+
+Configures the REVIEW step's set of code-review backends. The base
+backend (`dev-loop:simplify-worker`) always runs. An optional
+second-opinion backend (`dev-loop:codex-review-worker`, which wraps
+`codex:codex-rescue`) can be enabled per-intensity. When both are
+active, REVIEW step 6 spawns them in parallel via `Agent(model: "sonnet")`
+calls; findings concatenate under per-backend section headers. No
+auto-reconciliation between reports.
+
+```yaml
+code_review:
+  parallel: true                        # always true for now; reserved
+  codex:
+    enabled_in_normal: false            # opt-in for /dev-loop (no `high`)
+    enabled_in_high: false              # opt-in for /dev-loop high
+    agent: dev-loop:codex-review-worker # the wrapper agent (do not change)
+```
+
+Engine wiring:
+
+1. **REFRESH** resolves the `code_review` block into `CODE_REVIEW_BACKENDS`:
+   - Always includes `dev-loop:simplify-worker` (base).
+   - Conditionally appends `dev-loop:codex-review-worker` when the
+     current intensity's `enabled_in_*` toggle is true AND neither
+     `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in
+     `DEP_DRIFT` (doctor-worker reports the latter at REFRESH step 7).
+2. **REVIEW step 6** spawns each backend in `CODE_REVIEW_BACKENDS`
+   concurrently. Output is concatenated.
+3. Missing config block → defaults to base-only (preserves
+   pre-v1.15.0 behavior). Backwards compatible.
+
+Cost note: enabling Codex in normal mode means **every** full-pipeline
+cycle pays Codex's per-call cost. Suitable for projects where a second
+opinion matters (security-critical code, complex refactors). Skip for
+high-throughput trivial-fast-path work.
+
+Omit the section to keep base-only review (current default behavior).
+
 ## Knowledge layer
 
 Controls how the loop captures, queries, and maintains project knowledge.
