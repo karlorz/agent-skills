@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-version: "1.15.0"
+version: "1.16.0"
 description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.15.0: pluggable multi-backend code review — CODE_REVIEW_BACKENDS resolved at REFRESH from new code_review config block; REVIEW step 6 spawns simplify-worker (always) + optional codex-review-worker (per-intensity opt-in) in parallel; new wrapper agent dev-loop:codex-review-worker delegates to codex:codex-rescue. v1.14.0: auto-compact firing probe via isCompactSummary:true markers; AUDIT auto-memory surfacing. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
@@ -540,6 +540,23 @@ proj-work validates frontmatter (see its SKILL.md for required fields:
 `title`, `name`, `description`, `kind`, `status`, `priority: high|medium|low`,
 `project: "[[slug]]"` wikilink format, timestamps, provenance).
 
+**`closes:` convention (optional):** If this work item originated from
+ad-hoc captures discovered in REFRESH step 6 (or otherwise referenced
+specific raw transcripts), record their vault-relative paths under a
+`closes:` list in the spec.md frontmatter:
+
+```yaml
+closes:
+  - raw/transcripts/2026-05-22-idea-foo.md
+  - raw/transcripts/2026-05-22-bug-bar.md
+```
+
+RETRO step 11 reads this list and archives the entries via
+`skillwiki archive` when the cycle flips status to `completed`, so they
+stop re-surfacing as new captures next cycle. Omit `closes:` (or leave
+it empty) when the work item didn't originate from transcripts. See
+RETRO § Archive originating transcripts for archival semantics.
+
 **Critical-path priority escalation:** After creating the work item, check
 whether the work item description, spec, or any referenced files match a
 glob or path under `CRITICAL_PATHS.*.code`. For resuming work items
@@ -928,6 +945,32 @@ Skip auto-capture for:
 
 Do NOT modify existing raw files (N9 compliance). Always create a new
 file. If a file with the same name exists, append a `-2` suffix.
+
+#### Archive originating transcripts (sub-step of RETRO, only when `query_vault` in BACKEND_CAPS)
+
+After auto-capture, if the cycle is flipping the work item to
+`status: completed`, parse the `closes:` list from the work item's
+`spec.md` frontmatter (see WORK step § `closes:` convention). For each
+entry, derive the slug (basename without `.md`) and run
+`skillwiki archive <slug>`. Append a one-line summary to the retro:
+
+```
+- Archived <N> originating transcripts: <slug1>, <slug2>, …
+```
+
+Skip rules:
+- `closes:` absent or empty → skip silently.
+- Work item is NOT completing this cycle (status stays
+  `in-progress`) → skip; `closes:` persists across cycles and only
+  fires once on completion.
+- A listed path does not exist in `raw/transcripts/` → log a warning
+  in the retro but do not block the cycle. The transcript may already
+  be archived from a prior cycle.
+- `skillwiki archive` errors (vault lock, missing CLI) → log the error
+  in the retro and continue. Archive is hygiene, not a release gate.
+
+Idle cycles and non-completing cycles never archive — `closes:` is a
+completion-trigger, not a per-cycle action.
 
 ### 12. DISTILL — concept promotion / ADRs (conditional, every 3 cycles)
 
