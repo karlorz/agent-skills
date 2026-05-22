@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-version: "1.16.1"
+version: "1.16.2"
 description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.15.0: pluggable multi-backend code review — CODE_REVIEW_BACKENDS resolved at REFRESH from new code_review config block; REVIEW step 6 spawns simplify-worker (always) + optional codex-review-worker (per-intensity opt-in) in parallel; new wrapper agent dev-loop:codex-review-worker delegates to codex:codex-rescue. v1.14.0: auto-compact firing probe via isCompactSummary:true markers; AUDIT auto-memory surfacing. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
@@ -528,6 +528,52 @@ skill works from code and git history alone.
 
 Note: `skillwiki drift` is deferred to IDLE DISCOVERY (step 3) because
 it makes network calls and is expensive for the QUERY step.
+
+**Stale-premise check (mandatory, runs regardless of BACKEND_CAPS):**
+When the user invocation names specific transcript paths/filenames or
+distinctive topic labels, cross-check against archived state before
+treating them as claimable work. Three signals:
+
+1. **Named transcript paths.** Extract any string in the prompt matching
+   `raw/transcripts/*.md` (full or filename-only). For each, check both
+   `<vault>/raw/transcripts/` AND `<vault>/_archive/raw/transcripts/`.
+   If the file is in `_archive/` (or any matching basename), surface:
+   "Named transcript X is archived — work likely already shipped. Look
+   up the archive commit (e.g., `git -C <vault> log --oneline -- _archive/raw/transcripts/<name>`)
+   for context." Without a vault (`query_vault` not in BACKEND_CAPS),
+   skip this signal.
+
+2. **Distinctive topic labels.** Extract topic keywords from the prompt
+   that are concrete enough to grep for. Heuristic:
+   - Section letter labels (single letters `A–Z`, or ranges like
+     `G-L`) — always concrete.
+   - Hyphenated slugs (3+ chars total, ≥1 hyphen): `auto-archive`,
+     `codex-probe`, `runtime-probe`.
+   - Lowercase feature names (4+ chars, no spaces, not in a tiny stop
+     list of `the/and/for/with/from`).
+   - Skip single common words under 4 chars and natural-language
+     filler.
+
+   Run `git log --oneline -30 --grep="<label>"` on the active repo. If
+   matching commits exist, surface: "Topic '<label>' appears in N
+   commits since <oldest match> (<hashes>). May be re-discovery of
+   shipped work — confirm with user."
+
+3. **Combination gate.** If BOTH Signal 1 (named transcripts in archive)
+   AND Signal 2 (topic commits exist) fire → treat as strong
+   stale-premise. STOP before WORK step and ask the user via
+   `AskUserQuestion` (the QUERY step runs in the main session, so this
+   is safe): "Multiple signals indicate this work may already have
+   shipped. Continue anyway, or stop?"
+
+   If only one signal fires, **surface but proceed**. The user may
+   want re-investigation, refactor, or follow-up. Do not block on a
+   single signal.
+
+Stale-premise checks are cheap (one filesystem glob + one git log per
+prompt-named term) and run before WORK step. They prevent the
+recurring re-discovery loop observed when a stale cron prompt or
+manual invocation names work that has already shipped.
 
 ### 2. WORK — create work item (mandatory)
 
