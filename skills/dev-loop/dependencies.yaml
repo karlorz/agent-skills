@@ -109,6 +109,24 @@ optional:
     used_by: ["Bootstrap Mode step B"]
     fallback: "skip vault project init; use git-local work-item dirs"
 
+  - kind: skill
+    ref: skillwiki:wiki-canvas
+    capability: canvas_viz
+    used_by: ["IDLE maintenance (optional vault visualization refresh)"]
+    fallback: "skip canvas generation; vault graph visualization remains stale until manual refresh"
+
+  - kind: skill
+    ref: skillwiki:wiki-reingest
+    capability: source_drift_detection
+    used_by: ["IDLE maintenance (N9 reingest protocol)"]
+    fallback: "run `skillwiki drift` inline instead of full reingest workflow"
+
+  - kind: skill
+    ref: skillwiki:wiki-adapter-prd
+    capability: foreign_prd_ingest
+    used_by: ["IDLE maintenance (CodeStable/RFC/AIDE/Hermes document processing)"]
+    fallback: "skip foreign PRD processing; only skillwiki-native specs are ingestible"
+
   # --- Interview layer ---
   - kind: skill
     ref: grill-with-docs
