@@ -94,7 +94,7 @@ pressure that the controller cannot otherwise observe.
 ### Probe 3 — skillwiki doctor bridge (vault health)
 
 When `SKILLWIKI_DOCTOR_BRIDGE` env var is not `false` and `skillwiki` CLI is on
-PATH, run `skillwiki doctor --json` to surface vault environment health. The
+PATH, run `skillwiki doctor` (outputs JSON by default) to surface vault environment health. The
 doctor checks: node version, CLI channels, config file, vault structure, git
 remote, sync recency, skills installation, plugin version drift. If the vault is
 the project's knowledge backend, these errors block dev-loop steps that depend on
@@ -106,7 +106,7 @@ vault writes (WORK, SAVE, RETRO, AUDIT, archive).
    - `SKILLWIKI_DOCTOR_BRIDGE=false` → skip entirely, return
      `skillwiki_doctor: null, skillwiki_doctor_note: "disabled via env"`.
 
-2. Run `skillwiki doctor --json 2>&1`. Parse the JSON response. Expected shape:
+2. Run `skillwiki doctor 2>&1` (outputs JSON to stdout by default; no `--json` flag needed). Parse the JSON response. Expected shape:
    ```json
    {
      "ok": true,
