@@ -96,6 +96,28 @@ Run only if `vault_backend` is detected (see Capabilities Detection).
 - Empty type directories
 - Flag regardless of total pages in high mode
 
+### B5. Stale Bucket Aggregation (since v1.17.1)
+Surface time-sensitive decay from two `skillwiki` commands as prioritized
+work items:
+
+1. **Stale sections** — `skillwiki lint --only stale_sections --json 2>/dev/null`
+   (or `skillwiki lint --json 2>/dev/null | jq '.data.buckets.stale_sections'`
+   if `--only` is unavailable). Parse pages with expired or approaching-expiry
+   `<!-- expires: ... -->` annotations. Each stale section → P2 work item
+   recommending re-ingest or archival.
+
+2. **Stale project pages** — `skillwiki stale --project <slug> --json 2>/dev/null`
+   (or `skillwiki stale --json` filtered to project if `--project` unavailable).
+   Parse `stale_pages` list. Pages with `stale_ttl` in frontmatter override the
+   default threshold. Each stale page → P3 work item.
+
+3. **Priority gating:**
+   - `normal` mode: stale sections → P2, stale pages → P3 (only if no P2+ exists)
+   - `high` mode: both → P2 (no suppression)
+
+4. **Dedup:** Check prior work items under `projects/<slug>/work/` for matching
+   slugs. Stale buckets that already have open work items are skipped.
+
 **Handoff:** Collect all Track B findings and pass to Synthesize.
 
 ## Retros
@@ -113,8 +135,8 @@ Score: impact × effort
 |---|--------|----------|
 | P0 | Spec violation | Regression, broken contract |
 | P1 | High gap | Untested cmd, uncited raw>50%, isolated pages |
-| P2 | Medium | Thin pages, skill drift, single-source |
-| P3 | Low polish | Quality, cross-links, sections |
+| P2 | Medium | Thin pages, skill drift, single-source, stale sections |
+| P3 | Low polish | Quality, cross-links, sections, stale pages |
 | P4+ | Speculative | Proactive improvements, experiments |
 
 ## Idle Detection

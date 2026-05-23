@@ -27,10 +27,10 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.17.0: vault auto-commit gate in SAVE step 7 + AUDIT step 13 dirty-tree check. v1.16.4: step 13 AUDIT header clarified. v1.16.3: step 12 cadence clarification. v1.16.2: QUERY stale-premise check. v1.16.1: setup Section M runtime codex probe. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. MERGE CI gate. Execution subagents hard-wired to sonnet. /setup-dev-loop scaffolds 13 config sections (A-M).",
-      "version": "1.17.0",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.17.1: doctor-worker skillwiki bridge + research-worker stale buckets + wiki-sync dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. MERGE CI gate. Execution subagents on sonnet. /setup-dev-loop scaffolds 13 config sections (A-M).",
+      "version": "1.17.1",
       "category": "automation",
-      "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "ci-health-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery", "vault-auto-commit"]
+      "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "ci-health-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery", "vault-auto-commit", "doctor", "stale", "wiki-sync"]
     },
     {
       "name": "hermes-cli",

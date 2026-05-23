@@ -91,11 +91,62 @@ pressure that the controller cannot otherwise observe.
 5. Capture both `compact_count` (integer) and `session_jsonl_path` (string) in
    the output for caller visibility.
 
-### Probe 3 — overall status combination
+### Probe 3 — skillwiki doctor bridge (vault health)
 
-Final `status` field reflects probe 1's classification (`healthy | degraded | broken`).
-Probe 2 is purely informational — it doesn't modify probe 1's status. The caller
-applies its own thresholds against `compact_count`.
+When `SKILLWIKI_DOCTOR_BRIDGE` env var is not `false` and `skillwiki` CLI is on
+PATH, run `skillwiki doctor --json` to surface vault environment health. The
+doctor checks: node version, CLI channels, config file, vault structure, git
+remote, sync recency, skills installation, plugin version drift. If the vault is
+the project's knowledge backend, these errors block dev-loop steps that depend on
+vault writes (WORK, SAVE, RETRO, AUDIT, archive).
+
+1. Check availability:
+   - `command -v skillwiki >/dev/null 2>&1` — if not found, return
+     `skillwiki_doctor: null, skillwiki_doctor_error: "skillwiki CLI not on PATH"`.
+   - `SKILLWIKI_DOCTOR_BRIDGE=false` → skip entirely, return
+     `skillwiki_doctor: null, skillwiki_doctor_note: "disabled via env"`.
+
+2. Run `skillwiki doctor --json 2>&1`. Parse the JSON response. Expected shape:
+   ```json
+   {
+     "ok": true,
+     "data": {
+       "checks": [{"id": "...", "status": "pass|warn|error", "detail": "..."}],
+       "summary": {"pass": N, "warn": N, "error": N}
+     }
+   }
+   ```
+
+3. Classify vault health from `summary.error`:
+   - `error > 0` → `skillwiki_doctor_status: "error"` — escalate: if probe 1's
+     status is `healthy` or `degraded`, bump to next tier (healthy→degraded,
+     degraded→broken). Surface failing check labels.
+   - `error == 0 && warn > 0` → `skillwiki_doctor_status: "warn"` — note in
+     output but do not escalate probe 1's status.
+   - `error == 0 && warn == 0` → `skillwiki_doctor_status: "healthy"`.
+
+4. Include `skillwiki_doctor` object in output:
+   ```json
+   "skillwiki_doctor": {
+     "status": "healthy|warn|error",
+     "summary": {"pass": N, "warn": N, "error": N},
+     "failing_checks": ["check_id", ...],
+     "escalated": true|false
+   }
+   ```
+
+When `skillwiki doctor` is unavailable (CLI missing, non-zero exit, malformed
+JSON), return `skillwiki_doctor: null` with a `skillwiki_doctor_error` string.
+Do not escalate probe 1's status when the probe itself fails — the caller
+interprets `null` as "probe unavailable" vs `error` as "vault unhealthy."
+
+### Probe 4 — overall status combination
+
+Final `status` field combines probe 1's classification with probe 3's escalation:
+- Probe 1 produces a base status (`healthy | degraded | broken`).
+- Probe 3 may escalate (healthy→degraded, degraded→broken) when vault doctor
+  reports errors.
+- Probe 2 (compact count) is purely informational — it doesn't modify status.
 
 5. Emit JSON to stdout. No additional commentary, no markdown, no callouts.
 
@@ -114,7 +165,13 @@ applies its own thresholds against `compact_count`.
   "missing_count": 3,
   "manifest_path": "skills/dev-loop/dependencies.yaml",
   "compact_count": 0,
-  "session_jsonl_path": "/Users/karlchow/.claude/projects/-Users-karlchow-Desktop-code-agent-skills/88f00a89-df84-46c6-bd07-091998380377.jsonl"
+  "session_jsonl_path": "/Users/karlchow/.claude/projects/-Users-karlchow-Desktop-code-agent-skills/88f00a89-df84-46c6-bd07-091998380377.jsonl",
+  "skillwiki_doctor": {
+    "status": "healthy",
+    "summary": {"pass": 21, "warn": 0, "error": 0},
+    "failing_checks": [],
+    "escalated": false
+  }
 }
 ```
 

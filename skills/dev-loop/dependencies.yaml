@@ -149,6 +149,13 @@ optional:
     used_by: ["REVIEW step 6 when code_review.codex.enabled_in_<intensity>: true"]
     fallback: "drop codex-review-worker from CODE_REVIEW_BACKENDS; simplify-worker reviews alone"
 
+  # --- Vault sync (skillwiki) ---
+  - kind: skill
+    ref: skillwiki:wiki-sync
+    capability: vault_sync
+    used_by: ["IDLE maintenance", "RETRO archive sub-step"]
+    fallback: "skip vault git sync; vault changes remain local until manual push"
+
   # --- dev-loop self-references (always present when dev-loop loaded) ---
   - kind: agent
     ref: dev-loop:simplify-worker

@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.17.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.17.0: vault auto-commit gate in SAVE step 7 + AUDIT step 13 dirty-tree check. v1.16.4: step 13 AUDIT header clarified. v1.16.3: step 12 cadence. v1.16.2: QUERY stale-premise check. v1.16.1: Section M codex runtime probe. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.17.1"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
