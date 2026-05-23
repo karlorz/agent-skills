@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.16.4"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.15.0: pluggable multi-backend code review — CODE_REVIEW_BACKENDS resolved at REFRESH from new code_review config block; REVIEW step 6 spawns simplify-worker (always) + optional codex-review-worker (per-intensity opt-in) in parallel; new wrapper agent dev-loop:codex-review-worker delegates to codex:codex-rescue. v1.14.0: auto-compact firing probe via isCompactSummary:true markers; AUDIT auto-memory surfacing. v1.13.0: removed /compact + /clear (harness-driven). v1.12.0: dep-drift detector. Pass `high` for aggressive mode.'
+version: "1.17.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.17.0: vault auto-commit gate in SAVE step 7 + AUDIT step 13 dirty-tree check. v1.16.4: step 13 AUDIT header clarified. v1.16.3: step 12 cadence. v1.16.2: QUERY stale-premise check. v1.16.1: Section M codex runtime probe. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -380,6 +380,10 @@ prd_disciplines:
        pre-v1.15.0 behavior).
      Schema: `templates/project-config.md` § Code review. Setup flow:
      `setup/SKILL.md` Section M.
+     **Resolve `vault_auto_commit`** — read from config, default `true`.
+     Store as session variable `VAULT_AUTO_COMMIT`. When true, SAVE step 7
+     commits dirty vault files; AUDIT step 13 warns if tree is dirty.
+
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
      reading `{vault}/SCHEMA.md` — parse the `## Layers` section for
@@ -874,7 +878,14 @@ pushes directly on the release branch). PUSH (step 10) handles publishing
 (npm, tag-triggered CI). A project that only uses MERGE (no npm publish)
 will skip PUSH.
 
-### 7. SAVE — crystallize session insights (optional)
+### 7. SAVE — crystallize session insights + vault auto-commit (optional)
+
+**Vault auto-commit (sub-step of SAVE, only when `query_vault` in BACKEND_CAPS):**
+If `VAULT_AUTO_COMMIT` is true AND `query_vault` in BACKEND_CAPS:
+1. `git -C $VAULT diff --quiet` — if clean, skip silently.
+2. If dirty: `git -C $VAULT add -A && git -C $VAULT commit -m "dev-loop[${work_slug}]: auto-commit vault changes"`.
+3. If commit fails (no changes after add, or git not configured), skip silently — never block the cycle on vault commit failure.
+If `VAULT_AUTO_COMMIT` is false, skip.
 
 **If `crystallize` in BACKEND_CAPS:**
 At natural breakpoints, crystallize insights not captured in spec/plan.
@@ -1075,6 +1086,12 @@ phase.
 If `DEP_DRIFT` includes `claude-md-management:claude-md-improver`, skip
 its invocation and apply the documented fallback (skip AUDIT step;
 CLAUDE.md updates remain manual). The auto-memory surfacing still happens.
+
+**Vault dirty-tree check (sub-step of AUDIT, only when `query_vault` in BACKEND_CAPS):**
+After claude-md-improver and auto-memory surfacing:
+- `git -C $VAULT diff --quiet` — if dirty, emit warning:
+  "Vault working tree is dirty after cycle. Run `git -C $VAULT add -A && git -C $VAULT commit` or enable `vault_auto_commit: true` in dev-loop config."
+- This is a warning, not a cycle blocker — the cycle proceeds regardless.
 
 ### 14. VERIFY — provenance integrity (conditional, every 3 cycles)
 

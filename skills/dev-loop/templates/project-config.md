@@ -484,6 +484,24 @@ to listing directories in the vault root that contain `.md` files.
 When `query_vault` not in BACKEND_CAPS, `vault` is ignored — the loop uses
 git history and local work items instead of a vault.
 
+## Vault write hygiene (optional, since v1.17.0)
+
+Controls whether the dev-loop SAVE step auto-commits vault changes made
+by Edit/Write tool calls during the cycle. The skillwiki CLI's AUTO_COMMIT
+only triggers on CLI writes, not on native tool calls — this flag fills
+that gap.
+
+```yaml
+vault_auto_commit: true   # commit dirty vault files at end of SAVE step 7 (default: true)
+```
+
+When `true` (default), SAVE step 7 runs `git -C $VAULT add -A && git -C $VAULT commit`
+before crystallize logic. Clean tree → skip silently. When `false`, vault
+commits are left to the user.
+
+AUDIT step 13 also checks vault tree cleanliness — if dirty, it warns the
+user to commit manually or enable `vault_auto_commit`.
+
 ## Interview
 
 Controls interactive interview phases. The `interview` section is separate from
