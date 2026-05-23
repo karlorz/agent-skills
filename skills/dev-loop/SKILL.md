@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.17.1"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.18.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile before pushing vault changes. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -383,6 +383,22 @@ prd_disciplines:
      **Resolve `vault_auto_commit`** — read from config, default `true`.
      Store as session variable `VAULT_AUTO_COMMIT`. When true, SAVE step 7
      commits dirty vault files; AUDIT step 13 warns if tree is dirty.
+
+     **Resolve `vault_sync`** — parse the `vault_sync` block from config.
+     - If block is absent: default `peer_aware: true` when `vault_auto_commit: true`,
+       otherwise `false`. Default `lock_timeout_seconds: 30`, `retry_budget: 3`.
+     - If `peer_aware: false` (explicit or defaulted) → store `VAULT_SYNC_PEER_AWARE = false`.
+     - If `peer_aware: true` AND `query_vault` in BACKEND_CAPS:
+       - Verify skillwiki >= v0.6.0 by checking for `--acquire-lock` flag:
+         `skillwiki sync --help 2>/dev/null | grep -q "acquire-lock"`
+       - If available → store `VAULT_SYNC_PEER_AWARE = true`,
+         `VAULT_SYNC_LOCK_TIMEOUT = lock_timeout_seconds` (default 30),
+         `VAULT_SYNC_RETRY_BUDGET = retry_budget` (default 3).
+       - If skillwiki < v0.6.0 → store `VAULT_SYNC_PEER_AWARE = false`,
+         emit one-time warning: "vault_sync.peer_aware requires skillwiki
+         >= v0.6.0 — upgrade skillwiki to enable peer-aware vault push."
+     Always initialize `VAULT_SYNC_DEFERRAL_COUNT = 0` at cycle start
+     (per-cycle scope — not session-scoped).
 
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
@@ -869,6 +885,14 @@ directly on the default branch. Report: "Changes committed and pushed to
 - `debug-only` pipeline: MERGE after EXECUTE (skip BROWSER-VERIFY)
 - `manual` pipeline: skip (user drives)
 
+**Vault push coordination (MERGE sub-step, only when `VAULT_SYNC_PEER_AWARE`):**
+Before any vault `git push` in MERGE step 6b-2:
+1. Skip if `VAULT_SYNC_PEER_AWARE` is false → push directly.
+2. Run `skillwiki sync --acquire-lock --timeout $VAULT_SYNC_LOCK_TIMEOUT`.
+3. On success: push, release lock, reset `VAULT_SYNC_DEFERRAL_COUNT`.
+4. On contention: increment deferral count, log, continue without pushing vault.
+5. Same error handling as SAVE step 7 lock gate (push failure → release lock, report, continue).
+
 BROWSER-VERIFY only runs when `browser_verification` config exists and
 changed files match trigger globs. For pipelines that skip it, MERGE
 follows REVIEW directly.
@@ -886,6 +910,21 @@ If `VAULT_AUTO_COMMIT` is true AND `query_vault` in BACKEND_CAPS:
 2. If dirty: `git -C $VAULT add -A && git -C $VAULT commit -m "dev-loop[${work_slug}]: auto-commit vault changes"`.
 3. If commit fails (no changes after add, or git not configured), skip silently — never block the cycle on vault commit failure.
 If `VAULT_AUTO_COMMIT` is false, skip.
+
+**Vault push with advisory lock (sub-step of SAVE, only when `VAULT_SYNC_PEER_AWARE`):**
+After vault auto-commit succeeds AND produced a commit (skip if auto-commit found
+a clean tree), before pushing to remote:
+1. Skip if `VAULT_SYNC_PEER_AWARE` is false → push directly (current behavior).
+2. Run `skillwiki sync --acquire-lock --timeout $VAULT_SYNC_LOCK_TIMEOUT`.
+3. On success (lock acquired):
+   - `git -C $VAULT push origin main`
+   - `skillwiki sync --release-lock`
+   - Reset `VAULT_SYNC_DEFERRAL_COUNT = 0`.
+4. On failure (lock contended or command missing):
+   - Increment `VAULT_SYNC_DEFERRAL_COUNT`.
+   - Log: "vault push deferred: peer holds advisory lock (attempt $COUNT of $VAULT_SYNC_RETRY_BUDGET)".
+   - Continue cycle — do not block.
+5. If push fails (network/permissions): release lock, report error, continue.
 
 **If `crystallize` in BACKEND_CAPS:**
 At natural breakpoints, crystallize insights not captured in spec/plan.
@@ -1092,6 +1131,17 @@ After claude-md-improver and auto-memory surfacing:
 - `git -C $VAULT diff --quiet` — if dirty, emit warning:
   "Vault working tree is dirty after cycle. Run `git -C $VAULT add -A && git -C $VAULT commit` or enable `vault_auto_commit: true` in dev-loop config."
 - This is a warning, not a cycle blocker — the cycle proceeds regardless.
+
+**Vault sync contention check (sub-step of AUDIT, only when `VAULT_SYNC_PEER_AWARE`):**
+After the dirty-tree check:
+- If `VAULT_SYNC_DEFERRAL_COUNT == 0` → silent.
+- If `1 <= VAULT_SYNC_DEFERRAL_COUNT < VAULT_SYNC_RETRY_BUDGET` → note:
+  "vault push deferred $COUNT time(s) this cycle — peer held advisory lock."
+- If `VAULT_SYNC_DEFERRAL_COUNT >= VAULT_SYNC_RETRY_BUDGET` → surface as P2 finding:
+  "vault push retry budget exhausted ($COUNT deferrals). Peer sessions may be
+  holding the advisory lock persistently, or the lockfile may be stale.
+  Investigate with `skillwiki sync peers`."
+  (Counter resets to 0 at next REFRESH — per-cycle scope.)
 
 ### 14. VERIFY — provenance integrity (conditional, every 3 cycles)
 

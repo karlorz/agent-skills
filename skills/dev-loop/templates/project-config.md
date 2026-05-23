@@ -502,6 +502,31 @@ commits are left to the user.
 AUDIT step 13 also checks vault tree cleanliness — if dirty, it warns the
 user to commit manually or enable `vault_auto_commit`.
 
+## Vault sync coordination (optional, since v1.18.0)
+
+Controls whether dev-loop acquires the skillwiki advisory lockfile before
+pushing vault changes. Requires skillwiki >= v0.6.0 (which ships the
+`--acquire-lock` / `--release-lock` flags). When `peer_aware: true`,
+SAVE step 7 and MERGE step 6b-2 gate vault `git push` behind lock
+acquisition with a 30-second timeout — preventing the rebase-conflict-storm
+pattern when dev-loop and other sessions (Obsidian, parallel shells) race
+on vault git operations.
+
+```yaml
+vault_sync:
+  peer_aware: true              # acquire advisory lock before vault push (default: true when vault_auto_commit: true)
+  lock_timeout_seconds: 30      # max wait for lock acquisition before deferring
+  retry_budget: 3               # max consecutive deferrals before surfacing P2 finding
+```
+
+When `peer_aware: false` or skillwiki lacks `--acquire-lock`:
+- SAVE step 7 and MERGE step 6b-2 push directly (current behavior)
+- A one-time warning is emitted: "vault_sync.peer_aware is disabled — vault pushes are not coordinated with peer sessions"
+
+**Lock acquisition is best-effort, never blocking.** If a peer holds the
+lock, the cycle defers the push and continues. The vault commit stays
+local until the next cycle. AUDIT step 13 reports contention events.
+
 ## Interview
 
 Controls interactive interview phases. The `interview` section is separate from

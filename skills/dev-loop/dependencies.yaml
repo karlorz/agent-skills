@@ -153,8 +153,8 @@ optional:
   - kind: skill
     ref: skillwiki:wiki-sync
     capability: vault_sync
-    used_by: ["IDLE maintenance", "RETRO archive sub-step"]
-    fallback: "skip vault git sync; vault changes remain local until manual push"
+    used_by: ["SAVE step 7 vault push", "MERGE step 6b-2 vault push", "IDLE maintenance", "RETRO archive sub-step"]
+    fallback: "push vault directly without lock coordination; risk rebase-conflict-storm on multi-session hosts"
 
   # --- dev-loop self-references (always present when dev-loop loaded) ---
   - kind: agent

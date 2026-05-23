@@ -27,8 +27,8 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.17.1: doctor-worker skillwiki bridge + research-worker stale buckets + wiki-sync dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. MERGE CI gate. Execution subagents on sonnet. /setup-dev-loop scaffolds 13 config sections (A-M).",
-      "version": "1.17.1",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile before pushing vault changes. v1.17.1: doctor-worker skillwiki bridge + research-worker stale buckets + wiki-sync dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. MERGE CI gate. Execution subagents on sonnet. /setup-dev-loop scaffolds 13 config sections (A-M).",
+      "version": "1.18.0",
       "category": "automation",
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "ci-health-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery", "vault-auto-commit", "doctor", "stale", "wiki-sync"]
     },
