@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.18.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile before pushing vault changes. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.18.1"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -399,6 +399,11 @@ prd_disciplines:
          >= v0.6.0 — upgrade skillwiki to enable peer-aware vault push."
      Always initialize `VAULT_SYNC_DEFERRAL_COUNT = 0` at cycle start
      (per-cycle scope — not session-scoped).
+     **Resolve `presync_skill`** — parse from `vault_sync.presync_skill`:
+     `auto-detect` (default), `always`, or `never`. Store as
+     `VAULT_SYNC_PRESYNC_SKILL`. When `auto-detect`, probe
+     `$VAULT/.claude/skills/wiki-presync/SKILL.md` at cycle start;
+     cache result as `VAULT_PRESYNC_AVAILABLE` (bool).
 
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
@@ -887,6 +892,8 @@ directly on the default branch. Report: "Changes committed and pushed to
 
 **Vault push coordination (MERGE sub-step, only when `VAULT_SYNC_PEER_AWARE`):**
 Before any vault `git push` in MERGE step 6b-2:
+0. **Presync gate** — same as SAVE step 7 presync gate: invoke vault-local
+   wiki-presync if available. Skip push on failure.
 1. Skip if `VAULT_SYNC_PEER_AWARE` is false → push directly.
 2. Run `skillwiki sync --acquire-lock --timeout $VAULT_SYNC_LOCK_TIMEOUT`.
 3. On success: push, release lock, reset `VAULT_SYNC_DEFERRAL_COUNT`.
@@ -914,6 +921,13 @@ If `VAULT_AUTO_COMMIT` is false, skip.
 **Vault push with advisory lock (sub-step of SAVE, only when `VAULT_SYNC_PEER_AWARE`):**
 After vault auto-commit succeeds AND produced a commit (skip if auto-commit found
 a clean tree), before pushing to remote:
+0. **Presync gate** — if `VAULT_PRESYNC_AVAILABLE` and `VAULT_SYNC_PRESYNC_SKILL`
+   is `auto-detect` or `always`: invoke `Skill("$VAULT/.claude/skills/wiki-presync/SKILL.md")`
+   to run lint gate + collision dedup + `git pull --rebase`. If the skill fails
+   (non-zero exit), skip the push — presync failure means the vault has issues
+   that should block a push. If `VAULT_SYNC_PRESYNC_SKILL` is `always` but the
+   skill file is missing: warn "presync_skill: always but wiki-presync not found
+   at $VAULT/.claude/skills/wiki-presync/" and push directly.
 1. Skip if `VAULT_SYNC_PEER_AWARE` is false → push directly (current behavior).
 2. Run `skillwiki sync --acquire-lock --timeout $VAULT_SYNC_LOCK_TIMEOUT`.
 3. On success (lock acquired):
@@ -1576,6 +1590,24 @@ The ad-hoc capture flow works in both directions:
 When `query_vault` not in BACKEND_CAPS, Obsidian integration is
 unavailable — no vault exists for captures to land in. Ad-hoc captures
 from Claude go to `.claude/dev-loop-work/captures.md` instead.
+
+## Vault-Local Skill Discovery (requires `query_vault` in BACKEND_CAPS)
+
+dev-loop supports a vault-local skill pattern: skills placed at
+`$VAULT/.claude/skills/<name>/SKILL.md` that are discovered at runtime
+rather than declared in `dependencies.yaml`. This is for vault-specific
+tooling that doesn't belong in the main plugin distribution.
+
+**`wiki-presync` contract:** Before each vault push (SAVE step 7, MERGE
+step 6b-2), dev-loop checks `$VAULT/.claude/skills/wiki-presync/SKILL.md`.
+If present and `vault_sync.presync_skill` is `auto-detect` or `always`,
+the skill is invoked as a pre-push hook. The skill should run lint gate,
+collision dedup, and `git pull --rebase`. If it exits non-zero, the push
+is skipped — presync failure means the vault has issues that should
+block a push.
+
+Vaults that don't ship the skill see no change in behavior. The probe
+is a single `[ -f ]` check at cycle start — zero runtime cost when absent.
 
 ## Bootstrap Mode
 

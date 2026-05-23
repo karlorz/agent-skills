@@ -517,6 +517,7 @@ vault_sync:
   peer_aware: true              # acquire advisory lock before vault push (default: true when vault_auto_commit: true)
   lock_timeout_seconds: 30      # max wait for lock acquisition before deferring
   retry_budget: 3               # max consecutive deferrals before surfacing P2 finding
+  presync_skill: auto-detect    # auto-detect | always | never — invoke vault-local wiki-presync before push
 ```
 
 When `peer_aware: false` or skillwiki lacks `--acquire-lock`:
@@ -526,6 +527,15 @@ When `peer_aware: false` or skillwiki lacks `--acquire-lock`:
 **Lock acquisition is best-effort, never blocking.** If a peer holds the
 lock, the cycle defers the push and continues. The vault commit stays
 local until the next cycle. AUDIT step 13 reports contention events.
+
+**`presync_skill` modes:**
+- `auto-detect` (default): probe `$VAULT/.claude/skills/wiki-presync/SKILL.md`
+  at cycle start. If present, invoke it before each vault push — it runs lint
+  gate, collision dedup, and `git pull --rebase`. If the presync skill fails,
+  the push is skipped (presync failure means the vault has issues that should
+  block a push). Vaults without the skill see no change.
+- `always`: require the skill; warn if missing but push anyway.
+- `never`: skip the presync probe entirely, even if the skill is present.
 
 ## Interview
 
