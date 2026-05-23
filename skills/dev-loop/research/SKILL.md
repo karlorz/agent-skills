@@ -1,7 +1,7 @@
 ---
 name: research
-version: "1.5.3"
-description: Pluggable research agent for dev-loop. Spawn with model: sonnet — scans code health (CLI, tests, skills, specs) and optional vault health (coverage, links, quality). Outputs prioritized work items. Pass 'high' for aggressive mode.
+version: "1.5.4"
+description: Pluggable research agent for dev-loop. Spawn with model: sonnet — scans code health (CLI, tests, skills, specs) and optional vault health (coverage, links, quality). v1.5.4: Track B3 missing_tldr placeholder detection for high-confidence pages. Outputs prioritized work items. Pass 'high' for aggressive mode.
 type: companion-prompt
 mode: recurring
 ---
@@ -112,6 +112,7 @@ Skip if `vault_backend` unavailable.
 ### B3. Page Quality
 - Thin pages (<40L normal, <60L high)
 - Missing Overview/Related sections
+- **Missing TL;DR**: pages with `confidence: high` but TL;DR section contains only placeholder strings (`Pending summary.`, `TBD`, `TODO`, single-bullet stub). Flag as `info` severity — high-confidence hub pages should not ship with placeholder summaries. Surface alongside thin-page findings.
 
 ### B4. Type Coverage
 - Empty type dirs (entities, comparisons, queries, meta)
