@@ -27,6 +27,21 @@ vault: <vault-path>            # e.g., ~/wiki, or empty to skip vault steps
 release_branch: <branch-name>  # e.g., main, dev, master
 ```
 
+## Memory layer (optional)
+
+Controls whether dev-loop is aware of a cross-session memory backend (e.g.,
+claude-mem, agentmemory). When declared, REFRESH step 1 can search prior
+sessions for related work; RETRO step 11 can write structured observations
+for future recall. Most memory MCP servers auto-capture via hooks — the
+loop's role is awareness, not driving the capture.
+
+```yaml
+memory_layer: none              # claude-mem | agentmemory | none
+```
+
+When `none` (default), the loop relies on the skillwiki vault for long-term
+memory and session JSONL for short-term — current behavior, no change.
+
 ## PRD layer
 
 Controls which skill suite drives the brainstorm → spec → plan → execute →
