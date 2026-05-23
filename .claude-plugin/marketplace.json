@@ -44,7 +44,7 @@
       "name": "playwright-cli",
       "source": "./skills/playwright-cli",
       "description": "Browser automation via playwright-cli with browser-worker agent (model: sonnet) for mechanical Chrome lifecycle and interaction tasks — fork of microsoft/playwright-cli with attach+headed defaults and project config overrides",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "category": "automation",
       "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "testing", "chrome", "agent", "browser-worker"]
     },
