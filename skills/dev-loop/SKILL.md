@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.18.1"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.19.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -404,6 +404,27 @@ prd_disciplines:
      `VAULT_SYNC_PRESYNC_SKILL`. When `auto-detect`, probe
      `$VAULT/.claude/skills/wiki-presync/SKILL.md` at cycle start;
      cache result as `VAULT_PRESYNC_AVAILABLE` (bool).
+
+     **Resolve `release_policy`** — parse the `release_policy` block from config.
+     - If block is absent → store `RELEASE_POLICY = None`. PUSH step uses
+       pre-1.19.0 behavior (no auto-bump; user/upstream bumps manifests
+       before the cycle reaches step 10).
+     - If block present, store as `RELEASE_POLICY` dict with fields:
+       - `auto_bump` (bool, default `false`)
+       - `channel` (string: `beta` | `stable`, default `stable`) — passed
+         to `bump_script` as a hint; dev-loop does NOT compute version strings
+       - `trigger_globs` (list of fnmatch patterns; required when
+         `auto_bump: true`)
+       - `skip_globs` (list of fnmatch patterns; default `[]`)
+       - `tag_format` (string template, default `v{version}`) — consumed
+         by `bump_script`/tag-push logic, not by dev-loop directly
+       - `verify_after_push` (bool, default `true`)
+     - Validation: when `auto_bump: true` AND `trigger_globs` is empty or
+       absent, emit warning "release_policy.auto_bump is true but
+       trigger_globs is empty — no commit will ever trigger a bump.
+       Disabling auto_bump for this cycle." and treat as `auto_bump: false`.
+     Schema: `templates/project-config.md` § Release policy. Setup flow:
+     `setup/SKILL.md` Section N.
 
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
@@ -981,6 +1002,41 @@ outside the loop. The deploy script itself handles rollback on failure
 
 ### 10. PUSH (optional — run if `publish_via` config field is non-empty)
 
+**Auto-bump decision (when `RELEASE_POLICY` is non-None and `auto_bump: true`):**
+
+Before the `publish_via` branch, decide whether this cycle should bump
+and tag based on the declared `release_policy`:
+
+1. Resolve last tag: `git describe --tags --abbrev=0 2>/dev/null`. If
+   no tags exist, fall back to the repo root commit
+   (`git rev-list --max-parents=0 HEAD 2>/dev/null`). If both fail
+   (empty repo, no commits) → skip PUSH and log "PUSH skipped: empty
+   repo or no commit history."
+2. List changed files since that ref:
+   `git diff --name-only <last-tag>..HEAD`. Empty diff → skip PUSH
+   (nothing committed since last release).
+3. Match each changed file against `RELEASE_POLICY.trigger_globs`
+   (fnmatch / shell-style, patterns relative to repo root). If zero
+   files match any pattern → skip PUSH (no shippable changes).
+4. Match each changed file against `RELEASE_POLICY.skip_globs`. If
+   EVERY changed file matches at least one `skip_globs` pattern → skip
+   PUSH (vault-only / doc-only window). Log: "PUSH skipped: all
+   changed files match skip_globs."
+5. Otherwise → invoke `bump_script` (from `## Release` config) to
+   update manifests and compute the next version per `channel`. Pass
+   `channel` via env var `RELEASE_CHANNEL` (the script reads this if
+   it supports channel-aware bumping; otherwise it stable-bumps).
+6. After `bump_script` exits 0, commit manifest changes with
+   `chore: bump version to <new-version>` and `git push` to
+   `release_branch`. Then fall through to the `publish_via` branch
+   below — its tag-push logic uses `tag_format` and
+   `verify_after_push` from `RELEASE_POLICY`.
+
+When `RELEASE_POLICY` is `None` OR `auto_bump: false`, skip this
+prelude entirely and proceed directly to the `publish_via` branch
+(pre-1.19.0 behavior — manual bump expected before the cycle reaches
+this step).
+
 Follow the project's documented release procedure based on
 `publish_via`:
 
@@ -1524,6 +1580,13 @@ stale local state:
     branch). It never force-pushes or directly merges a feature branch
     into the release branch. This preserves branch protection, CI gates,
     and review workflows.
+22. **`release_policy` is opt-in.** Projects without the `release_policy`
+    block see no behavior change (pre-1.19.0 manual-bump flow preserved).
+    When the block is present with `auto_bump: true`, PUSH gates on
+    file-glob matches before invoking `bump_script` — the script handles
+    version computation, dev-loop handles the policy. When all changed
+    files match `skip_globs`, PUSH is skipped entirely so vault-only or
+    doc-only cycles don't generate noise releases.
 
 ## Wrapper Agents for Skill-as-Subagent Adapters
 

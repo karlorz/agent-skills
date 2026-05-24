@@ -639,6 +639,50 @@ remote_hosts: [<host>, ...]        # e.g., [sg01], or [] if not applicable
 It should be idempotent and handle its own rollback on failure.
 Leave empty to skip DEPLOY entirely.
 
+## Release policy (optional)
+
+Controls whether step 10 (PUSH) auto-bumps version when committed files
+match declared globs. Without this block, PUSH expects the user (or an
+upstream skill) to have already bumped the version manifests before the
+cycle reaches step 10 (pre-1.19.0 behavior).
+
+```yaml
+release_policy:
+  auto_bump: true                        # default: false. Set true to enable PUSH gating.
+  channel: beta                          # default: stable. Passed to bump_script as RELEASE_CHANNEL env var.
+  trigger_globs:                         # any committed file matching these makes PUSH fire
+    - "packages/skills/**"
+    - "packages/cli/**"
+    - "packages/shared/**"
+    - ".claude-plugin/marketplace.json"
+    - "scripts/bump-version.sh"
+  skip_globs:                            # cycles where ALL files match these skip PUSH
+    - "raw/**"
+    - "concepts/**"
+    - "entities/**"
+    - "queries/**"
+    - "projects/**"
+    - "_archive/**"
+    - "*.md"                             # standalone doc-only commits
+  tag_format: "v{version}"               # consumed by bump_script / tag-push logic
+  verify_after_push: true                # ls-remote + gh run watch after tag push
+```
+
+Semantics:
+
+- **`auto_bump: false`** (or block absent) → preserves pre-1.19.0 behavior.
+  Manual bump expected before the cycle reaches PUSH.
+- **Glob matching** is fnmatch (shell-style), patterns relative to repo
+  root. `**` matches any path depth.
+- **Decision logic**: PUSH skips entirely when (a) no changed files match
+  any `trigger_globs` pattern, OR (b) every changed file matches at least
+  one `skip_globs` pattern. Otherwise `bump_script` runs.
+- **Channel** is a hint to `bump_script` (passed as `RELEASE_CHANNEL` env
+  var). dev-loop does NOT compute version strings — the project's
+  `bump_script` owns version computation.
+- **`verify_after_push: true`** is recommended — without it, a failed
+  publish.yml run is silent until the next cycle.
+
 ## CI Configuration
 
 Controls whether the dev-loop MERGE step enforces CI checks before

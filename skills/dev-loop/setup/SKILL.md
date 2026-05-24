@@ -473,9 +473,71 @@ code_review:
 
 **Runtime behavior:** Loaded at REFRESH into `CODE_REVIEW_BACKENDS` session list. Always includes `dev-loop:simplify-worker`. Appends `dev-loop:codex-review-worker` when (a) current intensity's `enabled_in_*` flag is true AND (b) neither `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in `DEP_DRIFT`. REVIEW step 6 spawns each backend in parallel with `model: "sonnet"`; findings are concatenated under per-backend section headers. No auto-reconciliation. Schema reference: `templates/project-config.md` § Code review.
 
+**Section N — Release policy (since v1.19.0).** Controls whether step
+10 PUSH auto-bumps version on shippable commits. Optional; omit the
+block to preserve pre-1.19.0 manual-bump behavior.
+
+Present this section only if `publish_via` was set to a non-`none`
+value earlier in setup. If `publish_via: none`, skip Section N (no
+PUSH happens regardless).
+
+Ask the user, in order:
+
+> "Do you want dev-loop to auto-bump version on shippable commits? (yes/no, default: no)"
+
+If `no` → skip the rest of Section N; omit `release_policy` from the
+generated config.
+
+If `yes`:
+
+> "Which channel — `beta` (pre-release tags like `v1.2.3-beta.4`) or `stable` (`v1.2.3`)? Default: stable."
+
+> "Which file globs indicate a shippable commit? (comma-separated fnmatch patterns relative to repo root)"
+> Suggest defaults derived from detected layout:
+> - If `cli_src` matches `packages/*/src/...`, suggest `packages/cli/**`.
+> - If `skills_glob` is set, suggest `packages/skills/**` (or the
+>   detected glob's parent directory).
+> - Always include `.claude-plugin/marketplace.json` and the
+>   `bump_script` path if set.
+
+> "Which file globs indicate a noise-only commit to skip? (comma-separated; default shown)"
+> Default: `raw/**, concepts/**, entities/**, queries/**, projects/**, _archive/**, *.md`
+> The default skip list mirrors typical vault directories and standalone
+> markdown commits.
+
+> "Enable `verify_after_push` (ls-remote + gh run watch after tag push)? (yes/no, default: yes)"
+
+`tag_format` is fixed at `v{version}` (the canonical SemVer tag format).
+If a project needs a different tag format, ask the user to set
+`release_policy.tag_format` manually in the generated config — setup
+does not expose this field interactively.
+
+**Config emitted:**
+
+```yaml
+release_policy:
+  auto_bump: true
+  channel: <beta|stable>
+  trigger_globs:
+    - "<pattern>"
+    # ...
+  skip_globs:
+    - "<pattern>"
+    # ...
+  tag_format: "v{version}"
+  verify_after_push: <true|false>
+```
+
+**Runtime behavior:** Loaded at REFRESH into `RELEASE_POLICY` session
+variable. PUSH step (10) checks changed files since last tag against
+`trigger_globs`/`skip_globs` and gates whether to invoke `bump_script`.
+When the block is absent, `RELEASE_POLICY = None` and PUSH preserves
+pre-1.19.0 behavior. Schema reference: `templates/project-config.md`
+§ Release policy.
+
 ### 3. Confirm and write
 
-Show the user a draft of `./.claude/dev-loop.config.md` covering all twelve sections (PRD, knowledge, release, interview, glossary, CI setup, critical paths, fact-check tier, idle deep-research, browser verification, reactive debugging, discipline path scoping). Let them edit before writing.
+Show the user a draft of `./.claude/dev-loop.config.md` covering all thirteen sections (PRD, knowledge, release, interview, glossary, CI setup, critical paths, fact-check tier, idle deep-research, browser verification, reactive debugging, discipline path scoping, release policy). Let them edit before writing.
 
 ### 4. Write
 
