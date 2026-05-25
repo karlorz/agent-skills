@@ -10,10 +10,11 @@ PASS=0
 FAIL=0
 SKIP=0
 TARGET_HOST=""
+BACKUP_DIR=""
 
 usage() {
-  echo "Usage: $0 --manifest PATH [--group NAME] [--target HOST]"
-  echo "Groups: base caddy_domains per-domain hermes databases other_services apt wiki"
+  echo "Usage: $0 --manifest PATH [--group NAME] [--target HOST] [--backup-dir PATH]"
+  echo "Groups: base caddy_domains per-domain hermes databases dump_integrity other_services apt wiki"
   exit 1
 }
 
@@ -22,6 +23,7 @@ while [ $# -gt 0 ]; do
     --manifest) MANIFEST="$2"; shift 2 ;;
     --group) GROUP="$2"; ALL=false; shift 2 ;;
     --target) TARGET_HOST="$2"; shift 2 ;;
+    --backup-dir) BACKUP_DIR="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
@@ -175,6 +177,167 @@ for f in dbs:
   fi
 }
 
+test_dump_integrity() {
+  echo "--- Group: dump_integrity ---"
+
+  # Resolve backup directory: --backup-dir flag > manifest dirname > cwd
+  local bdir="$BACKUP_DIR"
+  if [ -z "$bdir" ]; then
+    bdir=$(python3 -c "
+import json, os
+m = json.load(open('$MANIFEST'))
+bd = m.get('backup_dir', '')
+if not bd:
+    bd = os.path.dirname('$MANIFEST')
+print(bd)
+" 2>/dev/null || dirname "$MANIFEST")
+  fi
+
+  if [ ! -d "$bdir" ]; then
+    assert_skip "backup directory (not found: $bdir)"
+    return
+  fi
+
+  # --- PostgreSQL .dump files: pg_restore --list ---
+  local pg_count=0
+  for dump_file in "$bdir"/pg_*.dump; do
+    [ -f "$dump_file" ] || continue
+    pg_count=$((pg_count + 1))
+    local db_name
+    db_name=$(basename "$dump_file" .dump | sed 's/^pg_//')
+    if pg_restore --list "$dump_file" >/dev/null 2>&1; then
+      assert "pg_restore --list OK for $db_name" true
+    else
+      assert "pg_restore --list OK for $db_name" false
+    fi
+    # SHA256 checksum verification
+    if [ -f "$dump_file.sha256" ]; then
+      local computed expected
+      if command -v sha256sum >/dev/null 2>&1; then
+        computed=$(sha256sum "$dump_file" | awk '{print $1}')
+      elif command -v shasum >/dev/null 2>&1; then
+        computed=$(shasum -a 256 "$dump_file" | awk '{print $1}')
+      else
+        assert_skip "sha256 for $db_name (no sha256sum/shasum)"
+        continue
+      fi
+      expected=$(awk '{print $1}' "$dump_file.sha256")
+      if [ "$computed" = "$expected" ]; then
+        assert "sha256 match for $db_name" true
+      else
+        assert "sha256 match for $db_name" false
+      fi
+    else
+      assert_skip "sha256 checksum file for $db_name"
+    fi
+  done
+  [ "$pg_count" -eq 0 ] && assert_skip "PostgreSQL dump files in $bdir"
+
+  # --- MySQL .sql.gz files: gzip -t ---
+  local mysql_count=0
+  for dump_file in "$bdir"/mysql_*.sql.gz; do
+    [ -f "$dump_file" ] || continue
+    mysql_count=$((mysql_count + 1))
+    local db_name
+    db_name=$(basename "$dump_file" .sql.gz | sed 's/^mysql_//')
+    if gzip -t "$dump_file" 2>/dev/null; then
+      assert "gzip integrity OK for mysql_$db_name" true
+    else
+      assert "gzip integrity OK for mysql_$db_name" false
+    fi
+    # SHA256 checksum verification
+    if [ -f "$dump_file.sha256" ]; then
+      local computed expected
+      if command -v sha256sum >/dev/null 2>&1; then
+        computed=$(sha256sum "$dump_file" | awk '{print $1}')
+      elif command -v shasum >/dev/null 2>&1; then
+        computed=$(shasum -a 256 "$dump_file" | awk '{print $1}')
+      else
+        assert_skip "sha256 for mysql_$db_name (no sha256sum/shasum)"
+        continue
+      fi
+      expected=$(awk '{print $1}' "$dump_file.sha256")
+      if [ "$computed" = "$expected" ]; then
+        assert "sha256 match for mysql_$db_name" true
+      else
+        assert "sha256 match for mysql_$db_name" false
+      fi
+    else
+      assert_skip "sha256 checksum file for mysql_$db_name"
+    fi
+  done
+  [ "$mysql_count" -eq 0 ] && assert_skip "MySQL dump files in $bdir"
+
+  # --- MongoDB archive.gz: gzip -t ---
+  if [ -f "$bdir/mongo.archive.gz" ]; then
+    if gzip -t "$bdir/mongo.archive.gz" 2>/dev/null; then
+      assert "gzip integrity OK for mongo.archive.gz" true
+    else
+      assert "gzip integrity OK for mongo.archive.gz" false
+    fi
+    if [ -f "$bdir/mongo.archive.gz.sha256" ]; then
+      local computed expected
+      if command -v sha256sum >/dev/null 2>&1; then
+        computed=$(sha256sum "$bdir/mongo.archive.gz" | awk '{print $1}')
+      elif command -v shasum >/dev/null 2>&1; then
+        computed=$(shasum -a 256 "$bdir/mongo.archive.gz" | awk '{print $1}')
+      else
+        assert_skip "sha256 for mongo.archive.gz (no sha256sum/shasum)"
+        computed=""
+      fi
+      if [ -n "$computed" ]; then
+        expected=$(awk '{print $1}' "$bdir/mongo.archive.gz.sha256")
+        if [ "$computed" = "$expected" ]; then
+          assert "sha256 match for mongo.archive.gz" true
+        else
+          assert "sha256 match for mongo.archive.gz" false
+        fi
+      fi
+    else
+      assert_skip "sha256 checksum file for mongo.archive.gz"
+    fi
+  else
+    assert_skip "MongoDB archive file in $bdir"
+  fi
+
+  # --- SQLite backup files: local integrity check ---
+  local sqlite_count=0
+  for db_file in "$bdir"/sqlite_*; do
+    [ -f "$db_file" ] || continue
+    # Skip sha256 sidecar files
+    case "$db_file" in *.sha256) continue ;; esac
+    sqlite_count=$((sqlite_count + 1))
+    local db_name
+    db_name=$(basename "$db_file" | sed 's/^sqlite_//')
+    if sqlite3 "$db_file" "PRAGMA integrity_check;" 2>/dev/null | grep -q "ok"; then
+      assert "sqlite3 integrity_check OK for $db_name" true
+    else
+      assert "sqlite3 integrity_check OK for $db_name" false
+    fi
+    # SHA256 checksum verification
+    if [ -f "$db_file.sha256" ]; then
+      local computed expected
+      if command -v sha256sum >/dev/null 2>&1; then
+        computed=$(sha256sum "$db_file" | awk '{print $1}')
+      elif command -v shasum >/dev/null 2>&1; then
+        computed=$(shasum -a 256 "$db_file" | awk '{print $1}')
+      else
+        assert_skip "sha256 for sqlite $db_name (no sha256sum/shasum)"
+        continue
+      fi
+      expected=$(awk '{print $1}' "$db_file.sha256")
+      if [ "$computed" = "$expected" ]; then
+        assert "sha256 match for sqlite $db_name" true
+      else
+        assert "sha256 match for sqlite $db_name" false
+      fi
+    else
+      assert_skip "sha256 checksum file for sqlite $db_name"
+    fi
+  done
+  [ "$sqlite_count" -eq 0 ] && assert_skip "SQLite backup files in $bdir"
+}
+
 test_other_services() {
   echo "--- Group: other_services ---"
   local host
@@ -243,6 +406,7 @@ if $ALL; then
   test_per_domain
   test_hermes
   test_databases
+  test_dump_integrity
   test_other_services
   test_apt
   test_wiki
