@@ -253,10 +253,15 @@ restore_group() {
     base)
       [ -f "$BACKUP_CONTENT_DIR/hostname" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/hostname" "${TARGET}:/etc/hostname" 2>/dev/null || true
       [ -f "$BACKUP_CONTENT_DIR/hosts" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/hosts" "${TARGET}:/etc/hosts" 2>/dev/null || true
+      [ -f "$BACKUP_CONTENT_DIR/sshd_config" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/sshd_config" "${TARGET}:/etc/ssh/sshd_config" 2>/dev/null && {
+        echo "  Restored sshd_config — restarting sshd..."
+        ssh "$TARGET" "sudo systemctl restart sshd 2>/dev/null || sudo systemctl restart ssh 2>/dev/null || true" 2>/dev/null
+      } || true
       ;;
     caddy_domains)
       [ -f "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" ] && ssh "$TARGET" "tar xzf - -C /" < "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" 2>/dev/null || true
       [ -f "$BACKUP_CONTENT_DIR/ssl-certs.tar.gz" ] && ssh "$TARGET" "tar xzf - -C /" < "$BACKUP_CONTENT_DIR/ssl-certs.tar.gz" 2>/dev/null || true
+      [ -f "$BACKUP_CONTENT_DIR/caddy-data.tar.gz" ] && ssh "$TARGET" "sudo mkdir -p /var/lib/caddy/.local/share/caddy/ && tar xzf - -C /" < "$BACKUP_CONTENT_DIR/caddy-data.tar.gz" 2>/dev/null || true
       # Check if Caddy binary exists on target — offer to install if missing
       caddy_exists=$(ssh "$TARGET" "which caddy 2>/dev/null || echo MISSING" 2>/dev/null || echo "MISSING")
       if [ "$caddy_exists" = "MISSING" ]; then
@@ -326,6 +331,12 @@ restore_group() {
           echo \"    systemctl --user enable --now \$svc\"
         done" 2>/dev/null || true
       fi
+      # Service unit files restore
+      if [ -f "$BACKUP_CONTENT_DIR/service-unit-files.txt" ]; then
+        echo "  Service unit files available in backup. To deploy:"
+        echo "    scp $BACKUP_CONTENT_DIR/service-unit-files.txt ${TARGET}:/tmp/"
+        echo "    (Review file, then copy individual units to /etc/systemd/system/ or ~/.config/systemd/user/)"
+      fi
       ;;
 
 
@@ -338,6 +349,12 @@ restore_group() {
           echo "  ⚠ Cross-distro apt restore (--allow-cross-distro) — packages may not resolve."
         fi
         rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/dpkg-selections.txt" "${TARGET}:/tmp/" 2>/dev/null || true
+      fi
+      # Apt sources restore (advisory — review before applying)
+      if [ -f "$BACKUP_CONTENT_DIR/apt-sources.txt" ]; then
+        echo "  Apt sources available in backup. To restore:"
+        echo "    rsync -avP $BACKUP_CONTENT_DIR/apt-sources.txt ${TARGET}:/tmp/apt-sources.txt"
+        echo "    (Review file, then copy to /etc/apt/sources.list or /etc/apt/sources.list.d/)"
       fi
       ;;
     databases)
