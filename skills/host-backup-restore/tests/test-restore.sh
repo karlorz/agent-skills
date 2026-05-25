@@ -14,7 +14,7 @@ BACKUP_DIR=""
 
 usage() {
   echo "Usage: $0 --manifest PATH [--group NAME] [--target HOST] [--backup-dir PATH]"
-  echo "Groups: base caddy_domains per-domain hermes databases dump_integrity other_services apt wiki"
+  echo "Groups: base caddy_domains per-domain hermes databases dump_integrity docker_restore other_services apt wiki"
   exit 1
 }
 
@@ -338,6 +338,186 @@ print(bd)
   [ "$sqlite_count" -eq 0 ] && assert_skip "SQLite backup files in $bdir"
 }
 
+test_docker_restore() {
+  echo "--- Group: docker_restore ---"
+
+  # Require Docker
+  if ! command -v docker >/dev/null 2>&1; then
+    assert_skip "Docker restore tests (docker not installed)"
+    return
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    assert_skip "Docker restore tests (docker daemon not running)"
+    return
+  fi
+
+  # Resolve backup directory
+  local bdir="$BACKUP_DIR"
+  if [ -z "$bdir" ]; then
+    bdir=$(python3 -c "
+import json, os
+m = json.load(open('$MANIFEST'))
+bd = m.get('backup_dir', '')
+if not bd:
+    bd = os.path.dirname('$MANIFEST')
+print(bd)
+" 2>/dev/null || dirname "$MANIFEST")
+  fi
+
+  if [ ! -d "$bdir" ]; then
+    assert_skip "Docker restore tests (backup dir not found: $bdir)"
+    return
+  fi
+
+  # --- PostgreSQL restore test ---
+  local pg_count=0
+  for dump_file in "$bdir"/pg_*.dump; do
+    [ -f "$dump_file" ] || continue
+    pg_count=$((pg_count + 1))
+    local db_name
+    db_name=$(basename "$dump_file" .dump | sed 's/^pg_//')
+    local container="test-restore-pg-$$"
+
+    echo "  Testing PostgreSQL restore: $db_name"
+    # Spin up ephemeral container
+    docker run -d --name "$container" -e POSTGRES_PASSWORD=test -e POSTGRES_DB="${db_name}" postgres:16-alpine >/dev/null 2>&1 || {
+      assert "PostgreSQL restore for $db_name (container start)" false
+      continue
+    }
+
+    # Wait for ready
+    local ready=false
+    for i in $(seq 1 30); do
+      docker exec "$container" pg_isready -U postgres >/dev/null 2>&1 && { ready=true; break; }
+      sleep 2
+    done
+
+    if ! $ready; then
+      assert "PostgreSQL restore for $db_name (pg_isready timeout)" false
+      docker rm -f "$container" >/dev/null 2>&1 || true
+      continue
+    fi
+
+    # Copy dump and restore
+    docker cp "$dump_file" "$container:/tmp/backup.dump" 2>/dev/null
+    if docker exec "$container" pg_restore -U postgres -d "$db_name" /tmp/backup.dump >/dev/null 2>&1; then
+      assert "pg_restore OK for $db_name" true
+    else
+      # pg_restore may return non-zero for warnings; check if tables exist
+      local table_count
+      table_count=$(docker exec "$container" psql -U postgres -d "$db_name" -t -c "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null | tr -d ' ')
+      if [ -n "$table_count" ] && [ "$table_count" -gt 0 ] 2>/dev/null; then
+        assert "pg_restore OK for $db_name (tables restored with warnings)" true
+      else
+        assert "pg_restore OK for $db_name" false
+      fi
+    fi
+
+    # Verify tables exist
+    local table_count
+    table_count=$(docker exec "$container" psql -U postgres -d "$db_name" -t -c "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null | tr -d ' ')
+    if [ -n "$table_count" ] && [ "$table_count" -gt 0 ] 2>/dev/null; then
+      assert "PostgreSQL table count > 0 for $db_name ($table_count tables)" true
+    else
+      assert "PostgreSQL table count > 0 for $db_name" false
+    fi
+
+    docker rm -f "$container" >/dev/null 2>&1 || true
+  done
+  [ "$pg_count" -eq 0 ] && assert_skip "PostgreSQL dump files for Docker restore"
+
+  # --- MySQL restore test ---
+  local mysql_count=0
+  for dump_file in "$bdir"/mysql_*.sql.gz; do
+    [ -f "$dump_file" ] || continue
+    mysql_count=$((mysql_count + 1))
+    local db_name
+    db_name=$(basename "$dump_file" .sql.gz | sed 's/^mysql_//')
+    local container="test-restore-mysql-$$"
+
+    echo "  Testing MySQL restore: $db_name"
+    docker run -d --name "$container" -e MYSQL_ROOT_PASSWORD=test -e MYSQL_DATABASE="${db_name}" mysql:8.0 >/dev/null 2>&1 || {
+      assert "MySQL restore for $db_name (container start)" false
+      continue
+    }
+
+    # Wait for ready
+    local ready=false
+    for i in $(seq 1 30); do
+      docker exec "$container" mysqladmin ping -uroot -ptest --silent >/dev/null 2>&1 && { ready=true; break; }
+      sleep 2
+    done
+
+    if ! $ready; then
+      assert "MySQL restore for $db_name (mysqladmin ping timeout)" false
+      docker rm -f "$container" >/dev/null 2>&1 || true
+      continue
+    fi
+
+    # Restore from gz
+    if gunzip -c "$dump_file" | docker exec -i "$container" mysql -uroot -ptest "$db_name" >/dev/null 2>&1; then
+      assert "mysql restore OK for $db_name" true
+    else
+      assert "mysql restore OK for $db_name" false
+    fi
+
+    # Verify tables exist
+    local table_count
+    table_count=$(docker exec "$container" mysql -uroot -ptest -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$db_name';" 2>/dev/null | tr -d ' ')
+    if [ -n "$table_count" ] && [ "$table_count" -gt 0 ] 2>/dev/null; then
+      assert "MySQL table count > 0 for $db_name ($table_count tables)" true
+    else
+      assert "MySQL table count > 0 for $db_name" false
+    fi
+
+    docker rm -f "$container" >/dev/null 2>&1 || true
+  done
+  [ "$mysql_count" -eq 0 ] && assert_skip "MySQL dump files for Docker restore"
+
+  # --- MongoDB restore test ---
+  if [ -f "$bdir/mongo.archive.gz" ]; then
+    local container="test-restore-mongo-$$"
+
+    echo "  Testing MongoDB restore"
+    docker run -d --name "$container" mongo:7 >/dev/null 2>&1 || {
+      assert "MongoDB restore (container start)" false
+    }
+
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
+      # Wait for ready
+      local ready=false
+      for i in $(seq 1 30); do
+        docker exec "$container" mongosh --eval "db.runCommand({ping:1})" >/dev/null 2>&1 && { ready=true; break; }
+        sleep 2
+      done
+
+      if $ready; then
+        docker cp "$bdir/mongo.archive.gz" "$container:/tmp/backup.gz" 2>/dev/null
+        if docker exec "$container" mongorestore --gzip --archive=/tmp/backup.gz --drop >/dev/null 2>&1; then
+          assert "mongorestore OK" true
+        else
+          assert "mongorestore OK" false
+        fi
+
+        # Verify databases exist beyond local/admin/config
+        local db_count
+        db_count=$(docker exec "$container" mongosh --quiet --eval "db.getMongo().getDBs().databases.filter(d => !['local','admin','config'].includes(d.name)).length" 2>/dev/null | tr -d ' ')
+        if [ -n "$db_count" ] && [ "$db_count" -gt 0 ] 2>/dev/null; then
+          assert "MongoDB database count > 0 ($db_count dbs)" true
+        else
+          assert "MongoDB database count > 0" false
+        fi
+      else
+        assert "MongoDB restore (mongosh ping timeout)" false
+      fi
+
+      docker rm -f "$container" >/dev/null 2>&1 || true
+    fi
+  else
+    assert_skip "MongoDB archive for Docker restore"
+  fi
+}
+
 test_other_services() {
   echo "--- Group: other_services ---"
   local host
@@ -407,6 +587,7 @@ if $ALL; then
   test_hermes
   test_databases
   test_dump_integrity
+  test_docker_restore
   test_other_services
   test_apt
   test_wiki
