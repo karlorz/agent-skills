@@ -59,6 +59,14 @@ echo "  Target:  $TARGET"
 echo ""
 
 SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
+CONTROL_PATH="$HOME/.ssh/controlmasters/%r@%h:%p"
+mkdir -p "$HOME/.ssh/controlmasters" 2>/dev/null || true
+SSH_OPTS="$SSH_OPTS -o ControlMaster=auto -o ControlPath=$CONTROL_PATH -o ControlPersist=10m"
+
+cleanup_ssh() {
+  ssh -O exit -o ControlPath="$CONTROL_PATH" "$TARGET" 2>/dev/null || true
+}
+trap cleanup_ssh EXIT
 
 ssh $SSH_OPTS "$TARGET" "hostname" &>/dev/null || {
   echo "ERROR: Cannot SSH to $TARGET" >&2; exit 1

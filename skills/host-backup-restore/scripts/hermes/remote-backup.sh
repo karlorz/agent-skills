@@ -88,6 +88,17 @@ echo "  Dest:  $DEST/$HOST"
 echo ""
 
 SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
+CONTROL_PATH="$HOME/.ssh/controlmasters/%r@%h:%p"
+mkdir -p "$HOME/.ssh/controlmasters" 2>/dev/null || true
+
+# Open SSH ControlMaster for connection reuse (eliminates repeated handshakes)
+SSH_OPTS="$SSH_OPTS -o ControlMaster=auto -o ControlPath=$CONTROL_PATH -o ControlPersist=10m"
+
+# Cleanup ControlMaster on exit
+cleanup_ssh() {
+  ssh -O exit -o ControlPath="$CONTROL_PATH" "$HOST" 2>/dev/null || true
+}
+trap cleanup_ssh EXIT
 
 ssh $SSH_OPTS "$HOST" "hostname" &>/dev/null || {
   echo "ERROR: Cannot SSH to $HOST" >&2; exit 1

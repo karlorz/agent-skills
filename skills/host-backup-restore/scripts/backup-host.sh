@@ -48,6 +48,14 @@ fi
 mkdir -p "$BACKUP_DIR"
 FILE_COUNT=0
 SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
+CONTROL_PATH="$HOME/.ssh/controlmasters/%r@%h:%p"
+mkdir -p "$HOME/.ssh/controlmasters" 2>/dev/null || true
+SSH_OPTS="$SSH_OPTS -o ControlMaster=auto -o ControlPath=$CONTROL_PATH -o ControlPersist=10m"
+
+cleanup_ssh() {
+  ssh -O exit -o ControlPath="$CONTROL_PATH" "$HOST" 2>/dev/null || true
+}
+trap cleanup_ssh EXIT
 
 echo "=== Host Backup: $HOST ==="
 echo "Destination: $BACKUP_DIR"
