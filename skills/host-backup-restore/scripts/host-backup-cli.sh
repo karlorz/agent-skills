@@ -190,7 +190,15 @@ export DB_USER
 # DB_PASS is passed via environment but NOT exported to child process env
 # to avoid exposure in /proc/self/environ. backup-host.sh reads it directly.
 export BACKUP_DIR="$DEST"
-# Pass DB_PASS securely via temp file
+# Pass DB_PASS securely via temp file (cleaned up on exit)
+DB_PASS_FILE=""
+cleanup_db_pass() {
+  if [ -n "$DB_PASS_FILE" ] && [ -f "$DB_PASS_FILE" ]; then
+    rm -f "$DB_PASS_FILE"
+  fi
+}
+trap cleanup_db_pass EXIT
+
 if [ -n "$DB_PASS" ]; then
   DB_PASS_FILE=$(mktemp)
   chmod 600 "$DB_PASS_FILE"

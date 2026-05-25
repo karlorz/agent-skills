@@ -122,7 +122,7 @@ host-backup-restore/
 │   ├── profiles.sh             # Profile management (presets + YAML)
 │   └── research-host.sh        # Post-discovery research query generator
 └── tests/
-    └── test-restore.sh         # Per-component restore verification (24 assertions)
+    └── test-restore.sh         # Per-component restore verification (27 assertions)
 ```
 
 ### Data flow
@@ -587,6 +587,8 @@ bash scripts/host-restore-cli.sh [options]
 | `--target HOST` | Target host for restore |
 | `--all` | Restore all groups |
 | `--dry-run` | Preview restore actions without executing |
+| `--db-user USER` | Database username for pg_restore/mysql (default: postgres/root) |
+| `--db-pass PASS` | Database password for mysql (passed securely via temp file) |
 
 ```bash
 # Examples
@@ -601,9 +603,9 @@ bash scripts/host-restore-cli.sh --archive ./sg01-backup.tar.gz --target newhost
 Cached manifest at `/tmp/host-backup-{hostname}-manifest.json`. Use `--redetect` to re-run.
 
 **discover.sh** connects via SSH and detects:
-- Caddyfile (`/etc/caddy/Caddyfile`) — domain names and upstream targets
+- Caddyfile (`/etc/caddy/Caddyfile`) — domain names and upstream targets (via `caddy adapt` + JSON extraction with legacy fallback)
 - Systemctl — service states (`systemctl is-active`, `systemctl list-units`)
-- Database sockets — postgres, mysql, redis, mongodb listener detection
+- Database sockets — postgres, mysql, redis, mongodb listener detection + database name enumeration
 - File system — sqlite `.db` files, installed packages, apt sources
 - Hermes — version, HERMES_HOME path
 - OS release — distro ID and version (for restore compatibility)
@@ -648,7 +650,7 @@ bash tests/test-restore.sh --manifest /tmp/manifest.json
 bash tests/test-restore.sh --manifest /tmp/manifest.json --group caddy_domains
 ```
 
-### Test matrix (24 assertions across 7 groups)
+### Test matrix (27 assertions across 8 groups)
 
 | Group | Assertions | What's verified |
 |-------|-----------|-----------------|
@@ -659,6 +661,7 @@ bash tests/test-restore.sh --manifest /tmp/manifest.json --group caddy_domains
 | databases | 4 | sqlite3 opens `.db`, row count > 0, postgres/mysql connection |
 | other_services | 3 | systemd units active, ports listening |
 | apt | 3 | `apt list --installed` includes expected packages |
+| wiki | 3 | rclone.conf, wiki mount active, fstab entry |
 
 ### Known limitations (source-side)
 

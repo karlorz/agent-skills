@@ -8,6 +8,8 @@ TARGET=""
 RESTORE_USER=""
 ALL=false
 DRY_RUN=false
+DB_USER=""
+DB_PASS=""
 
 usage() {
   echo "Usage: $0 --archive PATH [options]"
@@ -18,6 +20,8 @@ usage() {
   echo "  --all                 Restore all groups"
   echo "  --groups 'g1,g2,...'  Specific groups to restore"
   echo "  --dry-run             Preview only"
+  echo "  --db-user USER        Database username for pg_restore/mysql (default: postgres/root)"
+  echo "  --db-pass PASS        Database password for mysql"
   exit 1
 }
 
@@ -29,6 +33,8 @@ while [ $# -gt 0 ]; do
     --all) ALL=true; shift ;;
     --groups) BACKUP_GROUPS="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --db-user) DB_USER="$2"; shift 2 ;;
+    --db-pass) DB_PASS="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
@@ -71,9 +77,26 @@ echo "Target:  $TARGET"
 echo "Dry run: $DRY_RUN"
 echo ""
 
+# Pass DB_PASS securely via temp file (avoids env exposure in /proc)
+DB_PASS_FILE=""
+RESTORE_DIR=""
+cleanup_on_exit() {
+  rm -rf "${RESTORE_DIR:-/tmp/restore-INVALID}"
+  if [ -n "$DB_PASS_FILE" ] && [ -f "$DB_PASS_FILE" ]; then
+    rm -f "$DB_PASS_FILE"
+  fi
+}
+trap cleanup_on_exit EXIT
+
+if [ -n "$DB_PASS" ]; then
+  DB_PASS_FILE=$(mktemp)
+  chmod 600 "$DB_PASS_FILE"
+  echo "$DB_PASS" > "$DB_PASS_FILE"
+  export DB_PASS_FILE
+fi
+
 # Determine archive format and extract to temp
 RESTORE_DIR=$(mktemp -d)
-trap 'rm -rf "$RESTORE_DIR"' EXIT
 
 case "$ARCHIVE" in
   *.tar.gz) tar xzf "$ARCHIVE" -C "$RESTORE_DIR" ;;
@@ -102,8 +125,13 @@ AVAILABLE_GROUPS=""
 [ -f "$BACKUP_CONTENT_DIR/hermes-backup.zip" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS hermes"
 [ -f "$BACKUP_CONTENT_DIR/dpkg-selections.txt" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS apt"
 [ -f "$BACKUP_CONTENT_DIR/services.txt" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS other_services"
-# databases available if sqlite files present
-ls "$BACKUP_CONTENT_DIR"/*.db &>/dev/null && AVAILABLE_GROUPS="$AVAILABLE_GROUPS databases"
+# databases available if any dump files present
+for _f in "$BACKUP_CONTENT_DIR"/pg_*.dump "$BACKUP_CONTENT_DIR"/mysql_*.sql.gz "$BACKUP_CONTENT_DIR"/mongo.archive.gz "$BACKUP_CONTENT_DIR"/sqlite_*; do
+  if [ -f "$_f" ]; then
+    AVAILABLE_GROUPS="$AVAILABLE_GROUPS databases"
+    break
+  fi
+done
 # wiki available if rclone.conf present in backup
 [ -f "$BACKUP_CONTENT_DIR/rclone.conf" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS wiki"
 
@@ -253,8 +281,101 @@ restore_group() {
       fi
       ;;
     databases)
-      for db_file in "$BACKUP_CONTENT_DIR"/*.db; do
-        [ -f "$db_file" ] && scp "$db_file" "${TARGET}:/tmp/$(basename "$db_file")" 2>/dev/null || true
+      # --- PostgreSQL restore ---
+      for dump_file in "$BACKUP_CONTENT_DIR"/pg_*.dump; do
+        [ -f "$dump_file" ] || continue
+        db_name=$(basename "$dump_file" .dump | sed 's/^pg_//')
+        # Sanitize db_name — only allow alphanumeric, underscore, hyphen
+        if ! echo "$db_name" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+          echo "    SKIP: $db_name — invalid database name (potential injection)"
+          continue
+        fi
+        PG_USER="${DB_USER:-postgres}"
+        echo "  Restoring PostgreSQL: $db_name"
+        # Drop existing connections and recreate DB
+        ssh "$TARGET" "
+          sudo -u '$PG_USER' psql -d postgres -c \"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$db_name';\" 2>/dev/null || true
+          sudo -u '$PG_USER' dropdb --if-exists '$db_name' 2>/dev/null || true
+          sudo -u '$PG_USER' createdb '$db_name' 2>/dev/null || true
+        " 2>/dev/null || echo "    Warning: could not drop/recreate $db_name (may already exist)"
+        # Stream dump directly to pg_restore (single pass, no double-SSH)
+        ssh "$TARGET" "sudo -u '$PG_USER' pg_restore -d '$db_name' /dev/stdin" < "$dump_file" 2>&1 && {
+          echo "    OK: $db_name restored"
+        } || echo "    FAILED: pg_restore for $db_name (may need --db-user or check permissions)"
+      done
+
+      # --- MySQL restore ---
+      for dump_file in "$BACKUP_CONTENT_DIR"/mysql_*.sql.gz; do
+        [ -f "$dump_file" ] || continue
+        db_name=$(basename "$dump_file" .sql.gz | sed 's/^mysql_//')
+        # Sanitize db_name
+        if ! echo "$db_name" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+          echo "    SKIP: $db_name — invalid database name"
+          continue
+        fi
+        MYSQL_USER="${DB_USER:-root}"
+        echo "  Restoring MySQL: $db_name"
+        # Use MYSQL_PWD env var to avoid password in process table
+        MYSQL_AUTH="-u'$MYSQL_USER'"
+        MYSQL_RESTORE_CMD="mysql $MYSQL_AUTH"
+        if [ -n "${DB_PASS:-}" ]; then
+          MYSQL_RESTORE_CMD="MYSQL_PWD='$(cat "${DB_PASS_FILE}" 2>/dev/null || echo "")' $MYSQL_RESTORE_CMD"
+        fi
+        # Create database if not exists, then restore
+        ssh "$TARGET" "$MYSQL_RESTORE_CMD -e 'CREATE DATABASE IF NOT EXISTS \`$db_name\`;' 2>/dev/null" || true
+        gunzip -c "$dump_file" | ssh "$TARGET" "$MYSQL_RESTORE_CMD '$db_name'" 2>/dev/null && {
+          echo "    OK: $db_name restored"
+        } || echo "    FAILED: mysql restore for $db_name (may need --db-user/--db-pass)"
+      done
+
+      # --- MongoDB restore ---
+      if [ -f "$BACKUP_CONTENT_DIR/mongo.archive.gz" ]; then
+        echo "  Restoring MongoDB..."
+        MONGO_URI="${MONGO_URI:-}"
+        if [ -n "$MONGO_URI" ]; then
+          gunzip -c "$BACKUP_CONTENT_DIR/mongo.archive.gz" | ssh "$TARGET" "mongorestore --uri='$MONGO_URI' --gzip --archive 2>/dev/null" && {
+            echo "    OK: MongoDB restored"
+          } || echo "    FAILED: mongorestore (check MONGO_URI)"
+        else
+          gunzip -c "$BACKUP_CONTENT_DIR/mongo.archive.gz" | ssh "$TARGET" "mongorestore --gzip --archive 2>/dev/null" && {
+            echo "    OK: MongoDB restored"
+          } || echo "    FAILED: mongorestore (may need MONGO_URI env)"
+        fi
+      fi
+
+      # --- SQLite restore (WAL-safe via .backup) ---
+      for db_file in "$BACKUP_CONTENT_DIR"/sqlite_*; do
+        [ -f "$db_file" ] || continue
+        # Derive original path from filename (sqlite_<sanitized_name>)
+        db_name=$(basename "$db_file" | sed 's/^sqlite_//')
+        echo "  Restoring SQLite: $db_name"
+        # SCP to remote, then use sqlite3 .backup for WAL-safe placement
+        scp "$db_file" "${TARGET}:/tmp/host-restore-sqlite-${db_name}" 2>/dev/null && {
+          # Try to find original path from manifest
+          original_path=$(python3 -c "
+import json
+m = json.load(open('$BACKUP_CONTENT_DIR/manifest.json'))
+for f in m.get('databases', {}).get('sqlite', []):
+    import os
+    # Match by basename (sanitized names replace special chars with _)
+    base = os.path.basename(f)
+    sanitized = ''.join(c if c.isalnum() or c in '._-' else '_' for c in base)
+    if sanitized == '$db_name':
+        print(f)
+" 2>/dev/null || echo "")
+          if [ -n "$original_path" ]; then
+            # Verify integrity of uploaded file
+            ssh "$TARGET" "sqlite3 '/tmp/host-restore-sqlite-${db_name}' 'PRAGMA integrity_check;' 2>/dev/null | grep -q 'ok'" && {
+              # Use .backup to safely write to the original location
+              ssh "$TARGET" "sqlite3 '/tmp/host-restore-sqlite-${db_name}' '.backup ${original_path}'" 2>/dev/null && {
+                echo "    OK: restored to $original_path"
+              } || echo "    FAILED: sqlite3 .backup to $original_path (may need sudo)"
+            } || echo "    FAILED: integrity check for $db_name"
+          else
+            echo "    Note: original path not found in manifest, file left at /tmp/host-restore-sqlite-${db_name}"
+          fi
+          ssh "$TARGET" "rm -f /tmp/host-restore-sqlite-${db_name}" 2>/dev/null || true
+        } || echo "    FAILED: scp for $db_name"
       done
       ;;
     wiki)

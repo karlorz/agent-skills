@@ -6,6 +6,17 @@
 # Default: all groups
 set -euo pipefail
 
+# Portable checksum — macOS uses shasum, Linux uses sha256sum
+_compute_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1"
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1"
+  else
+    echo "checksum_unavailable $(basename "$1")"
+  fi
+}
+
 MANIFEST="${1:-}"
 shift || true
 SELECTED_GROUPS="${*:-all}"
@@ -149,7 +160,7 @@ else:
           echo "  Dumping PostgreSQL: $db"
           ssh "$HOST" "pg_dump -Fc -U '$PG_USER' '$db'" > "$BACKUP_DIR/pg_${db}.dump" 2>"$BACKUP_DIR/pg_${db}.err" && {
             FILE_COUNT=$((FILE_COUNT + 1))
-            sha256sum "$BACKUP_DIR/pg_${db}.dump" > "$BACKUP_DIR/pg_${db}.dump.sha256"
+            _compute_sha256 "$BACKUP_DIR/pg_${db}.dump" > "$BACKUP_DIR/pg_${db}.dump.sha256"
             echo "    OK: pg_${db}.dump ($(du -sh "$BACKUP_DIR/pg_${db}.dump" | cut -f1))"
           } || echo "    FAILED: pg_dump for $db (may need --db-user or DB_USER env)"
         done
@@ -185,7 +196,7 @@ else:
           # shellcheck disable=SC2086
           ssh "$HOST" "$MYSQL_DUMP_CMD 2>/dev/null | gzip" > "$BACKUP_DIR/mysql_${db}.sql.gz" && {
             FILE_COUNT=$((FILE_COUNT + 1))
-            sha256sum "$BACKUP_DIR/mysql_${db}.sql.gz" > "$BACKUP_DIR/mysql_${db}.sql.gz.sha256"
+            _compute_sha256 "$BACKUP_DIR/mysql_${db}.sql.gz" > "$BACKUP_DIR/mysql_${db}.sql.gz.sha256"
             echo "    OK: mysql_${db}.sql.gz ($(du -sh "$BACKUP_DIR/mysql_${db}.sql.gz" | cut -f1))"
           } || echo "    FAILED: mysqldump for $db (may need --db-user/--db-pass)"
         done
@@ -205,13 +216,13 @@ print(mg if mg and mg != 'not detected' else '')
         if [ -n "$MONGO_URI" ]; then
           ssh "$HOST" "mongodump --uri='$MONGO_URI' --gzip --archive 2>/dev/null" > "$BACKUP_DIR/mongo.archive.gz" && {
             FILE_COUNT=$((FILE_COUNT + 1))
-            sha256sum "$BACKUP_DIR/mongo.archive.gz" > "$BACKUP_DIR/mongo.archive.gz.sha256"
+            _compute_sha256 "$BACKUP_DIR/mongo.archive.gz" > "$BACKUP_DIR/mongo.archive.gz.sha256"
             echo "    OK: mongo.archive.gz ($(du -sh "$BACKUP_DIR/mongo.archive.gz" | cut -f1))"
           } || echo "    FAILED: mongodump"
         else
           ssh "$HOST" "mongodump --gzip --archive 2>/dev/null" > "$BACKUP_DIR/mongo.archive.gz" && {
             FILE_COUNT=$((FILE_COUNT + 1))
-            sha256sum "$BACKUP_DIR/mongo.archive.gz" > "$BACKUP_DIR/mongo.archive.gz.sha256"
+            _compute_sha256 "$BACKUP_DIR/mongo.archive.gz" > "$BACKUP_DIR/mongo.archive.gz.sha256"
             echo "    OK: mongo.archive.gz ($(du -sh "$BACKUP_DIR/mongo.archive.gz" | cut -f1))"
           } || echo "    FAILED: mongodump (may need MONGO_URI env)"
         fi
@@ -237,7 +248,7 @@ if isinstance(sqlite, list):
               FILE_COUNT=$((FILE_COUNT + 1))
               # Verify integrity
               ssh "$HOST" "sqlite3 '/tmp/host-backup-sqlite-${db_name}' 'PRAGMA integrity_check;'" 2>/dev/null | grep -q "ok" && echo "    OK (integrity verified): sqlite_${db_name}" || echo "    WARNING: integrity check failed for sqlite_${db_name}"
-              sha256sum "$BACKUP_DIR/sqlite_${db_name}" > "$BACKUP_DIR/sqlite_${db_name}.sha256"
+              _compute_sha256 "$BACKUP_DIR/sqlite_${db_name}" > "$BACKUP_DIR/sqlite_${db_name}.sha256"
             } || echo "    FAILED: scp for $db_name"
             ssh "$HOST" "rm -f /tmp/host-backup-sqlite-${db_name}" 2>/dev/null || true
           } || echo "    FAILED: sqlite3 .backup for $db_path (may need sudo or database not accessible)"

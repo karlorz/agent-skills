@@ -221,6 +221,22 @@ test_apt() {
 }
 
 # Run selected group or all
+test_wiki() {
+  echo "--- Group: wiki ---"
+  local host
+  host=$(get_target_host)
+
+  assert "wiki rclone.conf accessible" \
+    ssh "$host" "test -f ~/.config/rclone/rclone.conf" &>/dev/null || \
+    assert_skip "rclone.conf on target"
+  assert "wiki mount active" \
+    ssh "$host" "mountpoint -q ~/wiki 2>/dev/null" &>/dev/null || \
+    assert_skip "wiki mount on target"
+  assert "wiki fstab entry present" \
+    ssh "$host" "grep -q wiki /etc/fstab 2>/dev/null" &>/dev/null || \
+    assert_skip "wiki fstab entry on target"
+}
+
 if $ALL; then
   test_base
   test_caddy_domains
@@ -230,13 +246,6 @@ if $ALL; then
   test_other_services
   test_apt
   test_wiki
-
-test_wiki() {
-  group_header "wiki"
-  assert_file "wiki-rclone.conf"
-  assert_file "wiki-mount-status.txt"
-  assert_file "wiki-fstab.txt"
-}
 else
   "test_${GROUP}" 2>/dev/null || echo "Unknown group: $GROUP"
 fi
