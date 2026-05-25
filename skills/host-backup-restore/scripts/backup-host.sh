@@ -16,6 +16,12 @@ if [ -z "$MANIFEST" ] || [ ! -f "$MANIFEST" ]; then
   echo "Usage: BACKUP_DIR=/path $0 <manifest.json> [groups...]" >&2
   echo "  Groups: base caddy_domains hermes databases other_services apt wiki" >&2
   echo "  Default: all groups" >&2
+  echo "" >&2
+  echo "Environment:" >&2
+  echo "  BACKUP_DIR     Backup destination (default: ~/Desktop/backups/)" >&2
+  echo "  HERMES_TIER    minimal|standard|full (default: full)" >&2
+  echo "  DB_USER        Database username for pg_dump/mysqldump" >&2
+  echo "  DB_PASS_FILE   Path to file with database password (secure)" >&2
   exit 1
 fi
 
