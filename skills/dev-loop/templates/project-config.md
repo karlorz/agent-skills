@@ -672,8 +672,9 @@ Semantics:
 
 - **`auto_bump: false`** (or block absent) → preserves pre-1.19.0 behavior.
   Manual bump expected before the cycle reaches PUSH.
-- **Glob matching** is fnmatch (shell-style), patterns relative to repo
-  root. `**` matches any path depth.
+- **Glob matching** uses shell-style glob with `**` for recursive path
+  matching (Python `glob` semantics), patterns relative to repo root.
+  Example: `skills/**` matches any file under `skills/` at any depth.
 - **Decision logic**: PUSH skips entirely when (a) no changed files match
   any `trigger_globs` pattern, OR (b) every changed file matches at least
   one `skip_globs` pattern. Otherwise `bump_script` runs.

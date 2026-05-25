@@ -409,13 +409,24 @@ prd_disciplines:
      - If block is absent → store `RELEASE_POLICY = None`. PUSH step uses
        pre-1.19.0 behavior (no auto-bump; user/upstream bumps manifests
        before the cycle reaches step 10).
+     - **Advisory**: when `release_policy` block is absent AND `publish_via`
+       is set to a non-`none` value, emit one-line advisory: "PUSH step
+       configured (publish_via={value}) but release_policy block is absent
+       — version bump must occur before step 10. Add release_policy with
+       auto_bump: true to enable automated bumping."
      - If block present, store as `RELEASE_POLICY` dict with fields:
        - `auto_bump` (bool, default `false`)
        - `channel` (string: `beta` | `stable`, default `stable`) — passed
          to `bump_script` as a hint; dev-loop does NOT compute version strings
-       - `trigger_globs` (list of fnmatch patterns; required when
-         `auto_bump: true`)
-       - `skip_globs` (list of fnmatch patterns; default `[]`)
+       - `trigger_globs` (list of glob patterns; required when
+         `auto_bump: true`). Patterns use shell-style glob with `**`
+         for recursive path matching (Python `glob` semantics), relative
+         to repo root. Example: `skills/**` matches any file under
+         `skills/` at any depth; `.claude-plugin/marketplace.json`
+         matches exactly that file.
+       - `skip_globs` (list of glob patterns; default `[]`). Same
+         semantics as `trigger_globs`. Files matching both trigger and
+         skip are treated as skipped.
        - `tag_format` (string template, default `v{version}`) — consumed
          by `bump_script`/tag-push logic, not by dev-loop directly
        - `verify_after_push` (bool, default `true`)
@@ -423,6 +434,10 @@ prd_disciplines:
        absent, emit warning "release_policy.auto_bump is true but
        trigger_globs is empty — no commit will ever trigger a bump.
        Disabling auto_bump for this cycle." and treat as `auto_bump: false`.
+     - Validation: when `auto_bump: true` AND `bump_script` path does not
+       exist, emit warning "release_policy.auto_bump is true but
+       bump_script '{path}' not found — auto-bump will fail at PUSH step."
+       Do NOT downgrade auto_bump; the script may be created before PUSH.
      Schema: `templates/project-config.md` § Release policy. Setup flow:
      `setup/SKILL.md` Section N.
 
@@ -1016,8 +1031,9 @@ and tag based on the declared `release_policy`:
    `git diff --name-only <last-tag>..HEAD`. Empty diff → skip PUSH
    (nothing committed since last release).
 3. Match each changed file against `RELEASE_POLICY.trigger_globs`
-   (fnmatch / shell-style, patterns relative to repo root). If zero
-   files match any pattern → skip PUSH (no shippable changes).
+   (shell-style glob with `**` for recursive match, per Python `glob`
+   semantics, patterns relative to repo root). If zero files match
+   any pattern → skip PUSH (no shippable changes).
 4. Match each changed file against `RELEASE_POLICY.skip_globs`. If
    EVERY changed file matches at least one `skip_globs` pattern → skip
    PUSH (vault-only / doc-only window). Log: "PUSH skipped: all
