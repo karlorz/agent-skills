@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Hermes Agent CLI commands reference — full terminal command surface for hermes-agent by NousResearch",
   "author": {
-    "name": "kalrorz"
+    "name": "karlorz"
   },
   "license": "MIT",
   "keywords": ["hermes", "hermes-agent", "cli", "reference", "nousresearch", "commands"],

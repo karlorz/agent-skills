@@ -1,7 +1,7 @@
 {
   "name": "karlorz-agent-skills",
   "owner": {
-    "name": "kalrorz"
+    "name": "karlorz"
   },
   "metadata": {
     "description": "Curated skills for Claude Code: deep research, code simplification, and dev-loop cycles.",

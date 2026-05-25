@@ -1,5 +1,6 @@
 ---
 name: deep-research
+version: "2.3.3"
 description: Use when user requests comprehensive research on a topic, wants multi-source investigation (web, docs, repos), or mentions deep research, literature review, competitive analysis, or technology comparison. Works with or without a knowledge base vault.
 ---
 

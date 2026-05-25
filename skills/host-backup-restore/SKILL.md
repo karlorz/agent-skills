@@ -1,5 +1,6 @@
 ---
 name: host-backup-restore
+version: "3.3.0"
 description: Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker for mechanical tasks), post-discovery research, and skillwiki infrastructure capture. Use when backing up or restoring Caddy reverse-proxy domains, databases (postgres, mysql, redis, mongodb, sqlite), systemd services, SSH configs, and Hermes agent state on remote Linux hosts.
 argument-hint: "[host] [mode] [options]"
 ---

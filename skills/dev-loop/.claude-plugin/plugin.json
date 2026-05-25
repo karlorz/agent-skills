@@ -3,7 +3,7 @@
   "version": "1.19.0",
   "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki bridge + research-worker stale buckets + wiki-sync dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive originating raw transcripts via `closes:` frontmatter. v1.15.0: pluggable multi-backend code review. v1.14.0: auto-compact firing probe. v1.13.0: removed /compact + /clear. v1.12.0: dep-drift detector. MERGE CI gate uses ci-health-worker. Execution subagents hard-wired to sonnet. /setup-dev-loop scaffolds 14 config sections (A-N).",
   "author": {
-    "name": "kalrorz"
+    "name": "karlorz"
   },
   "license": "MIT",
   "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "simplify-worker", "ci-health-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery", "vault-auto-commit", "doctor", "stale", "wiki-sync"],

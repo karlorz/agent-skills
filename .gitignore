@@ -1,5 +1,8 @@
 __pycache__/
 *.py[cod]
+**/__pycache__/
+.DS_Store
+**/.DS_Store
 .claude/settings.local.json
 .claude/scheduled_tasks.json
 .claude/dev-loop.config.md

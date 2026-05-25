@@ -1,5 +1,6 @@
 ---
 name: simplify
+version: "1.0.0"
 description: Review and simplify recently changed code for reuse, clarity, and efficiency while preserving behavior. Use when the user asks to simplify, refine, polish, clean up, or make code clearer, or after finishing a logical chunk of implementation that should be tightened before commit.
 argument-hint: "[options] [focus] [<base-ref>]"
 ---
