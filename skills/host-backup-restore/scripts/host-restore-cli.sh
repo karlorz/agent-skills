@@ -10,6 +10,7 @@ ALL=false
 DRY_RUN=false
 DB_USER=""
 DB_PASS=""
+ALLOW_CROSS_DISTRO=false
 
 usage() {
   echo "Usage: $0 --archive PATH [options]"
@@ -22,6 +23,7 @@ usage() {
   echo "  --dry-run             Preview only"
   echo "  --db-user USER        Database username for pg_restore/mysql (default: postgres/root)"
   echo "  --db-pass PASS        Database password for mysql"
+  echo "  --allow-cross-distro  Allow apt restore across different OS (default: skip on mismatch)"
   exit 1
 }
 
@@ -35,6 +37,7 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=true; shift ;;
     --db-user) DB_USER="$2"; shift 2 ;;
     --db-pass) DB_PASS="$2"; shift 2 ;;
+    --allow-cross-distro) ALLOW_CROSS_DISTRO=true; shift ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
@@ -132,8 +135,8 @@ for _f in "$BACKUP_CONTENT_DIR"/pg_*.dump "$BACKUP_CONTENT_DIR"/mysql_*.sql.gz "
     break
   fi
 done
-# wiki available if rclone.conf present in backup
-[ -f "$BACKUP_CONTENT_DIR/rclone.conf" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS wiki"
+# wiki available if wiki-rclone.conf present in backup
+[ -f "$BACKUP_CONTENT_DIR/wiki-rclone.conf" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS wiki"
 
 echo "Available groups:${AVAILABLE_GROUPS:- none detected}"
 echo ""
@@ -175,13 +178,17 @@ if [ -n "$TARGET" ] && ! $DRY_RUN; then
   TARGET_ARCH=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$TARGET" "uname -m" 2>/dev/null || echo "")
 fi
 
+OS_MISMATCH=false
 if [ -n "$BACKUP_OS" ] && [ -n "$TARGET_OS" ]; then
   if [ "$BACKUP_OS" != "$TARGET_OS" ] || [ "$BACKUP_OS_VER" != "$TARGET_OS_VER" ]; then
+    OS_MISMATCH=true
     echo "⚠ WARNING: OS mismatch!"
     echo "  Backup source: $BACKUP_OS $BACKUP_OS_VER (${BACKUP_ARCH:-unknown})"
     echo "  Target:        $TARGET_OS $TARGET_OS_VER (${TARGET_ARCH:-unknown})"
     echo "  Restoring apt sources across different OS versions may break dependencies."
-    echo "  Use --groups without 'apt' to skip package restores."
+    if ! $ALLOW_CROSS_DISTRO; then
+      echo "  apt group will be SKIPPED. Use --allow-cross-distro to override."
+    fi
     echo ""
   fi
   if [ -n "$BACKUP_ARCH" ] && [ -n "$TARGET_ARCH" ] && [ "$BACKUP_ARCH" != "$TARGET_ARCH" ]; then
@@ -275,8 +282,13 @@ restore_group() {
 
 
     apt)
-      if [ -f "$BACKUP_CONTENT_DIR/dpkg-selections.txt" ]; then
-        echo "Warning: apt restore across distro versions may break dependencies"
+      if $OS_MISMATCH && ! $ALLOW_CROSS_DISTRO; then
+        echo "  SKIPPED: OS mismatch (backup: $BACKUP_OS $BACKUP_OS_VER, target: $TARGET_OS $TARGET_OS_VER)"
+        echo "  Use --allow-cross-distro to force apt restore across distros."
+      elif [ -f "$BACKUP_CONTENT_DIR/dpkg-selections.txt" ]; then
+        if $OS_MISMATCH; then
+          echo "  ⚠ Cross-distro apt restore (--allow-cross-distro) — packages may not resolve."
+        fi
         scp "$BACKUP_CONTENT_DIR/dpkg-selections.txt" "${TARGET}:/tmp/" 2>/dev/null || true
       fi
       ;;
@@ -388,9 +400,9 @@ for f in m.get('databases', {}).get('sqlite', []):
         if [ "$fuse_ok" = "yes" ]; then
           echo "  FUSE available. Setting up rclone wiki mount..."
           # Copy rclone.conf from backup archive
-          if [ -f "$BACKUP_CONTENT_DIR/rclone.conf" ]; then
+          if [ -f "$BACKUP_CONTENT_DIR/wiki-rclone.conf" ]; then
             ssh "$TARGET" "mkdir -p ~/.config/rclone" 2>/dev/null || true
-            scp "$BACKUP_CONTENT_DIR/rclone.conf" "${TARGET}:~/.config/rclone/rclone.conf" 2>/dev/null || {
+            scp "$BACKUP_CONTENT_DIR/wiki-rclone.conf" "${TARGET}:~/.config/rclone/rclone.conf" 2>/dev/null || {
               echo "  ⚠ Failed to copy rclone.conf"
               return
             }
