@@ -807,10 +807,11 @@ ssh -o BatchMode=yes <host> "hostname"
 | Method | Works for | Limit | Command |
 |--------|-----------|-------|---------|
 | base64 + devsh exec | Text files, small binaries | ~32 KB (shell arg limit) | `B64=$(base64 < file); devsh exec "$LXC" "echo \$B64 \| base64 -d > /tmp/file"` |
+| Chunked base64 | Any file size | Slower than HTTP for large files | `devsh_transfer "$VM_ID" backup.zip /tmp/backup.zip` (built into host-restore-cli.sh) |
 | HTTP serve | Any file size | Requires HTTP server on local machine | `python3 -m http.server 8080 & curl -o /tmp/file http://10.10.x.1:8080/file` |
 | SCP via sg01 bridge | Any file size | Requires sg01 as jump host | `rsync -avP file sg01:/tmp/; ssh sg01 "rsync -avP /tmp/file 10.10.1.123:/tmp/"` |
 
-For backup archives larger than 32 KB (Caddy config, SSL certs, Hermes zip), use the HTTP serve or rsync bridge method. Base64 encoding hits the shell's argument length limit for binary files.
+For backup archives larger than 32 KB (Caddy config, SSL certs, Hermes zip), use chunked base64, HTTP serve, or rsync bridge. The `devsh_transfer` helper in host-restore-cli.sh splits files into 30KB base64 chunks and reassembles on the remote side.
 
 ---
 

@@ -12,6 +12,36 @@ DB_USER=""
 DB_PASS=""
 ALLOW_CROSS_DISTRO=false
 
+# ── Chunked base64 transfer for targets without rsync/scp (e.g., devsh LXC) ──
+# Usage: devsh_transfer <vm_id> <local_file> <remote_path>
+# Splits file into 30KB base64 chunks and reassembles on remote.
+devsh_transfer() {
+  local vm_id="$1"
+  local local_file="$2"
+  local remote_path="$3"
+  local chunk_dir
+  chunk_dir=$(mktemp -d)
+  local chunk_size=22528  # 22KB payload → ~30KB base64, under shell arg limit
+
+  # Split into base64 chunks
+  base64 "$local_file" | split -b "$chunk_size" - "$chunk_dir/chunk_"
+
+  # Send each chunk and append on remote
+  local first=true
+  for chunk in "$chunk_dir"/chunk_*; do
+    local b64_data
+    b64_data=$(cat "$chunk")
+    if $first; then
+      devsh exec "$vm_id" "echo '$b64_data' | base64 -d > '$remote_path'" 2>/dev/null
+      first=false
+    else
+      devsh exec "$vm_id" "echo '$b64_data' | base64 -d >> '$remote_path'" 2>/dev/null
+    fi
+  done
+
+  rm -rf "$chunk_dir"
+}
+
 usage() {
   echo "Usage: $0 --archive PATH [options]"
   echo "Options:"
@@ -136,7 +166,7 @@ AVAILABLE_GROUPS=""
 [ -f "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS caddy_domains"
 [ -f "$BACKUP_CONTENT_DIR/hermes-backup.zip" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS hermes"
 [ -f "$BACKUP_CONTENT_DIR/dpkg-selections.txt" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS apt"
-[ -f "$BACKUP_CONTENT_DIR/services.txt" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS other_services"
+[ -f "$BACKUP_CONTENT_DIR/services.txt" ] || [ -f "$BACKUP_CONTENT_DIR/user-services.txt" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS other_services"
 # databases available if any dump files present
 for _f in "$BACKUP_CONTENT_DIR"/pg_*.dump "$BACKUP_CONTENT_DIR"/mysql_*.sql.gz "$BACKUP_CONTENT_DIR"/mongo.archive.gz "$BACKUP_CONTENT_DIR"/sqlite_*; do
   if [ -f "$_f" ]; then
@@ -275,6 +305,7 @@ restore_group() {
       ;;
     other_services)
       [ -f "$BACKUP_CONTENT_DIR/services.txt" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/services.txt" "${TARGET}:/tmp/" 2>/dev/null || true
+      [ -f "$BACKUP_CONTENT_DIR/user-services.txt" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/user-services.txt" "${TARGET}:/tmp/" 2>/dev/null || true
       # Systemd daemon-reload in case unit files were deployed
       echo "  Reloading systemd..."
       ssh "$TARGET" "systemctl daemon-reload 2>/dev/null || true"
@@ -286,6 +317,14 @@ restore_group() {
           echo "  Services requiring package install on target: $svc_list"
           echo "  Install with: apt-get install <packages> then systemctl enable --now <service>"
         fi
+      fi
+      # User services restore
+      if [ -f "$BACKUP_CONTENT_DIR/user-services.txt" ]; then
+        echo "  User services found in backup. To re-enable:"
+        ssh "$TARGET" "cat /tmp/user-services.txt 2>/dev/null | while read -r svc; do
+          systemctl --user is-enabled \"\$svc\" 2>/dev/null && continue
+          echo \"    systemctl --user enable --now \$svc\"
+        done" 2>/dev/null || true
       fi
       ;;
 
