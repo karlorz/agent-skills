@@ -315,10 +315,13 @@ tar czf "$BACKUP_DIR/../$BACKUP_NAME" -C "$BACKUP_DIR/.." "$(basename "$BACKUP_D
 }
 
 echo "Files backed up: $FILE_COUNT"
-echo "Archive: $(dirname "$BACKUP_DIR")/$BACKUP_NAME"
-if [ -f "$(dirname "$BACKUP_DIR")/$BACKUP_NAME" ]; then
-  du -sh "$(dirname "$BACKUP_DIR")/$BACKUP_NAME"
-else
-  du -sh "${BACKUP_DIR}.tar.gz" 2>/dev/null || ls -lh "${BACKUP_DIR}.tar.gz"
+PRIMARY_ARCHIVE="$(dirname "$BACKUP_DIR")/$BACKUP_NAME"
+FALLBACK_ARCHIVE="${BACKUP_DIR}.tar.gz"
+if [ -f "$PRIMARY_ARCHIVE" ]; then
+  echo "Archive: $PRIMARY_ARCHIVE"
+  du -sh "$PRIMARY_ARCHIVE"
+elif [ -f "$FALLBACK_ARCHIVE" ]; then
+  echo "Archive: $FALLBACK_ARCHIVE"
+  du -sh "$FALLBACK_ARCHIVE"
 fi
 echo "=== Backup complete: $(date) ==="

@@ -238,7 +238,7 @@ restore_group() {
     hermes)
       if [ -f "$BACKUP_CONTENT_DIR/hermes-backup.zip" ]; then
         # Use ~/ (real disk) instead of /tmp (small tmpfs) for large backups
-        hermes_size=$(stat -f%z "$BACKUP_CONTENT_DIR/hermes-backup.zip" 2>/dev/null || echo 0)
+        hermes_size=$(wc -c < "$BACKUP_CONTENT_DIR/hermes-backup.zip" 2>/dev/null || echo 0)
         remote_path="/tmp/hermes-restore.zip"
         if [ "$hermes_size" -gt 1073741824 ]; then  # >1GB
           remote_path="~/hermes-restore.zip"
@@ -303,6 +303,11 @@ restore_group() {
           continue
         fi
         PG_USER="${DB_USER:-postgres}"
+        # Sanitize PG_USER — only allow alphanumeric, underscore, hyphen
+        if ! echo "$PG_USER" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+          echo "    SKIP: $db_name — invalid PG user name (potential injection)"
+          continue
+        fi
         echo "  Restoring PostgreSQL: $db_name"
         # Drop existing connections and recreate DB
         ssh "$TARGET" "
@@ -326,6 +331,11 @@ restore_group() {
           continue
         fi
         MYSQL_USER="${DB_USER:-root}"
+        # Sanitize MYSQL_USER — only allow alphanumeric, underscore, hyphen
+        if ! echo "$MYSQL_USER" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+          echo "    SKIP: $db_name — invalid MySQL user name"
+          continue
+        fi
         echo "  Restoring MySQL: $db_name"
         # Use MYSQL_PWD env var to avoid password in process table
         MYSQL_AUTH="-u'$MYSQL_USER'"

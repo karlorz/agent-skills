@@ -170,8 +170,8 @@ if $INCLUDE_RCLONE_CONFIG; then
   echo "--- Phase 4: Rclone config ---"
   RCLONE_CONF=$(ssh "$HOST" "cat ~/.config/rclone/rclone.conf 2>/dev/null || echo NOT_FOUND" 2>/dev/null)
   if [ "$RCLONE_CONF" != "NOT_FOUND" ] && [ -n "$RCLONE_CONF" ]; then
-    ssh "$HOST" "cat ~/.config/rclone/rclone.conf" > "$DEST/$HOST/rclone-${TIMESTAMP}.conf" 2>/dev/null
-    echo "  Saved: $DEST/$HOST/rclone-${TIMESTAMP}.conf"
+    ssh "$HOST" "cat ~/.config/rclone/rclone.conf" > "$DEST/$HOST/wiki-rclone.conf" 2>/dev/null
+    echo "  Saved: $DEST/$HOST/wiki-rclone.conf"
   else
     echo "  No rclone config found on remote host"
   fi
@@ -202,7 +202,7 @@ if [ -n "$UPLOAD" ]; then
   if command -v rclone &>/dev/null; then
     SYNC_RC=0
     SYNC_TAIL=$(rclone sync "$DEST/$HOST/" "$UPLOAD" --backup-dir "${UPLOAD%/}/archive" \
-      --progress 2>&1 | tail -5) || SYNC_RC=$?
+      --stats-one-line-date 2>&1 | tail -5) || SYNC_RC=$?
     [ -n "$SYNC_TAIL" ] && echo "$SYNC_TAIL"
     if [ "$SYNC_RC" -eq 0 ]; then
       echo "  Synced to: $UPLOAD"
