@@ -122,6 +122,15 @@ with open('$BACKUP_DIR/domains.txt', 'w') as f:
         return
       }
       rsync -avP --partial-dir=.rsync-partial --timeout=300 -e "ssh $SSH_OPTS" "$HOST:/tmp/hermes-backup-$TIMESTAMP.zip" "$BACKUP_DIR/hermes-backup.zip" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      # Verify post-transfer checksum against remote
+      if [ -f "$BACKUP_DIR/hermes-backup.zip" ]; then
+        REMOTE_SHA=$(ssh $SSH_OPTS "$HOST" "sha256sum /tmp/hermes-backup-$TIMESTAMP.zip 2>/dev/null | cut -d' ' -f1" 2>/dev/null || echo "")
+        LOCAL_SHA=$(_compute_sha256 "$BACKUP_DIR/hermes-backup.zip" 2>/dev/null | cut -d' ' -f1 || echo "")
+        if [ -n "$REMOTE_SHA" ] && [ -n "$LOCAL_SHA" ] && [ "$REMOTE_SHA" != "$LOCAL_SHA" ]; then
+          echo "    WARNING: hermes-backup.zip checksum mismatch (remote=$REMOTE_SHA, local=$LOCAL_SHA)"
+        fi
+        _compute_sha256 "$BACKUP_DIR/hermes-backup.zip" > "$BACKUP_DIR/hermes-backup.zip.sha256"
+      fi
       ssh "$HOST" "rm -f /tmp/hermes-backup-$TIMESTAMP.zip" 2>/dev/null || true
       echo "hermes backup OK" > "$BACKUP_DIR/hermes-backup-status.txt"
       # Also capture hermes --version output
