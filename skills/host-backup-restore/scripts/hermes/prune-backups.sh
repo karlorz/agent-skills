@@ -102,6 +102,18 @@ for HOST_DIR in "$DEST_ROOT"/*/; do
     done
   done <<< "$TO_REMOVE"
 
+  # Clean up .rsync-partial directories (rsync checkpoint artifacts from v3.5.0+)
+  for pd in "$HOST_DIR"/.rsync-partial; do
+    [ -d "$pd" ] || continue
+    if $DRY_RUN; then
+      echo "  [DRY-RUN] Would clean: .rsync-partial/"
+    else
+      rm -rf "$pd"
+      echo "  Cleaned: .rsync-partial/"
+    fi
+    REMOVED_COUNT=$((REMOVED_COUNT + 1))
+  done
+
   TOTAL_REMOVED=$((TOTAL_REMOVED + REMOVED_COUNT))
   TOTAL_SAVED=$((TOTAL_SAVED + RETAIN))
 
