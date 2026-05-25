@@ -108,9 +108,27 @@ ssh $SSH_OPTS "$HOST" "hermes backup -o '$REMOTE_ZIP' $QUICK_FLAG" 2>/dev/null |
 
 SCP_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
 
-scp $SCP_OPTS "$HOST:$REMOTE_ZIP" "$DEST/$HOST/hermes-${TIMESTAMP}-${MODE}.zip" 2>/dev/null || {
-  echo "ERROR: Failed to transfer backup" >&2; exit 1
-}
+# Use rsync for resumable WAN transfer — survives interruption without restarting
+# Retry with exponential backoff for WAN resilience
+MAX_RETRIES=3
+RETRY_COUNT=0
+BACKOFF=30
+
+while [ $RETRY_COUNT -le $MAX_RETRIES ]; do
+  if rsync -avP --partial-dir=.rsync-partial --timeout=300 \
+    -e "ssh $SCP_OPTS" \
+    "$HOST:$REMOTE_ZIP" "$DEST/$HOST/hermes-${TIMESTAMP}-${MODE}.zip"; then
+    break
+  fi
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [ $RETRY_COUNT -le $MAX_RETRIES ]; then
+    echo "  Transfer failed (attempt $RETRY_COUNT/$MAX_RETRIES). Retry in ${BACKOFF}s..."
+    sleep $BACKOFF
+    BACKOFF=$((BACKOFF * 2 + (RANDOM % 30)))
+  else
+    echo "ERROR: Failed to transfer backup after $MAX_RETRIES retries" >&2; exit 1
+  fi
+done
 
 ssh "$HOST" "rm -f '$REMOTE_ZIP'"
 RCVD="$DEST/$HOST/hermes-${TIMESTAMP}-${MODE}.zip"
@@ -126,7 +144,7 @@ if $INCLUDE_PROFILES; then
 
   if [ -n "$HAS_PROFILES" ]; then
     ssh "$HOST" "tar czf /tmp/hermes-profiles-${TIMESTAMP}.tar.gz -C \"$HERMES_HOME/profiles\" ." 2>/dev/null
-    scp $SCP_OPTS "$HOST:/tmp/hermes-profiles-${TIMESTAMP}.tar.gz" "$DEST/$HOST/hermes-profiles-${TIMESTAMP}.tar.gz" 2>/dev/null
+    rsync -avP --partial-dir=.rsync-partial --timeout=300 -e "ssh $SCP_OPTS" "$HOST:/tmp/hermes-profiles-${TIMESTAMP}.tar.gz" "$DEST/$HOST/hermes-profiles-${TIMESTAMP}.tar.gz" 2>/dev/null
     ssh "$HOST" "rm -f /tmp/hermes-profiles-${TIMESTAMP}.tar.gz"
 
     PROF_TGZ="$DEST/$HOST/hermes-profiles-${TIMESTAMP}.tar.gz"
@@ -154,7 +172,7 @@ if $INCLUDE_SYSTEMD; then
   FOUND=$(ssh "$HOST" "ls '$SSH_TMP/' 2>/dev/null | wc -l" 2>/dev/null || echo "0")
   if [ "$FOUND" -gt 0 ] 2>/dev/null; then
     ssh "$HOST" "tar czf /tmp/hermes-systemd-${TIMESTAMP}.tar.gz -C '$SSH_TMP' ." 2>/dev/null
-    scp $SCP_OPTS "$HOST:/tmp/hermes-systemd-${TIMESTAMP}.tar.gz" "$DEST/$HOST/hermes-systemd-${TIMESTAMP}.tar.gz" 2>/dev/null
+    rsync -avP --partial-dir=.rsync-partial --timeout=300 -e "ssh $SCP_OPTS" "$HOST:/tmp/hermes-systemd-${TIMESTAMP}.tar.gz" "$DEST/$HOST/hermes-systemd-${TIMESTAMP}.tar.gz" 2>/dev/null
     echo "  Saved: $DEST/$HOST/hermes-systemd-${TIMESTAMP}.tar.gz"
     ssh "$HOST" "rm -rf '$SSH_TMP' /tmp/hermes-systemd-${TIMESTAMP}.tar.gz"
   else
@@ -216,7 +234,7 @@ if [ -n "$UPLOAD" ]; then
 fi
 
 echo "  Restore command:"
-echo "    scp $RCVD $HOST:/tmp/"
+echo "    rsync -avP $RCVD $HOST:/tmp/"
 echo "    ssh $HOST \"hermes import --force /tmp/hermes-${TIMESTAMP}-${MODE}.zip\""
 echo ""
 echo "  WARNING: Archive contains plaintext secrets. Encrypt if storing remotely:"

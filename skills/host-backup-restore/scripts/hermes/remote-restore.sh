@@ -64,9 +64,11 @@ ssh $SSH_OPTS "$TARGET" "hostname" &>/dev/null || {
   echo "ERROR: Cannot SSH to $TARGET" >&2; exit 1
 }
 
-# Transfer and import
+# Transfer and import — rsync for resumable WAN transfer
 REMOTE_ZIP="/tmp/hermes-restore-$(basename "$ARCHIVE")"
-scp $SSH_OPTS "$ARCHIVE" "$TARGET:$REMOTE_ZIP" || {
+rsync -avP --partial-dir=.rsync-partial --timeout=300 \
+  -e "ssh $SSH_OPTS" \
+  "$ARCHIVE" "$TARGET:$REMOTE_ZIP" || {
   echo "ERROR: Failed to transfer archive to $TARGET:$REMOTE_ZIP" >&2
   exit 1
 }

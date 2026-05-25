@@ -74,6 +74,7 @@ else
   fi
 fi
 TARGET="$SSH_TARGET"
+SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
 
 echo "=== Host Restore CLI ==="
 echo "Target:  $TARGET"
@@ -212,8 +213,8 @@ restore_group() {
 
   case "$group" in
     base)
-      [ -f "$BACKUP_CONTENT_DIR/hostname" ] && scp "$BACKUP_CONTENT_DIR/hostname" "${TARGET}:/etc/hostname" 2>/dev/null || true
-      [ -f "$BACKUP_CONTENT_DIR/hosts" ] && scp "$BACKUP_CONTENT_DIR/hosts" "${TARGET}:/etc/hosts" 2>/dev/null || true
+      [ -f "$BACKUP_CONTENT_DIR/hostname" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/hostname" "${TARGET}:/etc/hostname" 2>/dev/null || true
+      [ -f "$BACKUP_CONTENT_DIR/hosts" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/hosts" "${TARGET}:/etc/hosts" 2>/dev/null || true
       ;;
     caddy_domains)
       [ -f "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" ] && ssh "$TARGET" "tar xzf - -C /" < "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" 2>/dev/null || true
@@ -244,8 +245,8 @@ restore_group() {
           remote_path="~/hermes-restore.zip"
           echo "  Large backup ($((hermes_size/1024/1024))MB), using home dir for transfer..."
         fi
-        scp "$BACKUP_CONTENT_DIR/hermes-backup.zip" "${TARGET}:${remote_path}" 2>/dev/null || {
-          echo "  ⚠ SCP failed — check disk space on target"
+        rsync -avP --partial-dir=.rsync-partial --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/hermes-backup.zip" "${TARGET}:${remote_path}" 2>/dev/null || {
+          echo "  ⚠ rsync failed — check disk space on target"
           return
         }
         ssh "$TARGET" "hermes import --force ${remote_path} 2>/dev/null || hermes import ${remote_path} 2>/dev/null || true"
@@ -265,7 +266,7 @@ restore_group() {
       fi
       ;;
     other_services)
-      [ -f "$BACKUP_CONTENT_DIR/services.txt" ] && scp "$BACKUP_CONTENT_DIR/services.txt" "${TARGET}:/tmp/" 2>/dev/null || true
+      [ -f "$BACKUP_CONTENT_DIR/services.txt" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/services.txt" "${TARGET}:/tmp/" 2>/dev/null || true
       # Systemd daemon-reload in case unit files were deployed
       echo "  Reloading systemd..."
       ssh "$TARGET" "systemctl daemon-reload 2>/dev/null || true"
@@ -289,7 +290,7 @@ restore_group() {
         if $OS_MISMATCH; then
           echo "  ⚠ Cross-distro apt restore (--allow-cross-distro) — packages may not resolve."
         fi
-        scp "$BACKUP_CONTENT_DIR/dpkg-selections.txt" "${TARGET}:/tmp/" 2>/dev/null || true
+        rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/dpkg-selections.txt" "${TARGET}:/tmp/" 2>/dev/null || true
       fi
       ;;
     databases)
@@ -371,8 +372,8 @@ restore_group() {
         # Derive original path from filename (sqlite_<sanitized_name>)
         db_name=$(basename "$db_file" | sed 's/^sqlite_//')
         echo "  Restoring SQLite: $db_name"
-        # SCP to remote, then use sqlite3 .backup for WAL-safe placement
-        scp "$db_file" "${TARGET}:/tmp/host-restore-sqlite-${db_name}" 2>/dev/null && {
+        # rsync to remote, then use sqlite3 .backup for WAL-safe placement
+        rsync -avP --partial-dir=.rsync-partial --timeout=300 -e "ssh $SSH_OPTS" "$db_file" "${TARGET}:/tmp/host-restore-sqlite-${db_name}" 2>/dev/null && {
           # Try to find original path from manifest
           original_path=$(python3 -c "
 import json
@@ -397,7 +398,7 @@ for f in m.get('databases', {}).get('sqlite', []):
             echo "    Note: original path not found in manifest, file left at /tmp/host-restore-sqlite-${db_name}"
           fi
           ssh "$TARGET" "rm -f /tmp/host-restore-sqlite-${db_name}" 2>/dev/null || true
-        } || echo "    FAILED: scp for $db_name"
+        } || echo "    FAILED: rsync for $db_name"
       done
       ;;
     wiki)
@@ -412,7 +413,7 @@ for f in m.get('databases', {}).get('sqlite', []):
           # Copy rclone.conf from backup archive
           if [ -f "$BACKUP_CONTENT_DIR/wiki-rclone.conf" ]; then
             ssh "$TARGET" "mkdir -p ~/.config/rclone" 2>/dev/null || true
-            scp "$BACKUP_CONTENT_DIR/wiki-rclone.conf" "${TARGET}:~/.config/rclone/rclone.conf" 2>/dev/null || {
+            rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/wiki-rclone.conf" "${TARGET}:~/.config/rclone/rclone.conf" 2>/dev/null || {
               echo "  ⚠ Failed to copy rclone.conf"
               return
             }

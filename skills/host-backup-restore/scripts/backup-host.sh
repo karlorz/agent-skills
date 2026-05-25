@@ -47,6 +47,7 @@ else
 fi
 mkdir -p "$BACKUP_DIR"
 FILE_COUNT=0
+SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
 
 echo "=== Host Backup: $HOST ==="
 echo "Destination: $BACKUP_DIR"
@@ -120,7 +121,7 @@ with open('$BACKUP_DIR/domains.txt', 'w') as f:
         echo "hermes backup failed" > "$BACKUP_DIR/hermes-backup-status.txt"
         return
       }
-      scp "$HOST:/tmp/hermes-backup-$TIMESTAMP.zip" "$BACKUP_DIR/hermes-backup.zip" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      rsync -avP --partial-dir=.rsync-partial --timeout=300 -e "ssh $SSH_OPTS" "$HOST:/tmp/hermes-backup-$TIMESTAMP.zip" "$BACKUP_DIR/hermes-backup.zip" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       ssh "$HOST" "rm -f /tmp/hermes-backup-$TIMESTAMP.zip" 2>/dev/null || true
       echo "hermes backup OK" > "$BACKUP_DIR/hermes-backup-status.txt"
       # Also capture hermes --version output
@@ -242,14 +243,14 @@ if isinstance(sqlite, list):
           [ -z "$db_path" ] && continue
           db_name=$(basename "$db_path" | tr -c '[:alnum:]._-' '_')
           echo "  Dumping SQLite (WAL-safe): $db_path"
-          # Use sqlite3 .backup on remote host for WAL-safe copy, then SCP
+          # Use sqlite3 .backup on remote host for WAL-safe copy, then rsync
           ssh "$HOST" "sqlite3 '$db_path' '.backup /tmp/host-backup-sqlite-${db_name}'" 2>/dev/null && {
-            scp "$HOST:/tmp/host-backup-sqlite-${db_name}" "$BACKUP_DIR/sqlite_${db_name}" 2>/dev/null && {
+            rsync -avP --partial-dir=.rsync-partial --timeout=300 -e "ssh $SSH_OPTS" "$HOST:/tmp/host-backup-sqlite-${db_name}" "$BACKUP_DIR/sqlite_${db_name}" 2>/dev/null && {
               FILE_COUNT=$((FILE_COUNT + 1))
               # Verify integrity
               ssh "$HOST" "sqlite3 '/tmp/host-backup-sqlite-${db_name}' 'PRAGMA integrity_check;'" 2>/dev/null | grep -q "ok" && echo "    OK (integrity verified): sqlite_${db_name}" || echo "    WARNING: integrity check failed for sqlite_${db_name}"
               _compute_sha256 "$BACKUP_DIR/sqlite_${db_name}" > "$BACKUP_DIR/sqlite_${db_name}.sha256"
-            } || echo "    FAILED: scp for $db_name"
+            } || echo "    FAILED: rsync for $db_name"
             ssh "$HOST" "rm -f /tmp/host-backup-sqlite-${db_name}" 2>/dev/null || true
           } || echo "    FAILED: sqlite3 .backup for $db_path (may need sudo or database not accessible)"
         done

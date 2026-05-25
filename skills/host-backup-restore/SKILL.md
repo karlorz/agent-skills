@@ -1,7 +1,7 @@
 ---
 name: host-backup-restore
-version: "3.4.0"
-description: Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker for mechanical tasks), post-discovery research, and skillwiki infrastructure capture. Use when backing up or restoring Caddy reverse-proxy domains, databases (postgres, mysql, redis, mongodb, sqlite), systemd services, SSH configs, and Hermes agent state on remote Linux hosts.
+version: "3.5.0"
+description: Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker for mechanical tasks), post-discovery research, and skillwiki infrastructure capture. Uses rsync with partial-dir for resumable WAN transfers. Use when backing up or restoring Caddy reverse-proxy domains, databases (postgres, mysql, redis, mongodb, sqlite), systemd services, SSH configs, and Hermes agent state on remote Linux hosts.
 argument-hint: "[host] [mode] [options]"
 ---
 
@@ -808,9 +808,9 @@ ssh -o BatchMode=yes <host> "hostname"
 |--------|-----------|-------|---------|
 | base64 + devsh exec | Text files, small binaries | ~32 KB (shell arg limit) | `B64=$(base64 < file); devsh exec "$LXC" "echo \$B64 \| base64 -d > /tmp/file"` |
 | HTTP serve | Any file size | Requires HTTP server on local machine | `python3 -m http.server 8080 & curl -o /tmp/file http://10.10.x.1:8080/file` |
-| SCP via sg01 bridge | Any file size | Requires sg01 as jump host | `scp file sg01:/tmp/; ssh sg01 "scp /tmp/file 10.10.1.123:/tmp/"` |
+| SCP via sg01 bridge | Any file size | Requires sg01 as jump host | `rsync -avP file sg01:/tmp/; ssh sg01 "rsync -avP /tmp/file 10.10.1.123:/tmp/"` |
 
-For backup archives larger than 32 KB (Caddy config, SSL certs, Hermes zip), use the HTTP serve or SCP bridge method. Base64 encoding hits the shell's argument length limit for binary files.
+For backup archives larger than 32 KB (Caddy config, SSL certs, Hermes zip), use the HTTP serve or rsync bridge method. Base64 encoding hits the shell's argument length limit for binary files.
 
 ---
 
