@@ -145,7 +145,7 @@ Backup profiles define which groups to back up and what hermes-tier to use. Thre
 
 | Profile | Groups | Hermes Tier | Use Case |
 |---------|--------|-------------|----------|
-| `full` | all 6 groups | full | Complete infrastructure backup (default) |
+| `full` | all 7 groups | full | Complete infrastructure backup (default) |
 | `quick` | base, caddy_domains, hermes, databases | standard | Essential state — skips systemd units + apt |
 | `minimal` | hermes | minimal | Hermes agent state only — fastest snapshot |
 
@@ -186,7 +186,7 @@ In interactive mode, after discovery, present profile selection before group sel
   "question": "Which backup profile for <host>?",
   "header": "Profile",
   "options": [
-    {"label": "full (Recommended)", "description": "All 6 groups — complete infrastructure backup"},
+    {"label": "full (Recommended)", "description": "All 7 groups — complete infrastructure backup"},
     {"label": "quick", "description": "Essential state: Hermes, databases, Caddy, base (skips systemd + apt)"},
     {"label": "minimal", "description": "Hermes agent state only — fastest snapshot"},
     {"label": "Custom", "description": "Select individual groups manually"}
@@ -294,7 +294,7 @@ Use `AskUserQuestion` with profile options:
   "question": "Which backup profile for <host>?",
   "header": "Profile",
   "options": [
-    {"label": "full (Recommended)", "description": "All 6 groups — complete infrastructure backup"},
+    {"label": "full (Recommended)", "description": "All 7 groups — complete infrastructure backup"},
     {"label": "quick", "description": "Essential state: Hermes, databases, Caddy, base (skips systemd + apt)"},
     {"label": "minimal", "description": "Hermes agent state only — fastest snapshot"},
     {"label": "Custom", "description": "Select individual groups manually"}

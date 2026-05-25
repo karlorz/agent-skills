@@ -13,7 +13,7 @@ TARGET_HOST=""
 
 usage() {
   echo "Usage: $0 --manifest PATH [--group NAME] [--target HOST]"
-  echo "Groups: base caddy_domains per-domain hermes databases other_services apt"
+  echo "Groups: base caddy_domains per-domain hermes databases other_services apt wiki"
   exit 1
 }
 
@@ -229,6 +229,14 @@ if $ALL; then
   test_databases
   test_other_services
   test_apt
+  test_wiki
+
+test_wiki() {
+  group_header "wiki"
+  assert_file "wiki-rclone.conf"
+  assert_file "wiki-mount-status.txt"
+  assert_file "wiki-fstab.txt"
+}
 else
   "test_${GROUP}" 2>/dev/null || echo "Unknown group: $GROUP"
 fi

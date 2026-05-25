@@ -14,6 +14,8 @@ PROFILE=""
 SAVE_PROFILE=""
 LIST_PROFILES=false
 RESEARCH=false
+DB_USER=""
+DB_PASS=""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -24,7 +26,7 @@ usage() {
   echo "  --host HOST           SSH target hostname (required)"
   echo "  --user USER           SSH user (default: root; or use host-agent SSH alias for non-root)"
   echo "  --all                 Back up all groups"
-  echo "  --groups 'g1,g2,...'  Specific groups: base,caddy_domains,hermes,databases,other_services,apt"
+  echo "  --groups 'g1,g2,...'  Specific groups: base,caddy_domains,hermes,databases,other_services,apt,wiki"
   echo "  --profile NAME        Use a backup profile (full, quick, minimal, or custom)"
   echo "  --save-profile NAME   Save current --groups/--hermes-tier as a named profile"
   echo "  --list-profiles       List all available profiles and exit"
@@ -33,6 +35,8 @@ usage() {
   echo "  --dry-run             Preview only, no actual backup"
   echo "  --redetect            Re-run discovery, ignore cache"
   echo "  --research            Run post-discovery research on detected services"
+  echo "  --db-user USER        Database username for pg_dump/mysqldump (default: postgres/root)"
+  echo "  --db-pass PASS        Database password for mysqldump"
   echo ""
   echo "Profiles:"
   echo "  Built-in: full (default), quick, minimal"
@@ -59,6 +63,8 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=true; shift ;;
     --redetect) REDETECT=true; shift ;;
     --research) RESEARCH=true; shift ;;
+    --db-user) DB_USER="$2"; shift 2 ;;
+    --db-pass) DB_PASS="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
@@ -155,6 +161,7 @@ if $DRY_RUN; then
     echo "  - databases"
     echo "  - other_services"
     echo "  - apt"
+	    echo "  - wiki"
   else
     IFS=',' read -ra GROUP_ARRAY <<< "$BACKUP_GROUPS"
     for g in "${GROUP_ARRAY[@]}"; do
@@ -171,7 +178,7 @@ if [ -n "$SAVE_PROFILE" ]; then
   source "$SCRIPT_DIR/profiles.sh"
   SAVE_GROUPS="$BACKUP_GROUPS"
   if $ALL || [ -z "$BACKUP_GROUPS" ]; then
-    SAVE_GROUPS="base caddy_domains hermes databases other_services apt"
+    SAVE_GROUPS="base caddy_domains hermes databases other_services apt wiki"
   fi
   save_profile "$SAVE_PROFILE" "$SAVE_GROUPS" "$HERMES_TIER" "Custom profile saved from CLI"
   echo ""
@@ -179,7 +186,17 @@ fi
 
 # Execute backup
 export HERMES_TIER
+export DB_USER
+# DB_PASS is passed via environment but NOT exported to child process env
+# to avoid exposure in /proc/self/environ. backup-host.sh reads it directly.
 export BACKUP_DIR="$DEST"
+# Pass DB_PASS securely via temp file
+if [ -n "$DB_PASS" ]; then
+  DB_PASS_FILE=$(mktemp)
+  chmod 600 "$DB_PASS_FILE"
+  echo "$DB_PASS" > "$DB_PASS_FILE"
+  export DB_PASS_FILE
+fi
 
 if $ALL || [ -z "$BACKUP_GROUPS" ]; then
   bash "$SCRIPT_DIR/backup-host.sh" "$MANIFEST_FILE" all

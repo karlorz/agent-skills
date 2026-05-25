@@ -10,7 +10,7 @@ PROFILES_FILE="$CONFIG_DIR/profiles.yaml"
 # Built-in presets (not user-editable)
 # These are the defaults; user YAML overrides if same name is used
 declare -A PRESET_GROUPS=(
-  [full]="base caddy_domains hermes databases other_services apt"
+  [full]="base caddy_domains hermes databases other_services apt wiki"
   [quick]="base caddy_domains hermes databases"
   [minimal]="hermes"
 )
@@ -22,7 +22,7 @@ declare -A PRESET_HERMES_TIER=(
 )
 
 declare -A PRESET_DESCRIPTION=(
-  [full]="All 6 groups — full infrastructure backup"
+  [full]="All 7 groups — full infrastructure backup"
   [quick]="Essential state: Hermes, databases, Caddy, base (skips systemd units + apt)"
   [minimal]="Hermes agent state only — fastest snapshot"
 )

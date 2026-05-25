@@ -2,7 +2,7 @@
 # backup-host.sh — Mechanical backup script
 # Reads manifest and backs up selected groups
 # Usage: BACKUP_DIR=/path bash backup-host.sh <manifest.json> [groups...]
-# Groups: base caddy_domains hermes databases other_services apt
+# Groups: base caddy_domains hermes databases other_services apt wiki
 # Default: all groups
 set -euo pipefail
 
@@ -14,7 +14,7 @@ HOST=""
 
 if [ -z "$MANIFEST" ] || [ ! -f "$MANIFEST" ]; then
   echo "Usage: BACKUP_DIR=/path $0 <manifest.json> [groups...]" >&2
-  echo "  Groups: base caddy_domains hermes databases other_services apt" >&2
+  echo "  Groups: base caddy_domains hermes databases other_services apt wiki" >&2
   echo "  Default: all groups" >&2
   exit 1
 fi
@@ -47,8 +47,7 @@ backup_group() {
       ssh "$HOST" "sudo cat /etc/hosts" > "$BACKUP_DIR/hosts" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       ssh "$HOST" "sudo cat /etc/ssh/sshd_config" > "$BACKUP_DIR/sshd_config" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       ssh "$HOST" "sudo cat /etc/os-release" > "$BACKUP_DIR/os-release" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
-      # rclone config (for wiki S3 mount restore)
-      ssh "$HOST" "cat ~/.config/rclone/rclone.conf 2>/dev/null" > "$BACKUP_DIR/rclone.conf" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      # rclone config is captured in wiki group
       echo "$(date -Iseconds)" > "$BACKUP_DIR/BACKUP_TIMESTAMP"
       ;;
     caddy_domains)
@@ -111,7 +110,7 @@ with open('$BACKUP_DIR/domains.txt', 'w') as f:
       ssh "$HOST" "hermes --version" > "$BACKUP_DIR/hermes-version.txt" 2>/dev/null || true
       ;;
     databases)
-      # sqlite files from manifest
+      # Write database summary from manifest
       python3 -c "
 import json
 m = json.load(open('$MANIFEST'))
@@ -126,30 +125,127 @@ with open('$BACKUP_DIR/databases-summary.txt', 'w') as f:
             f.write(f'{db_type}: {items}\n')
       " 2>/dev/null || true
 
-      # Copy sqlite files using python3 for safe handling
-      python3 -c "
-import json, subprocess, sys, os
+      # --- PostgreSQL dumps ---
+      PG_DBS=$(python3 -c "
+import json
 m = json.load(open('$MANIFEST'))
-host = m['hostname']
-backup_dir = '$BACKUP_DIR'
-count = 0
-sqlite_files = m.get('databases', {}).get('sqlite', [])
-for f in sqlite_files:
-    try:
-        result = subprocess.run(['scp', f'{host}:{f}', backup_dir + '/'],
-                              capture_output=True, timeout=30)
-        if result.returncode == 0:
-            count += 1
-            basename = os.path.basename(f)
-            src = os.path.join(backup_dir, basename)
-            dst = os.path.join(backup_dir, 'sqlite_' + basename)
-            # Avoid name collisions
-            if os.path.exists(src) and not os.path.exists(dst):
-                os.rename(src, dst)
-    except Exception:
-        pass
-print(f'Copied {count} sqlite files')
-      " 2>/dev/null || true
+dbs = m.get('databases', {})
+pg = dbs.get('postgres', [])
+if isinstance(pg, list):
+    # Extract db names if manifest has structured data, else use detected flag
+    print(' '.join(pg) if pg else '')
+else:
+    print(pg if pg and pg != 'not detected' else '')
+      " 2>/dev/null || true)
+      if [ -n "$PG_DBS" ]; then
+        PG_USER="${DB_USER:-postgres}"
+        for db in $PG_DBS; do
+          echo "  Dumping PostgreSQL: $db"
+          ssh "$HOST" "pg_dump -Fc -U '$PG_USER' '$db'" > "$BACKUP_DIR/pg_${db}.dump" 2>"$BACKUP_DIR/pg_${db}.err" && {
+            FILE_COUNT=$((FILE_COUNT + 1))
+            sha256sum "$BACKUP_DIR/pg_${db}.dump" > "$BACKUP_DIR/pg_${db}.dump.sha256"
+            echo "    OK: pg_${db}.dump ($(du -sh "$BACKUP_DIR/pg_${db}.dump" | cut -f1))"
+          } || echo "    FAILED: pg_dump for $db (may need --db-user or DB_USER env)"
+        done
+      fi
+
+      # --- MySQL dumps ---
+      MYSQL_DBS=$(python3 -c "
+import json
+m = json.load(open('$MANIFEST'))
+dbs = m.get('databases', {})
+my = dbs.get('mysql', [])
+if isinstance(my, list):
+    print(' '.join(my) if my else '')
+else:
+    print(my if my and my != 'not detected' else '')
+      " 2>/dev/null || true)
+      if [ -n "$MYSQL_DBS" ]; then
+        MYSQL_USER="${DB_USER:-root}"
+        # Read DB_PASS from temp file if available (avoids env exposure)
+        if [ -n "${DB_PASS_FILE:-}" ] && [ -f "$DB_PASS_FILE" ]; then
+          MYSQL_PASS=$(cat "$DB_PASS_FILE")
+        else
+          MYSQL_PASS="${DB_PASS:-}"
+        fi
+        for db in $MYSQL_DBS; do
+          echo "  Dumping MySQL: $db"
+          # Use MYSQL_PWD env var to avoid password exposure in process table
+          MYSQL_AUTH="-u'$MYSQL_USER'"
+          MYSQL_DUMP_CMD="mysqldump $MYSQL_AUTH --single-transaction --routines --triggers --events '$db'"
+          if [ -n "$MYSQL_PASS" ]; then
+            MYSQL_DUMP_CMD="MYSQL_PWD='$MYSQL_PASS' $MYSQL_DUMP_CMD"
+          fi
+          # shellcheck disable=SC2086
+          ssh "$HOST" "$MYSQL_DUMP_CMD 2>/dev/null | gzip" > "$BACKUP_DIR/mysql_${db}.sql.gz" && {
+            FILE_COUNT=$((FILE_COUNT + 1))
+            sha256sum "$BACKUP_DIR/mysql_${db}.sql.gz" > "$BACKUP_DIR/mysql_${db}.sql.gz.sha256"
+            echo "    OK: mysql_${db}.sql.gz ($(du -sh "$BACKUP_DIR/mysql_${db}.sql.gz" | cut -f1))"
+          } || echo "    FAILED: mysqldump for $db (may need --db-user/--db-pass)"
+        done
+      fi
+
+      # --- MongoDB dumps ---
+      MONGO_DETECTED=$(python3 -c "
+import json
+m = json.load(open('$MANIFEST'))
+dbs = m.get('databases', {})
+mg = dbs.get('mongodb', 'not detected')
+print(mg if mg and mg != 'not detected' else '')
+      " 2>/dev/null || true)
+      if [ -n "$MONGO_DETECTED" ]; then
+        echo "  Dumping MongoDB..."
+        MONGO_URI="${MONGO_URI:-}"
+        if [ -n "$MONGO_URI" ]; then
+          ssh "$HOST" "mongodump --uri='$MONGO_URI' --gzip --archive 2>/dev/null" > "$BACKUP_DIR/mongo.archive.gz" && {
+            FILE_COUNT=$((FILE_COUNT + 1))
+            sha256sum "$BACKUP_DIR/mongo.archive.gz" > "$BACKUP_DIR/mongo.archive.gz.sha256"
+            echo "    OK: mongo.archive.gz ($(du -sh "$BACKUP_DIR/mongo.archive.gz" | cut -f1))"
+          } || echo "    FAILED: mongodump"
+        else
+          ssh "$HOST" "mongodump --gzip --archive 2>/dev/null" > "$BACKUP_DIR/mongo.archive.gz" && {
+            FILE_COUNT=$((FILE_COUNT + 1))
+            sha256sum "$BACKUP_DIR/mongo.archive.gz" > "$BACKUP_DIR/mongo.archive.gz.sha256"
+            echo "    OK: mongo.archive.gz ($(du -sh "$BACKUP_DIR/mongo.archive.gz" | cut -f1))"
+          } || echo "    FAILED: mongodump (may need MONGO_URI env)"
+        fi
+      fi
+
+      # --- SQLite dumps (WAL-safe via .backup command) ---
+      SQLITE_FILES=$(python3 -c "
+import json
+m = json.load(open('$MANIFEST'))
+dbs = m.get('databases', {})
+sqlite = dbs.get('sqlite', [])
+if isinstance(sqlite, list):
+    print('\n'.join(sqlite))
+      " 2>/dev/null || true)
+      if [ -n "$SQLITE_FILES" ]; then
+        echo "$SQLITE_FILES" | while read -r db_path; do
+          [ -z "$db_path" ] && continue
+          db_name=$(basename "$db_path" | tr -c '[:alnum:]._-' '_')
+          echo "  Dumping SQLite (WAL-safe): $db_path"
+          # Use sqlite3 .backup on remote host for WAL-safe copy, then SCP
+          ssh "$HOST" "sqlite3 '$db_path' '.backup /tmp/host-backup-sqlite-${db_name}'" 2>/dev/null && {
+            scp "$HOST:/tmp/host-backup-sqlite-${db_name}" "$BACKUP_DIR/sqlite_${db_name}" 2>/dev/null && {
+              FILE_COUNT=$((FILE_COUNT + 1))
+              # Verify integrity
+              ssh "$HOST" "sqlite3 '/tmp/host-backup-sqlite-${db_name}' 'PRAGMA integrity_check;'" 2>/dev/null | grep -q "ok" && echo "    OK (integrity verified): sqlite_${db_name}" || echo "    WARNING: integrity check failed for sqlite_${db_name}"
+              sha256sum "$BACKUP_DIR/sqlite_${db_name}" > "$BACKUP_DIR/sqlite_${db_name}.sha256"
+            } || echo "    FAILED: scp for $db_name"
+            ssh "$HOST" "rm -f /tmp/host-backup-sqlite-${db_name}" 2>/dev/null || true
+          } || echo "    FAILED: sqlite3 .backup for $db_path (may need sudo or database not accessible)"
+        done
+      fi
+      ;;
+    wiki)
+      # Wiki vault S3 mount: capture rclone config and verify mount
+      echo "  Backing up wiki S3 mount config..."
+      ssh "$HOST" "cat ~/.config/rclone/rclone.conf 2>/dev/null" > "$BACKUP_DIR/wiki-rclone.conf" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      # Check wiki mount status
+      ssh "$HOST" "mountpoint -q ~/wiki 2>/dev/null && echo 'wiki mount: active' || echo 'wiki mount: not mounted'" > "$BACKUP_DIR/wiki-mount-status.txt" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      # Capture fstab entry if present
+      ssh "$HOST" "grep wiki /etc/fstab 2>/dev/null || echo 'no wiki fstab entry'" > "$BACKUP_DIR/wiki-fstab.txt" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       ;;
     other_services)
       # Systemd service inventory
@@ -176,14 +272,14 @@ print(f'Copied {count} sqlite files')
 }
 
 if [ "$SELECTED_GROUPS" = "all" ]; then
-  for g in base caddy_domains hermes databases other_services apt; do
+  for g in base caddy_domains hermes databases other_services apt wiki; do
     backup_group "$g"
   done
 else
   for g in $SELECTED_GROUPS; do
     # Check if the group is recognized
     case "$g" in
-      base|caddy_domains|hermes|databases|other_services|apt) backup_group "$g" ;;
+      base|caddy_domains|hermes|databases|other_services|apt|wiki) backup_group "$g" ;;
       *) echo "Warning: Unknown group '$g', skipping" ;;
     esac
   done
