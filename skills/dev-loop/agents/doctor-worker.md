@@ -91,6 +91,39 @@ pressure that the controller cannot otherwise observe.
 5. Capture both `compact_count` (integer) and `session_jsonl_path` (string) in
    the output for caller visibility.
 
+### HUD bridge — status file emission (v1.20.0)
+
+After Probe 2 completes (whether `compact_count` is an integer or `null`),
+write the latest probe result to a stable status file so external HUDs
+(ccstatusline custom widgets, terminal polls, tmux statuslines) can read
+session pressure without coupling into the dev-loop controller.
+
+1. Ensure parent dir exists:
+   `mkdir -p ~/.claude/dev-loop`
+2. Compose the status JSON (minimal — keep small to keep reads cheap):
+   ```json
+   {
+     "compact_count": <int|null>,
+     "dep_status": "<healthy|degraded|broken>",
+     "session_jsonl_path": "<path or null>",
+     "cycle_ts": "<ISO-8601 UTC>"
+   }
+   ```
+   `dep_status` is the result of Probe 1 (dependency drift). `compact_count`
+   is the result of Probe 2. Keeping them in one file means consumers fetch
+   both signals in a single read.
+3. Write atomically (`> ~/.claude/dev-loop/last-doctor.json.tmp && mv ...`)
+   to `~/.claude/dev-loop/last-doctor.json`.
+4. On any write failure (permissions, full disk), log to stderr and continue.
+   The bridge is best-effort — never block a cycle on HUD emit failure.
+
+**Consumer contract:** This file MAY be missing (no dev-loop cycle has run
+yet) or stale (last cycle was long ago). Consumers should treat missing or
+old files as "monitor inactive" and not as a fatal error. The `cycle_ts`
+field lets consumers detect staleness. The file is single-writer
+(`doctor-worker`) and many-reader; no locking required for typical HUD
+polling intervals (≥1s).
+
 ### Probe 3 — skillwiki doctor bridge (vault health)
 
 When `SKILLWIKI_DOCTOR_BRIDGE` env var is not `false` and `skillwiki` CLI is on

@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.19.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.20.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high]"
 ---
 
@@ -537,17 +537,28 @@ prd_disciplines:
    - `degraded` → warn once per missing optional ref; store `DEP_DRIFT` set.
    - `healthy` → proceed.
 
-   **Behavior on `compact_count`:**
-   - `0` → silent (full context).
-   - `1` → one-line note: "Auto-compact has fired once this session. Earlier
-     observations may have lost detail; consider /clear at next natural
-     breakpoint."
-   - `2` → stronger warning: recommend ending this session after the current
-     cycle completes.
-   - `>= 3` → refuse to start the cycle without explicit user confirmation:
-     "Auto-compact has fired 3+ times — significant context loss. Start a
+   **Behavior on `compact_count`** (tuned v1.20.0 — single auto-compacts in
+   long-running loops are normal; previous thresholds escalated too aggressively):
+   - `0` → one-line proactive emit: "Auto-compact monitor active — 0 firings
+     this session (full context)." Always shown so users know the probe is
+     wired before pressure arrives.
+   - `1` → one-line emit: "Auto-compact monitor — 1 firing this session.
+     Earlier observations may have lost detail; monitoring continues."
+   - `2` → note: "Auto-compact has fired 2x this session. Consider /clear at
+     the next natural breakpoint to reset context."
+   - `3` → stronger warning: "Auto-compact has fired 3x — recommend ending
+     this session after the current cycle completes."
+   - `>= 4` → refuse to start the cycle without explicit user confirmation:
+     "Auto-compact has fired 4+ times — significant context loss. Start a
      fresh session for reliable multi-step work."
    - `null` (probe error) → log the error; do not block.
+
+   **HUD bridge (v1.20.0)** — `doctor-worker` writes the latest probe result
+   to `~/.claude/dev-loop/last-doctor.json` on every cycle. External HUDs
+   (ccstatusline custom widgets, terminal polls) can read this file without
+   coupling into the dev-loop controller. Shape: `{compact_count, dep_status,
+   session_jsonl_path, cycle_ts}`. See `agents/doctor-worker.md` § HUD bridge
+   for the consumer contract.
 
    Steps depending on optional capabilities (BROWSER-VERIFY 6a, GRILL 2b,
    IDLE step 4.5 deep-research, SAVE step 7 crystallize, AUDIT step 13,
