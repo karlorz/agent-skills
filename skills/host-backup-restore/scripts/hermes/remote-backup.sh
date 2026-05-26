@@ -113,6 +113,13 @@ REMOTE_ZIP="/tmp/hermes-${TIMESTAMP}.zip"
 QUICK_FLAG=""
 [ "$MODE" = "quick" ] && QUICK_FLAG="--quick"
 
+# Pre-flight: verify hermes binary works (catches sg01-style broken-venv outage)
+if ! ssh $SSH_OPTS "$HOST" "hermes --version" >/dev/null 2>&1; then
+  echo "ERROR: 'hermes --version' failed on $HOST — binary may be broken (symlink → missing venv)." >&2
+  echo "  Investigate: ssh $HOST 'ls -la \$(which hermes) && ls -la ~/.hermes/'" >&2
+  exit 1
+fi
+
 ssh $SSH_OPTS "$HOST" "hermes backup -o '$REMOTE_ZIP' $QUICK_FLAG" 2>/dev/null || {
   echo "ERROR: hermes backup failed" >&2; exit 1
 }

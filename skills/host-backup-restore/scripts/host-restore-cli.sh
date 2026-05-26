@@ -292,6 +292,12 @@ restore_group() {
           echo "  ⚠ rsync failed — check disk space on target"
           return
         }
+        # Pre-flight: verify hermes binary on target (catches sg01-style broken-venv outage)
+        if ! ssh "$TARGET" "hermes --version" >/dev/null 2>&1; then
+          echo "  ⚠ hermes --version failed on $TARGET — skipping import (binary may be broken)."
+          ssh "$TARGET" "rm -f ${remote_path}" 2>/dev/null || true
+          return
+        fi
         ssh "$TARGET" "hermes import --force ${remote_path} 2>/dev/null || hermes import ${remote_path} 2>/dev/null || true"
         ssh "$TARGET" "rm -f ${remote_path}" 2>/dev/null || true
         # Re-install gateway + dashboard services (source unit files may have wrong paths)

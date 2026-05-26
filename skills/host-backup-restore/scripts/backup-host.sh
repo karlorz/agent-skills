@@ -102,6 +102,12 @@ with open('$BACKUP_DIR/domains.txt', 'w') as f:
       # IMPORTANT: hermes backup does NOT support --tier flag
       # Use --quick for minimal, no flag for full
       echo "Creating Hermes backup on $HOST..."
+      # Pre-flight: verify hermes binary works (catches sg01-style broken-venv outage)
+      if ! ssh "$HOST" "hermes --version" >/dev/null 2>&1; then
+        echo "  ⚠ hermes --version failed on $HOST — binary may be broken (symlink → missing venv)."
+        echo "  hermes backup skipped" > "$BACKUP_DIR/hermes-backup-status.txt"
+        return
+      fi
       BACKUP_MODE=""
       HERMES_TIER="${HERMES_TIER:-full}"
       if [ "$HERMES_TIER" = "minimal" ]; then

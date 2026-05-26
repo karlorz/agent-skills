@@ -72,6 +72,14 @@ ssh $SSH_OPTS "$TARGET" "hostname" &>/dev/null || {
   echo "ERROR: Cannot SSH to $TARGET" >&2; exit 1
 }
 
+# Pre-flight: verify hermes binary works on target (catches sg01-style broken-venv outage)
+# Done before stop-services and transfer so a broken target doesn't trigger a downtime window.
+if ! ssh $SSH_OPTS "$TARGET" "hermes --version" >/dev/null 2>&1; then
+  echo "ERROR: 'hermes --version' failed on $TARGET — binary may be broken (symlink → missing venv)." >&2
+  echo "  Investigate: ssh $TARGET 'ls -la \$(which hermes) && ls -la ~/.hermes/'" >&2
+  exit 1
+fi
+
 # Transfer and import — rsync for resumable WAN transfer
 REMOTE_ZIP="/tmp/hermes-restore-$(basename "$ARCHIVE")"
 rsync -avP --partial-dir=.rsync-partial --timeout=300 \
