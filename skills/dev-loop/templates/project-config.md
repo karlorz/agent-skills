@@ -312,6 +312,37 @@ research backlog.
 Omit the section or set `enabled: false` to disable — idle cycles exit
 after maintenance with no research.
 
+## Investigate mode (optional)
+
+Proactive work-item creation mode. When invoked via `/dev-loop investigate`,
+scans project health and creates `status: proposed` work items in the vault.
+
+```yaml
+investigate:
+  max_items: 5                # cap per invocation (high doubles it to 10)
+  topic_seeds: []             # fallback deep-research topics; reuses idle_deep_research.topic_seeds if empty
+```
+
+**Fields:**
+- `max_items` (int, default 5): Maximum work items created per investigate
+  invocation. High intensity doubles this value.
+- `topic_seeds` (list, default []): Topics for deep-research in high mode
+  when no user topic is provided. Falls back to
+  `idle_deep_research.topic_seeds` if empty — projects that already
+  configured those get investigate deep-research for free.
+
+**Invocation examples:**
+```
+/dev-loop investigate                           # normal, autonomous scan, cap 5
+/dev-loop investigate high                      # adds deep-research, cap 10
+/dev-loop investigate "plugin SDK changes"      # steers deep-research to topic
+/dev-loop investigate high "plugin SDK changes" # high + user topic
+```
+
+Omit the section to use defaults (max_items: 5, topic_seeds from
+idle_deep_research). Investigate mode itself is always available when
+`query_vault` in BACKEND_CAPS — the config section only controls tuning.
+
 ## Browser verification (optional)
 
 Automated browser verification gate for projects with browser-facing code.

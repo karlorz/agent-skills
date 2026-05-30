@@ -151,8 +151,8 @@ optional:
   - kind: skill
     ref: deep-research:deep-research
     capability: deep_research
-    used_by: ["IDLE step 4.5"]
-    fallback: "skip IDLE deep-research entirely"
+    used_by: ["IDLE step 4.5", "INVESTIGATE step 3"]
+    fallback: "skip deep-research stages in IDLE and INVESTIGATE; proceed with local findings only"
 
   - kind: agent
     ref: playwright-cli:browser-worker
@@ -199,7 +199,7 @@ optional:
   - kind: agent
     ref: dev-loop:research-worker
     capability: research_scan
-    used_by: ["IDLE step 4"]
+    used_by: ["IDLE step 4", "INVESTIGATE step 2"]
     fallback: "inline Skill('dev-loop:research') invocation in parent session"
     self: true
 

@@ -1,8 +1,8 @@
 ---
 name: dev-loop
-version: "1.20.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
-argument-hint: "[high]"
+version: "1.21.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Also use when the user says "investigate", "find work", "scan for work items", or "what needs doing" to proactively create structured work items. v1.21.0: investigate mode — proactive work-item creation from code/vault/transcript/deep-research sources, tiered output (full spec or stub), status:proposed, vault required. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+argument-hint: "[high] [investigate [high] [topic]]"
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -31,10 +31,67 @@ autodiscovers conventions or asks the user to bootstrap one.
   `/compact` or `/clear` (they are user-only slash commands). Do not
   assume programmatic context management is available.
 
+## Mode
+
+Parse arguments for the keyword `investigate` (case-insensitive). If present,
+set **MODE = investigate**; otherwise **MODE = core** (default).
+
+### Argument Parsing Order
+
+1. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
+2. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
+3. Remaining args → `INVESTIGATE_TOPIC` (only meaningful when MODE = investigate).
+
+Examples:
+```
+/dev-loop                                → MODE=core, INTENSITY=normal
+/dev-loop high                           → MODE=core, INTENSITY=high
+/dev-loop investigate                    → MODE=investigate, INTENSITY=normal
+/dev-loop investigate high               → MODE=investigate, INTENSITY=high
+/dev-loop investigate "plugin SDK"       → MODE=investigate, INTENSITY=normal, TOPIC="plugin SDK"
+/dev-loop investigate high "plugin SDK"  → MODE=investigate, INTENSITY=high, TOPIC="plugin SDK"
+```
+
+### Mode Dispatch
+
+After REFRESH (step 0), branch on MODE:
+
+- **`core`** → run The Loop (steps 1–14) or IDLE DISCOVERY as documented below.
+- **`investigate`** → gate on `query_vault` in BACKEND_CAPS. If absent,
+  refuse: "Investigate mode requires a vault — run `/setup-dev-loop` to
+  configure one." If present, run the investigate pipeline from
+  `investigate/SKILL.md`. The investigate companion shares REFRESH state
+  (BACKEND_CAPS, VAULT_TYPES, DEP_DRIFT, CRITICAL_PATHS, config) — do not
+  re-derive.
+
+### Investigate Pipeline (summary)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ INVESTIGATE (when MODE = investigate)                    │
+│  1. QUERY     Existing work items + retros for dedup    │
+│  2. SCAN      Research-worker (code + vault + transcripts)│
+│  3. DEEPEN    Deep-research (high or user topic only)   │
+│  4. TRIAGE    Deduplicate, rank, apply intensity cap    │
+│  5. SPEC      Create proj-work items (status: proposed) │
+│  6. RETRO     Log investigation results                 │
+│  7. SAVE      Vault auto-commit                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+See `investigate/SKILL.md` for full step details. Key properties:
+- Output: `status: proposed` (human promotes to `planned` for CORE to pick up)
+- Tiered: concrete findings → full spec, exploratory → stub
+- Dedup: slug-based + status-aware + archive check
+- Cap: `max_items` (normal) or `max_items * 2` (high). Default 5/10.
+- Vault required (ADR: `investigate-mode-vault-required`)
+
 ## Intensity Level
 
 Parse arguments for the keyword `high` (case-insensitive). If present,
 set **intensity = high**; otherwise **intensity = normal**.
+
+Intensity applies to BOTH modes — core and investigate use the same variable.
 
 ### normal (default)
 
@@ -404,6 +461,15 @@ prd_disciplines:
      `VAULT_SYNC_PRESYNC_SKILL`. When `auto-detect`, probe
      `$VAULT/.claude/skills/wiki-presync/SKILL.md` at cycle start;
      cache result as `VAULT_PRESYNC_AVAILABLE` (bool).
+
+     **Resolve `investigate`** — parse the `investigate` block from config.
+     - If block is absent → store `INVESTIGATE_MAX_ITEMS = 5`,
+       `INVESTIGATE_TOPIC_SEEDS = []` (will fall back to
+       `idle_deep_research.topic_seeds` at runtime).
+     - If block present: read `max_items` (default 5), `topic_seeds`
+       (default []). Store as session variables.
+     - Investigate mode itself is always available when `query_vault` in
+       BACKEND_CAPS — the config section only controls tuning parameters.
 
      **Resolve `release_policy`** — parse the `release_policy` block from config.
      - If block is absent → store `RELEASE_POLICY = None`. PUSH step uses
@@ -1748,3 +1814,12 @@ re-run REFRESH to load the new config.
 The companion research agent prompt lives in `research/SKILL.md` adjacent to
 this `SKILL.md`. It is invoked from IDLE DISCOVERY step 4. The research
 agent shares the same project config; do not duplicate config fields.
+
+## Investigate Companion
+
+The companion investigate prompt lives in `investigate/SKILL.md` adjacent to
+this `SKILL.md`. It is invoked when MODE resolves to `investigate` after
+REFRESH, and reuses the same session state (`BACKEND_CAPS`, `VAULT_TYPES`,
+`DEP_DRIFT`, `CRITICAL_PATHS`, `INVESTIGATE_MAX_ITEMS`,
+`INVESTIGATE_TOPIC_SEEDS`). It creates `status: proposed` work items and does
+not execute code.
