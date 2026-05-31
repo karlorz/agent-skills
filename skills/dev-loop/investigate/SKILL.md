@@ -3,18 +3,19 @@ name: investigate
 version: "1.0.0"
 description: >
   Companion prompt for dev-loop investigate mode. Proactively scans project
-  health (code, vault, transcripts, deep-research) and creates structured
-  status:proposed work items in the vault. Invoked via /dev-loop investigate
-  [high] [topic]. Requires query_vault in BACKEND_CAPS.
+  health (code, vault, transcripts, deep-research) and queues structured,
+  schema-valid findings in the vault. Invoked via /dev-loop investigate [high]
+  [topic]. Requires query_vault in BACKEND_CAPS.
 type: companion-prompt
 mode: on-demand
 ---
 
 # Dev-Loop Investigate Mode
 
-Proactive work-item creation pipeline. Scans project health across four
-sources, deduplicates against existing work, and creates structured
-`status: proposed` work items in the vault for future CORE cycles to consume.
+Proactive finding queue pipeline. Scans project health across four sources,
+deduplicates against existing work, and writes schema-valid queued findings in
+the vault. Findings stay non-executable until a human promotes them into
+`status: planned` work items.
 
 ## Prerequisites
 
@@ -80,7 +81,7 @@ investigate:
 │               + unclaimed transcripts                   │
 │  3. DEEPEN    Deep-research (high or user topic only)   │
 │  4. TRIAGE    Deduplicate, rank, cap                    │
-│  5. SPEC      Create proj-work items (tiered output)    │
+│  5. SPEC      Queue findings (schema-adaptive output)   │
 ├─────────────────────────────────────────────────────────┤
 │ POSTLUDE                                                │
 │  6. RETRO     Log investigation results                 │
@@ -96,19 +97,23 @@ Gather existing state to prevent duplicate work-item creation:
 
 1. **List existing work items** — `ls {vault}/projects/{slug}/work/` to get
    all current slugs and their statuses. Parse spec.md frontmatter for
-   `status`, `name`, `title`.
+   `status`, `name`, `title`, and `kind`.
 2. **Check project history** — `ls {vault}/projects/{slug}/history/` for
    archived work-item slugs (completed work that shouldn't be re-proposed).
    If `history/` is absent, treat as empty.
-3. **Read recent retros** — scan `{vault}/log.md` for the last 10 retro
+3. **List queued raw captures** — scan `{vault}/raw/transcripts/` for
+   ad-hoc captures with `project: "[[<project-slug>]]"` and slugs matching
+   investigation output (`YYYY-MM-DD-<kind>-<slug>.md`).
+4. **Read recent retros** — scan `{vault}/log.md` for the last 10 retro
    entries to understand what's been investigated recently.
-4. **Check prior investigate runs** — grep log.md for `investigate-cycle`
+5. **Check prior investigate runs** — grep log.md for `investigate-cycle`
    entries. If the last investigate run was <24h ago AND intensity is the
    same, warn: "Investigate ran recently (<time> ago) — findings may overlap.
    Continue anyway." Do not block.
 
 Store results as `EXISTING_SLUGS` (set of name slugs + statuses) and
-`HISTORY_SLUGS` (set) for TRIAGE.
+`HISTORY_SLUGS` (set) for TRIAGE. Store queued transcript slugs as
+`QUEUED_CAPTURE_SLUGS`.
 
 ### 2. SCAN — research-worker (code + vault health + transcripts)
 
@@ -193,8 +198,10 @@ hyphens, strip common words). Then check:
    - Status `in-progress` → **skip** (being worked on)
    - Status `completed` → **skip** unless the finding references changes
      since the completion date
-2. If slug ∈ `HISTORY_SLUGS` → **skip** (work completed and archived)
-3. If slug matches an existing slug with >70% character overlap (Levenshtein
+2. If slug ∈ `QUEUED_CAPTURE_SLUGS` → **skip** (already queued as a raw
+   transcript capture)
+3. If slug ∈ `HISTORY_SLUGS` → **skip** (work completed and archived)
+4. If slug matches an existing slug with >70% character overlap (Levenshtein
    or common-prefix) → **flag** as "possibly related" but still include
 
 Log skipped duplicates: "Skipped: <slug> (existing: <status>)"
@@ -232,9 +239,29 @@ Heuristic: if the finding references specific file paths or has a clear
 acceptance criteria expressible as a command (`test passes`, `lint clean`,
 `version matches`), it's a full spec. Otherwise, stub.
 
-### 5. SPEC — create work items
+### 5. SPEC — queue findings
 
-For each triaged finding, create a work item via `proj-work`:
+For each triaged finding, create a schema-valid queued artifact. The queue
+format is schema-adaptive because skillwiki installations differ on whether a
+non-executing work-item status exists.
+
+**Schema probe (before first output):**
+
+1. Draft a single candidate non-executing work item in the target project
+   work directory using `status: proposed`.
+2. Run `skillwiki validate <candidate-spec.md>`.
+3. If validation passes, use **Mode A: proposed work item queue** for this
+   invocation.
+4. If validation rejects `status: proposed`, `kind`, or lifecycle fields,
+   delete the candidate and use **Mode B: raw transcript capture queue**.
+
+Do not continue after a validation failure with the same invalid shape.
+
+#### Mode A: proposed work item queue
+
+Use this mode only when the local schema validates non-executing proposed work
+items. For each triaged finding, create a work item via `proj-work` and
+validate the resulting `spec.md`.
 
 **Common frontmatter:**
 ```yaml
@@ -242,11 +269,12 @@ For each triaged finding, create a work item via `proj-work`:
 title: "<conventional-commit-style title>"
 name: <slug>
 description: "<one-paragraph summary>"
-kind: <bug|feature|task|idea>   # derived from finding source
-status: proposed                # always proposed, never planned
+kind: <feature|issue|refactor|decision>
+status: proposed                # only when local schema supports it
 priority: <high|medium|low>     # derived from P-score: P0-P1→high, P2→medium, P3+→low
 project: "[[<project-slug>]]"
 created: YYYY-MM-DD
+updated: YYYY-MM-DD
 tags:
   - <project-slug>
   - investigate
@@ -289,6 +317,69 @@ source_investigate: true        # marker for investigate-created items
 - Follow-up work item created if action needed
 ```
 
+**Work-item kind mapping:**
+
+| Finding source/type | Work-item `kind` |
+|---|---|
+| Concrete bug or failing behavior | `issue` |
+| User-facing capability or new workflow | `feature` |
+| Internal cleanup with no behavior change | `refactor` |
+| Exploratory architecture choice | `decision` |
+
+#### Mode B: raw transcript capture queue
+
+Use this mode when `skillwiki validate` rejects proposed work items. Create a
+schema-valid ad-hoc capture under:
+
+```text
+{vault}/raw/transcripts/YYYY-MM-DD-<capture-kind>-<slug>.md
+```
+
+**Frontmatter:**
+
+```yaml
+---
+source_url:
+ingested: YYYY-MM-DD
+kind: <task|bug|idea|note>
+project: "[[<project-slug>]]"
+---
+```
+
+No `sha256` is used for ad-hoc captures; they are mutable working notes, not
+immutable raw sources. Validate each capture with `skillwiki validate`.
+
+**Capture kind mapping:**
+
+| Finding source/type | Capture `kind` | Claim behavior |
+|---|---|---|
+| Concrete actionable change | `task` | Appears in unclaimed transcript discovery |
+| Concrete defect/regression | `bug` | Appears in unclaimed transcript discovery |
+| Exploratory improvement | `idea` | Preserved but not executable by default |
+| Context-only observation | `note` | Preserved but not executable by default |
+
+**Capture body:**
+
+```markdown
+# <title>
+
+## Problem
+<What's wrong or missing — from the finding>
+
+## Recommended Promotion
+Promote this capture into a `planned` project work item only after a human
+confirms scope and priority.
+
+## Requirements Or Questions
+<Concrete requirements for task/bug, or investigation questions for idea/note>
+
+## Acceptance
+<Verifiable outcomes, or decision/output expected from investigation>
+
+## Sources Used
+- <finding source reference>
+```
+
 **Rate limiting:** If creating >3 items, batch-commit vault changes after
 every 3 items to avoid large uncommitted working trees.
 
@@ -302,7 +393,7 @@ Append to `{vault}/log.md`:
 - Topic:         <user topic or "autonomous">
 - Scanned:       <N> total findings
 - Deduplicated:  <K> skipped
-- Created:       <M> proposed work items
+- Queued:        <M> findings (<A> proposed work items, <B> raw captures)
 - Items:         <slug1> (P<x>), <slug2> (P<y>), ...
 - Friction:      <any issues during investigation>
 - Generalize?:   no
@@ -314,29 +405,31 @@ Append to `{vault}/log.md`:
 
 Same as CORE step 7:
 1. If `VAULT_AUTO_COMMIT` is true AND vault is dirty:
-   `git -C $VAULT add -A && git -C $VAULT commit -m "dev-loop[investigate]: <N> proposed items for <slug>"`
+   `git -C $VAULT add -A && git -C $VAULT commit -m "dev-loop[investigate]: <N> queued findings for <slug>"`
 2. If `VAULT_SYNC_PEER_AWARE`: acquire lock, push, release.
 3. If presync skill available: run before push.
 
 ## Hard Rules (investigate-specific)
 
-1. **Never create `status: planned` items.** All investigate output is
-   `proposed`. The human promotes.
-2. **Never execute work.** Investigate creates specs, not code. If a
-   finding is trivially fixable, still create the work item — let
-   CORE's trivial fast-path handle it.
+1. **Never create `status: planned` items.** Investigate output is queued,
+   not executable. The human promotes.
+2. **Never execute work.** Investigate queues findings, not code. If a
+   finding is trivially fixable, still queue it — let CORE's trivial
+   fast-path handle it after human promotion.
 3. **Respect the cap.** Never exceed `max_items * (2 if high else 1)`.
    If TRIAGE produces more, discard the lowest-ranked.
 4. **Dedup is mandatory.** Every finding must pass the slug + status +
    archive check. Skipping dedup creates vault clutter.
-5. **Log everything.** RETRO must include counts (scanned, deduped,
-   created) for auditability. Silent investigate runs are forbidden.
+5. **Validate the chosen queue shape.** If `status: proposed` fails
+   validation, switch to raw transcript captures for the whole invocation.
+6. **Log everything.** RETRO must include counts (scanned, deduped,
+   queued) for auditability. Silent investigate runs are forbidden.
 
 ## Interaction with Other Modes
 
 | Scenario | Behavior |
 |----------|----------|
-| `/dev-loop investigate` then `/dev-loop` | CORE picks up proposed items (if promoted to planned) |
+| `/dev-loop investigate` then `/dev-loop` | CORE picks up only promoted `planned` work; raw `task`/`bug` captures surface as unclaimed transcripts |
 | `/dev-loop investigate` then `/dev-loop investigate` | TRIAGE dedup prevents duplicates |
 | `/loop 2h /dev-loop investigate` | Recurring investigation, safe due to dedup + 24h warning |
 | `/dev-loop investigate` with no vault | Refuses with actionable message |

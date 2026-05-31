@@ -1,6 +1,6 @@
 ---
 name: deep-research
-version: "2.3.3"
+version: "2.3.4"
 description: Use when user requests comprehensive research on a topic, wants multi-source investigation (web, docs, repos), or mentions deep research, literature review, competitive analysis, or technology comparison. Works with or without a knowledge base vault.
 ---
 
@@ -182,6 +182,13 @@ Route output based on active mode:
 > **IMPORTANT — wiki-add-task routing guard**: Do NOT invoke `wiki-add-task` during Phase 5 for any reason. Any vault-capture intent (e.g., "save this to the vault", "capture this finding", "log this research") must route through `references/vault-pipeline.md` directly. If `wiki-add-task` activates, discard its output and resume with the vault-pipeline workflow.
 
 **Vault page type**: Default to `queries/` (research results are filed queries). If the research reveals a generalized, reusable pattern (not specific to one investigation), also create a companion `concepts/` page capturing the transferable knowledge. The query captures the specific investigation; the concept captures the reusable insight.
+
+**Follow-up work**: If the research produces actionable follow-up work, queue
+it only after the typed research page(s) validate. Use the schema-compatible
+follow-up queue in `references/vault-pipeline.md`: proposed work items only
+when `skillwiki validate` accepts that non-executing status, otherwise
+ad-hoc captures under `raw/transcripts/`. Do not turn research ideas directly
+into `planned` work items during Phase 5.
 
 ### Phase 6: Report
 

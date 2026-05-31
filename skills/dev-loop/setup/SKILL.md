@@ -270,7 +270,7 @@ idle_deep_research:
     context7_calls: 3
 ```
 
-**Runtime behavior:** Idle Discovery step 4.5 — fires only when research step 4 returns no P2+ findings and cooldown allows. Round-robins through `topic_seeds`, biased toward `critical_paths.*.code` matches when `bias_toward` is set. Honors `budget.*` caps per run. Output ideas land via `wiki-add-task` as `kind: idea, p_score_default: P3`. Schema reference: `templates/project-config.md` § Idle deep-research.
+**Runtime behavior:** Idle Discovery step 4.5 — fires only when research step 4 returns no P2+ findings and cooldown allows. Round-robins through `topic_seeds`, biased toward `critical_paths.*.code` matches when `bias_toward` is set. Honors `budget.*` caps per run. Output ideas route through the schema-compatible vault queue; use raw transcript captures when the active schema lacks a non-executing work-item status. Default score: `p_score_default: P3`. Schema reference: `templates/project-config.md` § Idle deep-research.
 
 **Section J — Browser verification gate.**
 

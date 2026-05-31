@@ -125,7 +125,7 @@ If refinement fails, keep the pre-refinement version and warn in the report.
 
 ## Phase 5: Output Routing
 
-- **Vault (default when available)**: Persist as `queries/<slug>.md` with raw source capture, validate, update index.md and log.md. See `references/vault-pipeline.md` for the full workflow. Also create `concepts/` companion page if the research reveals a reusable pattern.
+- **Vault (default when available)**: Persist as `queries/<slug>.md` with raw source capture, validate, update index.md and log.md. See `references/vault-pipeline.md` for the full workflow. Also create a `concepts/` companion page if the research reveals a reusable pattern. If actionable follow-up work exists, queue it only after typed pages validate, using the schema-compatible follow-up queue from `references/vault-pipeline.md`; never create `planned` work directly from Phase 5 research output.
 - **--save <path>**: Write report to the specified file path.
 - **--ephemeral / stdout**: Print the report directly. Only use when user explicitly requests it or no vault exists.
 

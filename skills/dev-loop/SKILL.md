@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.22.1"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Also use when the user says "investigate", "find work", "scan for work items", or "what needs doing" to proactively create structured work items. v1.22.0: /goal compatible mode — ORCHESTRATION_CAPS for goal-context detection (Claude Code, Codex, Antigravity), GRILL goal_override:never suppresses interview under /goal, RETRO emits continuation hints for evaluators, /goal Integration section documents grill-me → /goal → dev-loop pipeline. v1.21.0: investigate mode — proactive work-item creation from code/vault/transcript/deep-research sources, tiered output (full spec or stub), status:proposed, vault required. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.22.2"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Also use when the user says "investigate", "find work", "scan for work items", or "what needs doing" to proactively queue structured findings. v1.22.2: investigate/deep-research queue contracts are schema-adaptive — use proposed work items only when validation supports them, otherwise raw transcript captures. v1.22.0: /goal compatible mode — ORCHESTRATION_CAPS for goal-context detection (Claude Code, Codex, Antigravity), GRILL goal_override:never suppresses interview under /goal, RETRO emits continuation hints for evaluators, /goal Integration section documents grill-me → /goal → dev-loop pipeline. v1.21.0: investigate mode — proactive finding creation from code/vault/transcript/deep-research sources, tiered output (full spec or stub), vault required. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high] [investigate [high] [topic]]"
 ---
 
@@ -73,14 +73,16 @@ After REFRESH (step 0), branch on MODE:
 │  2. SCAN      Research-worker (code + vault + transcripts)│
 │  3. DEEPEN    Deep-research (high or user topic only)   │
 │  4. TRIAGE    Deduplicate, rank, apply intensity cap    │
-│  5. SPEC      Create proj-work items (status: proposed) │
+│  5. SPEC      Queue findings (schema-adaptive output)   │
 │  6. RETRO     Log investigation results                 │
 │  7. SAVE      Vault auto-commit                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
 See `investigate/SKILL.md` for full step details. Key properties:
-- Output: `status: proposed` (human promotes to `planned` for CORE to pick up)
+- Output: queued findings; use `status: proposed` only when the local
+  schema validates it, otherwise use raw transcript captures. Humans promote
+  findings to `planned` before CORE executes them.
 - Tiered: concrete findings → full spec, exploratory → stub
 - Dedup: slug-based + status-aware + archive check
 - Cap: `max_items` (normal) or `max_items * 2` (high). Default 5/10.
@@ -1520,8 +1522,9 @@ instead:
    - Skip if a vault query page for the topic was created within
      `skip_if_recent_query_page_exists` days, or if `max_per_day` is hit.
    - Invoke `/deep-research <topic>` honoring `budget.*` caps.
-   - Extract 1–3 actionable ideas → `wiki-add-task` with `kind: idea`,
-     `p_score_default: P3`.
+   - Extract 1–3 actionable ideas → route through the schema-compatible
+     vault queue. Use raw transcript captures when the active schema lacks a
+     non-executing work-item status. Default P-score: P3.
    - Mark cooldown timestamp; log: "Idle deep-research: <topic>, <N> ideas."
 
    With `knowledge_layer: none`, the vault capture path is unavailable —
@@ -1976,5 +1979,7 @@ The companion investigate prompt lives in `investigate/SKILL.md` adjacent to
 this `SKILL.md`. It is invoked when MODE resolves to `investigate` after
 REFRESH, and reuses the same session state (`BACKEND_CAPS`, `VAULT_TYPES`,
 `DEP_DRIFT`, `CRITICAL_PATHS`, `INVESTIGATE_MAX_ITEMS`,
-`INVESTIGATE_TOPIC_SEEDS`). It creates `status: proposed` work items and does
-not execute code.
+`INVESTIGATE_TOPIC_SEEDS`). It queues schema-valid findings and does not
+execute code. Proposed work items are allowed only when `skillwiki validate`
+accepts that non-executing status; otherwise findings are queued as
+`raw/transcripts/` ad-hoc captures.
