@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 #
-# bump-version.sh — bump a skill's version across its three manifests.
+# bump-version.sh — bump a skill's version across its manifests.
 #
-# A skill version lives in three places that must stay in sync:
+# A skill version lives in three or four places that must stay in sync:
 #   1. skills/<skill>/SKILL.md                  frontmatter:  version: "X.Y.Z"
 #   2. skills/<skill>/.claude-plugin/plugin.json              "version": "X.Y.Z"
-#   3. .claude-plugin/marketplace.json          matching plugin entry's "version"
+#   3. skills/<skill>/.codex-plugin/plugin.json               "version": "X.Y.Z" (if present)
+#   4. .claude-plugin/marketplace.json          matching plugin entry's "version"
 #
 # This script reads the current version from SKILL.md (source of truth),
-# computes the next version, and rewrites all three files in place while
+# computes the next version, and rewrites all manifest files in place while
 # preserving their exact formatting. It does NOT git add/commit/tag/push —
 # the dev-loop PUSH step owns that. It prints the suggested tag in the
 # repo's tag_format ({skill}-{version}, e.g. dev-loop-1.20.1).
@@ -71,11 +72,18 @@ case "$CHANNEL" in stable|beta) ;; *) die "RELEASE_CHANNEL must be 'stable' or '
 SKILL_DIR="$REPO_ROOT/skills/$SKILL"
 SKILL_MD="$SKILL_DIR/SKILL.md"
 PLUGIN_JSON="$SKILL_DIR/.claude-plugin/plugin.json"
+CODEX_PLUGIN_JSON="$SKILL_DIR/.codex-plugin/plugin.json"
 
 [ -d "$SKILL_DIR" ]    || die "skill not found: skills/$SKILL/"
 [ -f "$SKILL_MD" ]     || die "missing $SKILL_MD"
 [ -f "$PLUGIN_JSON" ]  || die "missing $PLUGIN_JSON"
 [ -f "$MARKETPLACE" ]  || die "missing $MARKETPLACE"
+
+if [ -f "$CODEX_PLUGIN_JSON" ]; then
+  HAS_CODEX_PLUGIN=1
+else
+  HAS_CODEX_PLUGIN=0
+fi
 
 # --- read current versions ---------------------------------------------------
 read_skill_version() {
@@ -83,6 +91,9 @@ read_skill_version() {
 }
 read_plugin_version() {
   awk -F'"' '/"version"[[:space:]]*:/{print $4; exit}' "$PLUGIN_JSON"
+}
+read_codex_plugin_version() {
+  awk -F'"' '/"version"[[:space:]]*:/{print $4; exit}' "$CODEX_PLUGIN_JSON"
 }
 read_market_version() {
   awk -v name="$SKILL" '
@@ -97,10 +108,18 @@ CUR="$(read_skill_version)"
 P_CUR="$(read_plugin_version)"
 M_CUR="$(read_market_version)"
 [ -n "$M_CUR" ] || die "no marketplace.json entry for plugin '$SKILL'"
+if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
+  C_CUR="$(read_codex_plugin_version)"
+else
+  C_CUR=""
+fi
 
 # --- pre-check: warn on pre-existing drift -----------------------------------
 if [ "$P_CUR" != "$CUR" ]; then
   printf 'bump-version: WARNING plugin.json (%s) != SKILL.md (%s) before bump\n' "$P_CUR" "$CUR" >&2
+fi
+if [ "$HAS_CODEX_PLUGIN" -eq 1 ] && [ "$C_CUR" != "$CUR" ]; then
+  printf 'bump-version: WARNING .codex-plugin/plugin.json (%s) != SKILL.md (%s) before bump\n' "$C_CUR" "$CUR" >&2
 fi
 if [ "$M_CUR" != "$CUR" ]; then
   printf 'bump-version: WARNING marketplace.json (%s) != SKILL.md (%s) before bump\n' "$M_CUR" "$CUR" >&2
@@ -171,7 +190,12 @@ printf 'skill:    %s\n' "$SKILL"
 printf 'channel:  %s\n' "$CHANNEL"
 printf 'version:  %s -> %s\n' "$CUR" "$NEW"
 printf 'tag:      %s\n' "$TAG"
-printf 'files:    skills/%s/SKILL.md, skills/%s/.claude-plugin/plugin.json, .claude-plugin/marketplace.json\n' "$SKILL" "$SKILL"
+FILES="skills/$SKILL/SKILL.md, skills/$SKILL/.claude-plugin/plugin.json"
+if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
+  FILES="$FILES, skills/$SKILL/.codex-plugin/plugin.json"
+fi
+FILES="$FILES, .claude-plugin/marketplace.json"
+printf 'files:    %s\n' "$FILES"
 
 if [ "$DRY_RUN" -eq 1 ]; then
   printf '\n[dry-run] no files written.\n'
@@ -196,6 +220,18 @@ awk -v ver="$NEW" '
   { print }
 ' "$PLUGIN_JSON" > "$tmp" && mv "$tmp" "$PLUGIN_JSON"
 
+if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
+  # .codex-plugin/plugin.json: replace the first "version": "..." occurrence.
+  tmp="$(mktemp)"
+  awk -v ver="$NEW" '
+    !done && /"version"[[:space:]]*:/ {
+      sub(/"version"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"version\": \"" ver "\"")
+      done=1
+    }
+    { print }
+  ' "$CODEX_PLUGIN_JSON" > "$tmp" && mv "$tmp" "$CODEX_PLUGIN_JSON"
+fi
+
 # marketplace.json: replace "version" only inside the matching plugin block.
 tmp="$(mktemp)"
 awk -v name="$SKILL" -v ver="$NEW" '
@@ -207,13 +243,24 @@ awk -v name="$SKILL" -v ver="$NEW" '
   { print }
 ' "$MARKETPLACE" > "$tmp" && mv "$tmp" "$MARKETPLACE"
 
-# --- verify all three now agree ----------------------------------------------
+# --- verify all manifests now agree ------------------------------------------
 S_NEW="$(read_skill_version)"
 P_NEW="$(read_plugin_version)"
 M_NEW="$(read_market_version)"
+C_NEW=""
+if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
+  C_NEW="$(read_codex_plugin_version)"
+fi
 if [ "$S_NEW" != "$NEW" ] || [ "$P_NEW" != "$NEW" ] || [ "$M_NEW" != "$NEW" ]; then
   die "post-edit mismatch: SKILL.md=$S_NEW plugin.json=$P_NEW marketplace.json=$M_NEW (wanted $NEW)"
 fi
+if [ "$HAS_CODEX_PLUGIN" -eq 1 ] && [ "$C_NEW" != "$NEW" ]; then
+  die "post-edit mismatch: .codex-plugin/plugin.json=$C_NEW (wanted $NEW)"
+fi
 
-printf '\nbumped %s to %s (3 files updated, in sync).\n' "$SKILL" "$NEW"
+UPDATED_COUNT=3
+if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
+  UPDATED_COUNT=4
+fi
+printf '\nbumped %s to %s (%s files updated, in sync).\n' "$SKILL" "$NEW" "$UPDATED_COUNT"
 printf 'next: git add -A && git commit && git tag %s\n' "$TAG"

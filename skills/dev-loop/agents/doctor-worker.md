@@ -44,16 +44,28 @@ This worker performs **two probes** per invocation and returns a combined JSON:
    **Skills** (`kind: skill`):
    - Split `ref` on `:` into `<plugin>` and `<name>` (or treat single-segment refs as raw skill names with no plugin namespace).
    - Probe paths (in order):
-     - `~/.claude/skills/<plugin>/<name>/SKILL.md`
-     - `~/.claude/skills/<name>/SKILL.md` (for skills installed without plugin namespace)
-     - `~/.claude/plugins/cache/*/<plugin>/*/skills/<name>/SKILL.md`
-     - `~/.claude/plugins/cache/*/<plugin>/*/<name>/SKILL.md`
+      - `~/.claude/skills/<plugin>/<name>/SKILL.md`
+      - `~/.claude/skills/<name>/SKILL.md` (for skills installed without plugin namespace)
+      - `~/.agents/skills/<name>/SKILL.md` (Codex skill discovery path)
+      - `~/.claude/plugins/cache/*/<plugin>/*/SKILL.md` (plugin-root skill, e.g. `deep-research`)
+      - `~/.claude/plugins/cache/*/<plugin>/*/skills/<name>/SKILL.md`
+      - `~/.claude/plugins/cache/*/<plugin>/*/<name>/SKILL.md`
+      - `~/.codex/plugins/cache/*/<plugin>/*/SKILL.md` (Codex plugin-root skill cache)
+      - `~/.codex/plugins/cache/*/<plugin>/*/skills/<name>/SKILL.md`
+      - `~/.codex/plugins/cache/*/<plugin>/*/<name>/SKILL.md`
 
    **Agents** (`kind: agent`):
    - Split `ref` on `:` into `<plugin>` and `<name>`.
    - Probe paths:
-     - `~/.claude/agents/<name>.md`
-     - `~/.claude/plugins/cache/*/<plugin>/*/agents/<name>.md`
+      - `~/.claude/agents/<name>.md`
+      - `~/.claude/plugins/cache/*/<plugin>/*/agents/<name>.md`
+      - `~/.claude/plugins/cache/*/<plugin>/*/agents/*.md`
+      - `~/.codex/plugins/cache/*/<plugin>/*/agents/<name>.md`
+      - `~/.codex/plugins/cache/*/<plugin>/*/agents/*.md`
+   - For `agents/*.md` wildcard matches, read the YAML frontmatter and treat
+     the entry as present when frontmatter `name:` equals `<name>`. This covers
+     agents registered by frontmatter name where the file name is different,
+     such as `agents/research.md` declaring `name: research-worker`.
 
    Use `Glob` for wildcarded cache paths; use `Read` (or `Bash test -f`) for exact paths.
 

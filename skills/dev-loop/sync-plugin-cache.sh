@@ -32,7 +32,7 @@ echo "  Source: ${SOURCE_DIR}"
 echo "  Cache:  ${CACHE_DIR}"
 
 # Sync core files (preserving cache-only files like package.json if present)
-for file in SKILL.md research/SKILL.md setup/SKILL.md investigate/SKILL.md .claude-plugin/plugin.json .codex-plugin/plugin.json; do
+for file in SKILL.md dependencies.yaml research/SKILL.md setup/SKILL.md investigate/SKILL.md .claude-plugin/plugin.json .codex-plugin/plugin.json; do
   src="${SOURCE_DIR}/${file}"
   dst="${CACHE_DIR}/${file}"
   if [[ -f "$src" ]]; then
