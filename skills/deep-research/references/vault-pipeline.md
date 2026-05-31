@@ -78,18 +78,55 @@ provenance: research
 
 **Diagram placement in page**: If the synthesis includes a Mermaid diagram, place it immediately after the **Overview** section and before the **Findings** section. This gives the wiki reader a visual anchor before diving into source details. If no diagram, omit the section entirely — do not leave a placeholder heading.
 
+## Reusable Research And Follow-Up Queue
+
+When a query page contains a reusable pattern, create a companion
+`concepts/<slug>.md` page. The query page answers the specific research
+question; the concept page preserves the transferable rule, compatibility
+mapping, or implementation pattern for future sessions.
+
+If the research also produces actionable follow-up work, queue that work only
+after every typed page validates. Never create `status: planned` work directly
+from research output.
+
+Use this schema-adaptive queue:
+
+1. Probe whether the local skillwiki schema accepts a non-executing proposed
+   work item by validating a candidate `spec.md` with `status: proposed`.
+2. If validation passes, create proposed project work items and validate each
+   `spec.md`.
+3. If validation rejects `status: proposed`, `kind`, or lifecycle fields,
+   queue follow-ups as ad-hoc captures under `raw/transcripts/`.
+
+Raw follow-up captures use this frontmatter:
+
+```yaml
+---
+source_url:
+ingested: YYYY-MM-DD
+kind: task          # task | bug | idea | note
+project: "[[slug]]"
+---
+```
+
+Use `task` or `bug` for concrete follow-ups that should surface as unclaimed
+transcripts. Use `idea` or `note` for exploratory or context-only findings
+that should be preserved but not automatically executed.
+
 ## Write Pipeline (Strict Order)
 
-1. **Validate**: `skillwiki validate <page>` -- STOP if non-zero
-2. **Write page**: Save to `concepts/<slug>.md` (or `comparisons/`, `queries/`, `entities/`)
-3. **Update index**: Add entry to `index.md`
-4. **Append log**: Add entry to `log.md`
+1. **Write draft page**: Save to `concepts/<slug>.md` (or `comparisons/`, `queries/`, `entities/`)
+2. **Validate**: `skillwiki validate <page>` -- STOP if non-zero
+3. **Write and validate companion pages**: create any reusable `concepts/` companion and validate it before index/log updates
+4. **Queue follow-ups**: create schema-compatible proposed items or raw transcript captures, then validate each queued artifact
+5. **Update index**: Add typed-page entries to `index.md`
+6. **Append log**: Add entry to `log.md`
 
 **Forbidden**: Never update index.md or log.md before validate passes.
 
 ## Safety Rules
 
-1. Always validate before writing index/log
+1. Always validate typed pages and queued follow-ups before writing index/log
 2. Never overwrite existing pages without user confirmation
 3. Source failures keep other sources; note in report
 4. Respect `--no-raw` for quick lookups (no provenance chain)

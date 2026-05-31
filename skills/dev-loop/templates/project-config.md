@@ -289,7 +289,7 @@ idle_deep_research:
     deep_fetches: 3
     context7_calls: 3
   followups:
-    on_finding: capture_to_vault_then_create_work_item  # ideas become claimable work
+    on_finding: schema_compatible_vault_queue  # queue findings without making them executable
     p_score_default: P3               # deep-research findings start at P3
 ```
 
@@ -301,7 +301,10 @@ idle_deep_research:
 3. Skip the topic if the vault already has a query page for it created
    within `skip_if_recent_query_page_exists` days.
 4. Invoke `/deep-research <topic> --vault` with the declared budget.
-5. Extract 1-3 actionable ideas → `wiki-add-task` as `kind: idea`.
+5. Extract 1-3 actionable ideas → route through the schema-compatible vault
+   queue. If the active schema lacks a non-executing work-item status, write
+   ad-hoc captures under `raw/transcripts/` instead of creating invalid work
+   items.
 6. Mark the cooldown timestamp for the next eligible idle cycle.
 
 **Why this matters:** Long-running cron loops (e.g., `*/15 * * * *`)
@@ -314,8 +317,11 @@ after maintenance with no research.
 
 ## Investigate mode (optional)
 
-Proactive work-item creation mode. When invoked via `/dev-loop investigate`,
-scans project health and creates `status: proposed` work items in the vault.
+Proactive finding queue mode. When invoked via `/dev-loop investigate`, scans
+project health and queues schema-valid findings in the vault. Proposed work
+items are used only when the active skillwiki schema validates a non-executing
+`status: proposed`; otherwise findings are captured under `raw/transcripts/`
+for human promotion.
 
 ```yaml
 investigate:

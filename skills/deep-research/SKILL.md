@@ -1,6 +1,6 @@
 ---
 name: deep-research
-version: "2.3.3"
+version: "2.4.0"
 description: Use when user requests comprehensive research on a topic, wants multi-source investigation (web, docs, repos), or mentions deep research, literature review, competitive analysis, or technology comparison. Works with or without a knowledge base vault.
 ---
 
@@ -49,6 +49,18 @@ All Phase 2 and Phase 4 agents are spawned via the Agent tool with `model: "sonn
 **Cost impact**: When the parent session runs Opus, research and refinement agents run on Sonnet (~5-10x cheaper per token), while only the cross-source synthesis phase uses the parent model.
 
 **Agent model specification** (see `concepts/claude-code-agent-model-specification`): The Agent tool's `model` parameter overrides the agent definition's frontmatter `model:` field. Valid values: `"sonnet"`, `"opus"`, `"haiku"`, or a full model ID. Do NOT set `model:` in skill frontmatter — it causes the skill to register as an agent, inflating the agent count. Always specify model at Agent spawn time or in agent `.md` frontmatter.
+
+## Platform Adaptation
+
+deep-research uses Claude Code tool names (`Agent`, `TodoWrite`) and the
+`model: "sonnet"`/`"haiku"` Agent-tool parameter. Under OpenAI Codex CLI or the
+Codex App these map to platform equivalents — `Agent` → `spawn_agent` /
+`wait_agent` / `close_agent`, with `[features] multi_agent = true` required in
+`~/.codex/config.toml` for the Phase 2 fan-out. The per-agent model pinning is a
+cost optimization ("cheap tier for mechanical gather/refine work"), not a hard
+requirement. See `references/codex-tools.md` for the full tool mapping, the
+multi_agent config gate, the model-tier fallback, and detached-HEAD sandbox
+handling for vault writes. Discovery on Codex is via `~/.agents/skills/`.
 
 ## When to Use
 
@@ -183,6 +195,13 @@ Route output based on active mode:
 
 **Vault page type**: Default to `queries/` (research results are filed queries). If the research reveals a generalized, reusable pattern (not specific to one investigation), also create a companion `concepts/` page capturing the transferable knowledge. The query captures the specific investigation; the concept captures the reusable insight.
 
+**Follow-up work**: If the research produces actionable follow-up work, queue
+it only after the typed research page(s) validate. Use the schema-compatible
+follow-up queue in `references/vault-pipeline.md`: proposed work items only
+when `skillwiki validate` accepts that non-executing status, otherwise
+ad-hoc captures under `raw/transcripts/`. Do not turn research ideas directly
+into `planned` work items during Phase 5.
+
 ### Phase 6: Report
 
 Print a summary block:
@@ -250,3 +269,4 @@ Warnings: <any>
 ## Related Reference
 
 - **references/vault-pipeline.md**: Vault-mode raw capture, validation, and index/log update workflow
+- **references/codex-tools.md**: Codex CLI/App tool mapping (`Agent` → `spawn_agent`/`wait_agent`), `multi_agent` config gate, model-tier fallback, and detached-HEAD sandbox handling

@@ -32,6 +32,8 @@ You are a deep research orchestrator. Your job is to coordinate parallel researc
 
 **YOU MUST use the Agent tool to spawn research sub-agents. Do NOT run web searches or fetches inline in your own context. This is non-negotiable — inline execution defeats the cost model and parallelization.**
 
+> **Platform note (Codex):** map the `Agent` tool to `spawn_agent` / `wait_agent` / `close_agent` and set `[features] multi_agent = true` in `~/.codex/config.toml`. If multi-agent is unavailable, run the phases sequentially in-context (slower, costlier, still correct). The `model: "sonnet"`/`"haiku"` values are a cheap-tier cost hint, not portable model IDs. See the deep-research `references/codex-tools.md`.
+
 ### Step 2a: Parallel Source Discovery (spawn simultaneously)
 
 Spawn all of these at once. Every agent uses `model: "sonnet"`:
@@ -125,7 +127,7 @@ If refinement fails, keep the pre-refinement version and warn in the report.
 
 ## Phase 5: Output Routing
 
-- **Vault (default when available)**: Persist as `queries/<slug>.md` with raw source capture, validate, update index.md and log.md. See `references/vault-pipeline.md` for the full workflow. Also create `concepts/` companion page if the research reveals a reusable pattern.
+- **Vault (default when available)**: Persist as `queries/<slug>.md` with raw source capture, validate, update index.md and log.md. See `references/vault-pipeline.md` for the full workflow. Also create a `concepts/` companion page if the research reveals a reusable pattern. If actionable follow-up work exists, queue it only after typed pages validate, using the schema-compatible follow-up queue from `references/vault-pipeline.md`; never create `planned` work directly from Phase 5 research output.
 - **--save <path>**: Write report to the specified file path.
 - **--ephemeral / stdout**: Print the report directly. Only use when user explicitly requests it or no vault exists.
 

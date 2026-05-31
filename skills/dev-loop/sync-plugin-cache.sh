@@ -32,7 +32,7 @@ echo "  Source: ${SOURCE_DIR}"
 echo "  Cache:  ${CACHE_DIR}"
 
 # Sync core files (preserving cache-only files like package.json if present)
-for file in SKILL.md research/SKILL.md setup/SKILL.md .claude-plugin/plugin.json; do
+for file in SKILL.md research/SKILL.md setup/SKILL.md investigate/SKILL.md .claude-plugin/plugin.json .codex-plugin/plugin.json; do
   src="${SOURCE_DIR}/${file}"
   dst="${CACHE_DIR}/${file}"
   if [[ -f "$src" ]]; then
@@ -54,6 +54,13 @@ if [[ -d "${SOURCE_DIR}/templates" ]]; then
   mkdir -p "${CACHE_DIR}/templates"
   cp "${SOURCE_DIR}/templates/"* "${CACHE_DIR}/templates/"
   echo "  ✓ templates/"
+fi
+
+# Sync references directory (codex-tools.md and other reference docs)
+if [[ -d "${SOURCE_DIR}/references" ]]; then
+  mkdir -p "${CACHE_DIR}/references"
+  cp "${SOURCE_DIR}/references/"* "${CACHE_DIR}/references/"
+  echo "  ✓ references/"
 fi
 
 echo ""
