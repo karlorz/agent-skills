@@ -2,7 +2,7 @@
 # backup-host.sh — Mechanical backup script
 # Reads manifest and backs up selected groups
 # Usage: BACKUP_DIR=/path bash backup-host.sh <manifest.json> [groups...]
-# Groups: base caddy_domains hermes databases other_services apt wiki
+# Groups: base ssh tailscale caddy_domains hermes databases other_services apt wiki
 # Default: all groups
 set -euo pipefail
 
@@ -25,7 +25,7 @@ HOST=""
 
 if [ -z "$MANIFEST" ] || [ ! -f "$MANIFEST" ]; then
   echo "Usage: BACKUP_DIR=/path $0 <manifest.json> [groups...]" >&2
-  echo "  Groups: base caddy_domains hermes databases other_services apt wiki" >&2
+  echo "  Groups: base ssh tailscale caddy_domains hermes databases other_services apt wiki" >&2
   echo "  Default: all groups" >&2
   echo "" >&2
   echo "Environment:" >&2
@@ -36,16 +36,19 @@ if [ -z "$MANIFEST" ] || [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
-# Extract hostname and timestamp from manifest
-HOST=$(python3 -c "import json; print(json.load(open('$MANIFEST'))['hostname'])")
+# Extract display hostname and SSH target from manifest. hostname is used for
+# archive labels; ssh_target, when present, is used for remote commands.
+HOST_LABEL=$(python3 -c "import json; print(json.load(open('$MANIFEST'))['hostname'])")
+HOST=$(python3 -c "import json; m=json.load(open('$MANIFEST')); print(m.get('ssh_target') or m['hostname'])")
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_BASE="${BACKUP_DIR%/}"
-if [ "$(basename "$BACKUP_BASE")" = "$HOST" ]; then
+if [ "$(basename "$BACKUP_BASE")" = "$HOST_LABEL" ]; then
   BACKUP_DIR="${BACKUP_BASE}/backup-${TIMESTAMP}"
 else
-  BACKUP_DIR="${BACKUP_BASE}/${HOST}/backup-${TIMESTAMP}"
+  BACKUP_DIR="${BACKUP_BASE}/${HOST_LABEL}/backup-${TIMESTAMP}"
 fi
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR" 2>/dev/null || true
 FILE_COUNT=0
 SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
 CONTROL_PATH="$HOME/.ssh/controlmasters/%r@%h:%p"
@@ -57,7 +60,8 @@ cleanup_ssh() {
 }
 trap cleanup_ssh EXIT
 
-echo "=== Host Backup: $HOST ==="
+echo "=== Host Backup: $HOST_LABEL ==="
+[ "$HOST" != "$HOST_LABEL" ] && echo "SSH target: $HOST"
 echo "Destination: $BACKUP_DIR"
 echo "Started: $(date)"
 echo ""
@@ -75,6 +79,25 @@ backup_group() {
       ssh "$HOST" "sudo cat /etc/os-release" > "$BACKUP_DIR/os-release" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       # rclone config is captured in wiki group
       echo "$(date -Iseconds)" > "$BACKUP_DIR/BACKUP_TIMESTAMP"
+      ;;
+    ssh)
+      # Full SSH host identity and account access config for reinstall prep.
+      ssh "$HOST" "sudo tar --ignore-failed-read --warning=no-file-changed -czf - /etc/ssh /root/.ssh /home/*/.ssh 2>/tmp/host-backup-ssh-tar.err" > "$BACKUP_DIR/ssh-config-and-keys.tar.gz" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      chmod 600 "$BACKUP_DIR/ssh-config-and-keys.tar.gz" 2>/dev/null || true
+      ssh "$HOST" "cat /tmp/host-backup-ssh-tar.err 2>/dev/null || true" > "$BACKUP_DIR/ssh-config-and-keys.tar.stderr.txt" 2>/dev/null || true
+      ssh "$HOST" "sudo sshd -T 2>/dev/null || true" > "$BACKUP_DIR/sshd-effective-config.txt" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      ssh "$HOST" "systemctl status ssh --no-pager -l 2>/dev/null || systemctl status sshd --no-pager -l 2>/dev/null || true" > "$BACKUP_DIR/ssh-service-status.txt" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      ;;
+    tailscale)
+      # Tailscale has no single complete export; capture machine state plus
+      # non-secret restore-reference metadata for reinstall decisions.
+      ssh "$HOST" "sudo tar --ignore-failed-read --warning=no-file-changed -czf - /var/lib/tailscale /etc/default/tailscaled /etc/systemd/system/tailscaled.service.d /lib/systemd/system/tailscaled.service /usr/lib/systemd/system/tailscaled.service /etc/apt/sources.list.d/tailscale.list /usr/share/keyrings/tailscale-archive-keyring.gpg 2>/tmp/host-backup-tailscale-tar.err" > "$BACKUP_DIR/tailscale-state-and-config.tar.gz" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      chmod 600 "$BACKUP_DIR/tailscale-state-and-config.tar.gz" 2>/dev/null || true
+      ssh "$HOST" "cat /tmp/host-backup-tailscale-tar.err 2>/dev/null || true" > "$BACKUP_DIR/tailscale-state-and-config.tar.stderr.txt" 2>/dev/null || true
+      ssh "$HOST" "tailscale version 2>/dev/null || true" > "$BACKUP_DIR/tailscale-version.txt" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      ssh "$HOST" "tailscale ip -4 2>/dev/null || true; tailscale ip -6 2>/dev/null || true" > "$BACKUP_DIR/tailscale-ips.txt" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      ssh "$HOST" "tailscale status --json 2>/dev/null || true" > "$BACKUP_DIR/tailscale-status.json" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
+      ssh "$HOST" "systemctl status tailscaled --no-pager -l 2>/dev/null || true" > "$BACKUP_DIR/tailscaled-status.txt" 2>/dev/null && FILE_COUNT=$((FILE_COUNT + 1)) || true
       ;;
     caddy_domains)
       # Caddy config
@@ -313,14 +336,14 @@ if isinstance(sqlite, list):
 }
 
 if [ "$SELECTED_GROUPS" = "all" ]; then
-  for g in base caddy_domains hermes databases other_services apt wiki; do
+  for g in base ssh tailscale caddy_domains hermes databases other_services apt wiki; do
     backup_group "$g"
   done
 else
   for g in $SELECTED_GROUPS; do
     # Check if the group is recognized
     case "$g" in
-      base|caddy_domains|hermes|databases|other_services|apt|wiki) backup_group "$g" ;;
+      base|ssh|tailscale|caddy_domains|hermes|databases|other_services|apt|wiki) backup_group "$g" ;;
       *) echo "Warning: Unknown group '$g', skipping" ;;
     esac
   done
@@ -332,11 +355,12 @@ FILE_COUNT=$((FILE_COUNT + 1))
 
 # Create archive
 echo "=== Creating archive ==="
-BACKUP_NAME="${HOST}-backup-${TIMESTAMP}.tar.gz"
+BACKUP_NAME="${HOST_LABEL}-backup-${TIMESTAMP}.tar.gz"
 tar czf "$BACKUP_DIR/../$BACKUP_NAME" -C "$BACKUP_DIR/.." "$(basename "$BACKUP_DIR")" 2>/dev/null || {
   # Fallback
   tar czf "${BACKUP_DIR}.tar.gz" -C "$(dirname "$BACKUP_DIR")" "$(basename "$BACKUP_DIR")" 2>/dev/null || true
 }
+chmod 600 "$BACKUP_DIR/../$BACKUP_NAME" "${BACKUP_DIR}.tar.gz" 2>/dev/null || true
 
 echo "Files backed up: $FILE_COUNT"
 PRIMARY_ARCHIVE="$(dirname "$BACKUP_DIR")/$BACKUP_NAME"

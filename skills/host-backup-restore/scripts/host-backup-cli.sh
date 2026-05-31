@@ -26,7 +26,7 @@ usage() {
   echo "  --host HOST           SSH target hostname (required)"
   echo "  --user USER           SSH user (default: root; or use host-agent SSH alias for non-root)"
   echo "  --all                 Back up all groups"
-  echo "  --groups 'g1,g2,...'  Specific groups: base,caddy_domains,hermes,databases,other_services,apt,wiki"
+  echo "  --groups 'g1,g2,...'  Specific groups: base,ssh,tailscale,caddy_domains,hermes,databases,other_services,apt,wiki"
   echo "  --profile NAME        Use a backup profile (full, quick, minimal, or custom)"
   echo "  --save-profile NAME   Save current --groups/--hermes-tier as a named profile"
   echo "  --list-profiles       List all available profiles and exit"
@@ -140,7 +140,22 @@ $REDETECT && REDETECT_FLAG="--redetect"
 MANIFEST=$(bash "$SCRIPT_DIR/discover.sh" "$SSH_TARGET" $REDETECT_FLAG)
 echo "$MANIFEST" | python3 -m json.tool 2>/dev/null || echo "$MANIFEST"
 
+RAW_MANIFEST_FILE="/tmp/host-backup-${SSH_TARGET}-manifest.json"
 MANIFEST_FILE="/tmp/host-backup-${HOST}-manifest.json"
+python3 - "$RAW_MANIFEST_FILE" "$MANIFEST_FILE" "$HOST" "$SSH_TARGET" <<'PY'
+import json
+import sys
+
+raw_path, out_path, host_label, ssh_target = sys.argv[1:]
+with open(raw_path) as f:
+    manifest = json.load(f)
+manifest["hostname"] = host_label
+if ssh_target != host_label:
+    manifest["ssh_target"] = ssh_target
+with open(out_path, "w") as f:
+    json.dump(manifest, f, indent=2)
+    f.write("\n")
+PY
 
 # Post-discovery research
 if $RESEARCH; then
@@ -156,15 +171,17 @@ if $DRY_RUN; then
   echo "Would back up:"
   if $ALL || [ -z "$BACKUP_GROUPS" ]; then
     echo "  - base"
+    echo "  - ssh"
+    echo "  - tailscale"
     echo "  - caddy_domains"
     echo "  - hermes (tier: $HERMES_TIER)"
     echo "  - databases"
     echo "  - other_services"
     echo "  - apt"
-	    echo "  - wiki"
+    echo "  - wiki"
   else
-    IFS=',' read -ra GROUP_ARRAY <<< "$BACKUP_GROUPS"
-    for g in "${GROUP_ARRAY[@]}"; do
+    NORMALIZED=$(echo "$BACKUP_GROUPS" | tr ',' ' ')
+    for g in $NORMALIZED; do
       echo "  - $g"
     done
   fi
@@ -178,7 +195,7 @@ if [ -n "$SAVE_PROFILE" ]; then
   source "$SCRIPT_DIR/profiles.sh"
   SAVE_GROUPS="$BACKUP_GROUPS"
   if $ALL || [ -z "$BACKUP_GROUPS" ]; then
-    SAVE_GROUPS="base caddy_domains hermes databases other_services apt wiki"
+    SAVE_GROUPS="base ssh tailscale caddy_domains hermes databases other_services apt wiki"
   fi
   save_profile "$SAVE_PROFILE" "$SAVE_GROUPS" "$HERMES_TIER" "Custom profile saved from CLI"
   echo ""

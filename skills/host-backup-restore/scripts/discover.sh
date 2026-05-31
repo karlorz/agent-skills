@@ -21,14 +21,17 @@ if [ "$REDETECT" != "--redetect" ] && [ -f "$CACHE_FILE" ]; then
   exit 0
 fi
 
-# Build manifest parts with python3 (avoid bash JSON bugs)
-python3 -c "
+# Build manifest parts with python3 (avoid bash JSON bugs).
+# Keep the Python program in a single-quoted heredoc so shell expansion cannot
+# corrupt grep anchors, awk fields, or embedded quotes before Python runs.
+python3 - "$HOST" <<'PY' | tee "$CACHE_FILE"
 import json, subprocess, sys
+from datetime import datetime, timezone
 
 host = sys.argv[1]
 manifest = {
     'hostname': host,
-    'timestamp': __import__('datetime').datetime.utcnow().isoformat() + 'Z',
+    'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
     'caddy_domains': [],
     'hermes': {},
     'databases': {'sqlite': []},
@@ -130,7 +133,7 @@ if hermes_version:
     first_line = hermes_version.split('\n')[0]
     manifest['hermes']['version'] = first_line.strip()
 
-hermes_home = ssh('echo \"\$HERMES_HOME\"', timeout=5)
+hermes_home = ssh('echo "$HERMES_HOME"', timeout=5)
 if hermes_home:
     manifest['hermes']['home'] = hermes_home
 else:
@@ -241,4 +244,4 @@ if arch:
     manifest['arch'] = arch.strip()
 
 print(json.dumps(manifest, indent=2))
-" "$HOST" | tee "$CACHE_FILE"
+PY

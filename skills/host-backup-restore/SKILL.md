@@ -1,7 +1,7 @@
 ---
 name: host-backup-restore
-version: "3.6.1"
-description: Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker for mechanical tasks), post-discovery research, and skillwiki infrastructure capture. Uses rsync with partial-dir for resumable WAN transfers. Use when backing up or restoring Caddy reverse-proxy domains, databases (postgres, mysql, redis, mongodb, sqlite), systemd services, SSH configs, and Hermes agent state on remote Linux hosts.
+version: "3.6.2"
+description: Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker for mechanical tasks), post-discovery research, and skillwiki infrastructure capture. Uses rsync with partial-dir for resumable WAN transfers. Use when backing up or restoring Caddy reverse-proxy domains, databases (postgres, mysql, redis, mongodb, sqlite), systemd services, full SSH identity/config, Tailscale state/config, and Hermes agent state on remote Linux hosts.
 argument-hint: "[host] [mode] [options]"
 ---
 
@@ -146,7 +146,7 @@ Backup profiles define which groups to back up and what hermes-tier to use. Thre
 
 | Profile | Groups | Hermes Tier | Use Case |
 |---------|--------|-------------|----------|
-| `full` | all 7 groups | full | Complete infrastructure backup (default) |
+| `full` | all 9 groups | full | Complete infrastructure backup including SSH identity and Tailscale state (default) |
 | `quick` | base, caddy_domains, hermes, databases | standard | Essential state — skips systemd units + apt |
 | `minimal` | hermes | minimal | Hermes agent state only — fastest snapshot |
 
@@ -161,7 +161,7 @@ profiles:
     hermes_tier: full
     description: "Daily backup of essential services"
   weekly-full:
-    groups: [base, caddy_domains, hermes, databases, other_services, apt]
+    groups: [base, ssh, tailscale, caddy_domains, hermes, databases, other_services, apt, wiki]
     hermes_tier: full
     description: "Weekly full infrastructure backup"
   hermes-only:
@@ -187,7 +187,7 @@ In interactive mode, after discovery, present profile selection before group sel
   "question": "Which backup profile for <host>?",
   "header": "Profile",
   "options": [
-    {"label": "full (Recommended)", "description": "All 7 groups — complete infrastructure backup"},
+    {"label": "full (Recommended)", "description": "All 9 groups — complete infrastructure backup with SSH identity and Tailscale state"},
     {"label": "quick", "description": "Essential state: Hermes, databases, Caddy, base (skips systemd + apt)"},
     {"label": "minimal", "description": "Hermes agent state only — fastest snapshot"},
     {"label": "Custom", "description": "Select individual groups manually"}
@@ -295,7 +295,7 @@ Use `AskUserQuestion` with profile options:
   "question": "Which backup profile for <host>?",
   "header": "Profile",
   "options": [
-    {"label": "full (Recommended)", "description": "All 7 groups — complete infrastructure backup"},
+    {"label": "full (Recommended)", "description": "All 9 groups — complete infrastructure backup with SSH identity and Tailscale state"},
     {"label": "quick", "description": "Essential state: Hermes, databases, Caddy, base (skips systemd + apt)"},
     {"label": "minimal", "description": "Hermes agent state only — fastest snapshot"},
     {"label": "Custom", "description": "Select individual groups manually"}
@@ -334,7 +334,9 @@ For each detected group, use `AskUserQuestion` (yes/no). Iterate through groups 
 
 | Group | Description | Detected on sg01 example |
 |-------|------------|--------------------------|
-| `base` | SSH config, hostname, `/etc/hosts`, SSL certs | hostname, /etc/hosts |
+| `base` | Hostname, `/etc/hosts`, `/etc/os-release`, `sshd_config` quick reference | hostname, /etc/hosts |
+| `ssh` | Full SSH host identity and account access (`/etc/ssh`, `/root/.ssh`, `/home/*/.ssh`) | host keys, authorized_keys |
+| `tailscale` | Tailscale machine state/config and restore-reference metadata (`/var/lib/tailscale`, package source, status JSON, IPs, version) | tailscaled state, tailscale status |
 | `caddy_domains` | Caddy config (`/etc/caddy/Caddyfile`), SSL certs, `caddy validate` | 5 domains: mon, status, term, bot, star |
 | `hermes` | `hermes backup` (built-in zip — handles SQLite WAL mode) | v0.13.0 at /root/.hermes |
 | `databases` | sqlite files, postgres/mysql/redis dumps, mongodb | state.db, [any others detected] |
@@ -652,7 +654,7 @@ bash tests/test-restore.sh --manifest /tmp/manifest.json
 bash tests/test-restore.sh --manifest /tmp/manifest.json --group caddy_domains
 ```
 
-### Test matrix (27 assertions across 8 groups)
+### Restore test matrix (27 assertions across 8 restore groups)
 
 | Group | Assertions | What's verified |
 |-------|-----------|-----------------|
@@ -664,6 +666,8 @@ bash tests/test-restore.sh --manifest /tmp/manifest.json --group caddy_domains
 | other_services | 3 | systemd units active, ports listening |
 | apt | 3 | `apt list --installed` includes expected packages |
 | wiki | 3 | rclone.conf, wiki mount active, fstab entry |
+
+Backup-only groups `ssh` and `tailscale` are reinstall-prep artifacts. Restore is deliberately manual because reusing SSH host keys or Tailscale machine identity affects host trust and tailnet identity.
 
 ### Known limitations (source-side)
 
