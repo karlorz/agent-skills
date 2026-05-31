@@ -1,7 +1,7 @@
 {
   "name": "host-backup-restore",
-  "version": "3.6.2",
-  "description": "Host-level backup restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet workers for general + Hermes ops), post-discovery research, skillwiki infrastructure capture, and Hermes module (absorbed from hermes-remote-backup). v3.6.2: shell-safe discovery transport plus first-class SSH identity and Tailscale state/config backup groups. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
+  "version": "3.6.3",
+  "description": "Host-level backup restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet workers for general + Hermes ops), post-discovery research, skillwiki infrastructure capture, and Hermes module (absorbed from hermes-remote-backup). v3.6.3: explicit SSH/Tailscale identity restore for post-reinstall hosts, with safety snapshots, ca-certificates handling, and SSH validation. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
   "author": {
     "name": "karlorz"
   },

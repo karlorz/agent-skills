@@ -11,6 +11,7 @@ DRY_RUN=false
 DB_USER=""
 DB_PASS=""
 ALLOW_CROSS_DISTRO=false
+RESTORE_IDENTITY=false
 
 # ── Chunked base64 transfer for targets without rsync/scp (e.g., devsh LXC) ──
 # Usage: devsh_transfer <vm_id> <local_file> <remote_path>
@@ -54,6 +55,8 @@ usage() {
   echo "  --db-user USER        Database username for pg_restore/mysql (default: postgres/root)"
   echo "  --db-pass PASS        Database password for mysql"
   echo "  --allow-cross-distro  Allow apt restore across different OS (default: skip on mismatch)"
+  echo "  --restore-identity    Allow manual restore of ssh/tailscale identity groups"
+  echo "                        WARNING: reuses SSH host keys and Tailscale machine identity"
   exit 1
 }
 
@@ -68,6 +71,7 @@ while [ $# -gt 0 ]; do
     --db-user) DB_USER="$2"; shift 2 ;;
     --db-pass) DB_PASS="$2"; shift 2 ;;
     --allow-cross-distro) ALLOW_CROSS_DISTRO=true; shift ;;
+    --restore-identity) RESTORE_IDENTITY=true; shift ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
@@ -163,6 +167,8 @@ echo ""
 # Detect available groups
 AVAILABLE_GROUPS=""
 [ -f "$BACKUP_CONTENT_DIR/hostname" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS base"
+[ -f "$BACKUP_CONTENT_DIR/ssh-config-and-keys.tar.gz" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS ssh"
+[ -f "$BACKUP_CONTENT_DIR/tailscale-state-and-config.tar.gz" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS tailscale"
 [ -f "$BACKUP_CONTENT_DIR/caddy-config.tar.gz" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS caddy_domains"
 [ -f "$BACKUP_CONTENT_DIR/hermes-backup.zip" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS hermes"
 [ -f "$BACKUP_CONTENT_DIR/dpkg-selections.txt" ] && AVAILABLE_GROUPS="$AVAILABLE_GROUPS apt"
@@ -250,6 +256,54 @@ restore_group() {
   echo "--- Restoring: $group ---"
 
   case "$group" in
+    ssh)
+      if ! $RESTORE_IDENTITY; then
+        echo "  SKIPPED: ssh identity restore requires --restore-identity"
+        echo "  This archive contains SSH host keys and account access config."
+        echo "  Re-run with --groups ssh --restore-identity only if you intend to reuse the old host trust identity."
+        return
+      fi
+      if [ ! -f "$BACKUP_CONTENT_DIR/ssh-config-and-keys.tar.gz" ]; then
+        echo "  SKIPPED: ssh-config-and-keys.tar.gz not found"
+        return
+      fi
+      safety_dir="/root/host-restore-safety-$(date +%Y%m%d-%H%M%S)-ssh"
+      echo "  Creating remote SSH safety snapshot: $safety_dir"
+      ssh "$TARGET" "set -e; mkdir -p '$safety_dir'; chmod 700 '$safety_dir'; tar --ignore-failed-read --warning=no-file-changed -czf '$safety_dir/current-ssh-config-and-keys.tar.gz' /etc/ssh /root/.ssh /home/*/.ssh 2>'$safety_dir/current-ssh-tar.stderr.txt' || true"
+      echo "  Restoring SSH host identity and account SSH dirs..."
+      ssh "$TARGET" "tar -xzf - -C /" < "$BACKUP_CONTENT_DIR/ssh-config-and-keys.tar.gz"
+      ssh "$TARGET" "chmod 700 /root/.ssh 2>/dev/null || true; chmod 600 /root/.ssh/authorized_keys 2>/dev/null || true; chmod 600 /etc/ssh/ssh_host_*_key 2>/dev/null || true; chmod 644 /etc/ssh/ssh_host_*_key.pub 2>/dev/null || true"
+      if ! ssh "$TARGET" "/usr/sbin/sshd -t"; then
+        echo "  ERROR: restored sshd config failed validation; rolling back from $safety_dir" >&2
+        ssh "$TARGET" "tar -xzf '$safety_dir/current-ssh-config-and-keys.tar.gz' -C / || true; /usr/sbin/sshd -t || true"
+        return 1
+      fi
+      ssh "$TARGET" "systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null"
+      echo "  SSH restored. Local clients may need: ssh-keygen -R <host-or-ip>; ssh -o StrictHostKeyChecking=accept-new <host>"
+      ;;
+    tailscale)
+      if ! $RESTORE_IDENTITY; then
+        echo "  SKIPPED: tailscale identity restore requires --restore-identity"
+        echo "  This archive contains /var/lib/tailscale machine state."
+        echo "  Re-run with --groups tailscale --restore-identity only if you intend to reuse the old tailnet node identity."
+        return
+      fi
+      if [ ! -f "$BACKUP_CONTENT_DIR/tailscale-state-and-config.tar.gz" ]; then
+        echo "  SKIPPED: tailscale-state-and-config.tar.gz not found"
+        return
+      fi
+      safety_dir="/root/host-restore-safety-$(date +%Y%m%d-%H%M%S)-tailscale"
+      echo "  Creating remote Tailscale safety snapshot: $safety_dir"
+      ssh "$TARGET" "set -e; mkdir -p '$safety_dir'; chmod 700 '$safety_dir'; tar --ignore-failed-read --warning=no-file-changed -czf '$safety_dir/current-tailscale-state-and-config.tar.gz' /var/lib/tailscale /etc/default/tailscaled /etc/systemd/system/tailscaled.service.d /lib/systemd/system/tailscaled.service /usr/lib/systemd/system/tailscaled.service /etc/apt/sources.list.d/tailscale.list /usr/share/keyrings/tailscale-archive-keyring.gpg 2>'$safety_dir/current-tailscale-tar.stderr.txt' || true"
+      echo "  Restoring Tailscale package source/keyring..."
+      ssh "$TARGET" "tar -xzf - -C / etc/apt/sources.list.d/tailscale.list usr/share/keyrings/tailscale-archive-keyring.gpg 2>/dev/null || true" < "$BACKUP_CONTENT_DIR/tailscale-state-and-config.tar.gz"
+      echo "  Ensuring ca-certificates and tailscale package are installed..."
+      ssh "$TARGET" "if ! dpkg -s ca-certificates >/dev/null 2>&1; then apt-get update || true; DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates; update-ca-certificates; fi"
+      ssh "$TARGET" "if ! command -v tailscale >/dev/null 2>&1; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale; fi"
+      echo "  Restoring Tailscale machine state..."
+      ssh "$TARGET" "systemctl stop tailscaled 2>/dev/null || true; tar -xzf - -C /; chown -R root:root /var/lib/tailscale 2>/dev/null || true; systemctl daemon-reload; systemctl enable tailscaled >/dev/null 2>&1 || true; systemctl start tailscaled" < "$BACKUP_CONTENT_DIR/tailscale-state-and-config.tar.gz"
+      ssh "$TARGET" "systemctl is-active tailscaled; tailscale ip -4 2>/dev/null || true; tailscale status --json 2>/dev/null | grep -E 'BackendState|HostName|DNSName|PublicKey' | head -n 8 || true"
+      ;;
     base)
       [ -f "$BACKUP_CONTENT_DIR/hostname" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/hostname" "${TARGET}:/etc/hostname" 2>/dev/null || true
       [ -f "$BACKUP_CONTENT_DIR/hosts" ] && rsync -avP --timeout=300 -e "ssh $SSH_OPTS" "$BACKUP_CONTENT_DIR/hosts" "${TARGET}:/etc/hosts" 2>/dev/null || true

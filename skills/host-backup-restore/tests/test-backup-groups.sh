@@ -135,8 +135,26 @@ SH
     bash -c "[[ \$(stat -f '%Lp' '$backup_dir' 2>/dev/null || stat -c '%a' '$backup_dir') == 700 ]]"
 }
 
+test_restore_identity_groups_are_explicit_opt_in() {
+  local restore_cli="$SKILL_DIR/scripts/host-restore-cli.sh"
+
+  assert "restore CLI detects SSH identity archives" \
+    grep -q 'ssh-config-and-keys.tar.gz' "$restore_cli"
+  assert "restore CLI detects Tailscale identity archives" \
+    grep -q 'tailscale-state-and-config.tar.gz' "$restore_cli"
+  assert "restore CLI requires explicit identity restore flag" \
+    grep -q -- '--restore-identity' "$restore_cli"
+  assert "restore CLI handles missing ca-certificates before Tailscale install" \
+    grep -q 'ca-certificates' "$restore_cli"
+  assert "restore CLI validates sshd config before restart" \
+    grep -q '/usr/sbin/sshd -t' "$restore_cli"
+  assert "restore CLI fails hard if restored sshd config is invalid" \
+    grep -q 'return 1' "$restore_cli"
+}
+
 test_discover_uses_shell_safe_python_transport
 test_ssh_and_tailscale_groups_create_artifacts
+test_restore_identity_groups_are_explicit_opt_in
 
 echo "Tests: $PASS passed, $FAIL failed"
 test "$FAIL" -eq 0

@@ -1,6 +1,6 @@
 ---
 name: host-backup-restore
-version: "3.6.2"
+version: "3.6.3"
 description: Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker for mechanical tasks), post-discovery research, and skillwiki infrastructure capture. Uses rsync with partial-dir for resumable WAN transfers. Use when backing up or restoring Caddy reverse-proxy domains, databases (postgres, mysql, redis, mongodb, sqlite), systemd services, full SSH identity/config, Tailscale state/config, and Hermes agent state on remote Linux hosts.
 argument-hint: "[host] [mode] [options]"
 ---
@@ -37,6 +37,9 @@ bash scripts/host-backup-cli.sh --host sg01 --profile full --research
 
 # Restore to a fresh host
 bash scripts/host-restore-cli.sh --archive ./sg01-backup.tar.gz --target newhost --all
+
+# Restore SSH + Tailscale identity after OS reinstall (explicit opt-in)
+bash scripts/host-restore-cli.sh --archive ./sg02-backup.tar.gz --target sg02 --groups "ssh,tailscale" --restore-identity
 ```
 
 ---
@@ -382,6 +385,29 @@ Offer to save the selection as a custom profile:
 
 3. **AskUserQuestion for groups to restore** (same per-group yes/no pattern as Step 4b).
 
+**If `ssh` or `tailscale` identity groups were selected after an OS reinstall:**
+
+`ssh` and `tailscale` are reinstall-prep identity groups. They are restorable via CLI only with explicit `--restore-identity` because they replace host trust and tailnet identity:
+
+```bash
+bash scripts/host-restore-cli.sh \
+  --archive ~/Desktop/backups/sg02/sg02-backup-YYYYMMDD-HHMMSS.tar.gz \
+  --target sg02 \
+  --groups "ssh,tailscale" \
+  --restore-identity
+```
+
+Operational findings from the sg02 Debian 13 reinstall:
+
+1. **Host key changes are expected after reinstall.** Clear stale local entries first: `ssh-keygen -R <alias>; ssh-keygen -R <ip>`, then reconnect with `ssh -o StrictHostKeyChecking=accept-new <alias>`.
+2. **Fresh Debian 13 may lack `ca-certificates`.** Tailscale apt install can fail with `certificate verify failed` until `apt-get install -y ca-certificates && update-ca-certificates` runs.
+3. **Fresh minimal hosts may lack `rsync` and `python3`.** Identity restore must not depend on them. Stream tarballs over SSH and use POSIX tools for validation.
+4. **Install Tailscale before restoring `/var/lib/tailscale`.** Restore the saved apt source/keyring first, install `tailscale`, stop `tailscaled`, extract the saved state, then `systemctl daemon-reload && systemctl enable --now tailscaled`.
+5. **Validate SSH before restart.** After extracting `/etc/ssh`, run `/usr/sbin/sshd -t`; if it fails, roll back from the safety tarball before restarting SSH.
+6. **Refresh `known_hosts` after restoring old SSH host keys.** The server key reverts to the backup identity, so local clients that accepted the post-reinstall key will see another host-key change.
+
+The restore CLI creates remote safety tarballs under `/root/host-restore-safety-*-ssh` and `/root/host-restore-safety-*-tailscale` before overwriting identity material.
+
 **If `caddy_domains` was selected and Caddy is not on the target:**
 
 Check if Caddy exists on the target:
@@ -668,6 +694,20 @@ bash tests/test-restore.sh --manifest /tmp/manifest.json --group caddy_domains
 | wiki | 3 | rclone.conf, wiki mount active, fstab entry |
 
 Backup-only groups `ssh` and `tailscale` are reinstall-prep artifacts. Restore is deliberately manual because reusing SSH host keys or Tailscale machine identity affects host trust and tailnet identity.
+
+CLI identity restore is available only with explicit opt-in:
+
+```bash
+bash scripts/host-restore-cli.sh --archive ./backup.tar.gz --target <host> --groups "ssh,tailscale" --restore-identity
+```
+
+The identity restore path is intentionally dependency-light for fresh reinstall targets:
+
+- Uses SSH tar streaming, not target-side `rsync`
+- Installs `ca-certificates` before using the Tailscale apt repo
+- Installs `tailscale` before restoring `/var/lib/tailscale`
+- Validates `sshd -t` before restarting SSH
+- Emits `known_hosts` refresh guidance after SSH host key reuse
 
 ### Known limitations (source-side)
 
