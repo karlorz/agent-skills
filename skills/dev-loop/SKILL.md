@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.21.0"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Also use when the user says "investigate", "find work", "scan for work items", or "what needs doing" to proactively create structured work items. v1.21.0: investigate mode — proactive work-item creation from code/vault/transcript/deep-research sources, tiered output (full spec or stub), status:proposed, vault required. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.22.1"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Also use when the user says "investigate", "find work", "scan for work items", or "what needs doing" to proactively create structured work items. v1.22.0: /goal compatible mode — ORCHESTRATION_CAPS for goal-context detection (Claude Code, Codex, Antigravity), GRILL goal_override:never suppresses interview under /goal, RETRO emits continuation hints for evaluators, /goal Integration section documents grill-me → /goal → dev-loop pipeline. v1.21.0: investigate mode — proactive work-item creation from code/vault/transcript/deep-research sources, tiered output (full spec or stub), status:proposed, vault required. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high] [investigate [high] [topic]]"
 ---
 
@@ -253,6 +253,47 @@ from config (default: auto-discover), look up the backend in `prd_backends`
 (or derive defaults), and store the set of PRD capabilities + registered skill
 names. Steps 3–6 check `PRD_CAPS` membership instead of naming specific skills.
 
+### Orchestration Capability Set (v1.22.0)
+
+`ORCHESTRATION_CAPS` is resolved at REFRESH, orthogonal to both `BACKEND_CAPS`
+and `PRD_CAPS`. It contains only positive capabilities and detects whether the
+current session is running inside a platform-provided autonomous loop (`/goal`).
+
+| Capability | When set |
+|---|---|
+| `goal_context` | Conversation context contains strong evidence of an active /goal evaluator loop (evaluator feedback, active goal condition text, "continue working toward" phrasing, or explicit /goal command/status in the transcript) |
+| `multi_cycle_orchestrator` | A platform loop is expected to invoke dev-loop again after this single-pass cycle exits |
+| `non_interactive_goal` | Default assumption under `goal_context`: no human is waiting to answer prompts, so interactive questions should be suppressed unless config explicitly allows them |
+
+Detection is **heuristic, not API-based** — no platform (Claude Code,
+Codex, Antigravity) exposes a programmatic /goal detection mechanism
+(verified May 2026). The heuristic checks:
+1. System prompt or recent messages mention an active goal, completion
+   condition, or evaluator in a /goal-specific context.
+2. The conversation contains evaluator feedback strings ("condition not yet
+   met", "continue working", "goal active").
+3. The session was invoked with a `/goal` command visible in the transcript.
+
+Avoid false positives: do **not** set `goal_context` for generic uses of the
+word "goal", design discussions about /goal, or user requests to prepare a
+future /goal. Require an active-loop signal, not merely documentation text.
+
+When `goal_context` is true:
+- Add `goal_context` and `multi_cycle_orchestrator` to `ORCHESTRATION_CAPS`.
+- Add `non_interactive_goal` unless `interview.work_item.goal_override: allow`
+  explicitly permits monitored interaction.
+- Set `GRILL_TRIGGER_OVERRIDE = never` when `non_interactive_goal` is present.
+- Log: "Goal context detected — interactive prompts suppressed for this cycle."
+- Emit: "Running under /goal — dev-loop will complete one work item per turn.
+  The /goal evaluator handles multi-cycle continuation."
+
+When `goal_context` is false (default): no behavior change. All existing
+workflows continue unchanged.
+
+Steps that need interactive input check for `non_interactive_goal` before
+calling AskUserQuestion. If present, use the documented fallback (skip, or use
+config defaults).
+
 ### Pipeline Templates
 
 Pipeline templates control which steps run. `PRD_CAPS` controls which skill
@@ -407,6 +448,15 @@ prd_disciplines:
        `INTERVIEW_BACKEND`.
      - Parse `interview.work_item.trigger` — store as `INTERVIEW_TRIGGER`
        (`auto`, `manual`, or `never`).
+     - Parse `interview.work_item.goal_override` — store as
+       `INTERVIEW_GOAL_OVERRIDE` (`never` or `allow`, default `never`).
+     **Resolve `ORCHESTRATION_CAPS`** — inspect the current system context and
+     recent transcript for active /goal-loop signals (see Orchestration
+     Capability Set). If strong evidence is present, add `goal_context` and
+     `multi_cycle_orchestrator`. Add `non_interactive_goal` unless
+     `INTERVIEW_GOAL_OVERRIDE == allow`. Do not set any goal capability for
+     generic mentions of "goal" or for discussions about setting a future
+     /goal.
      **Resolve CI discovery** — parse `ci_configured` and `ci_discovery`
      from config. If `ci_configured: true`:
      - `ci_discovery: runtime` (default) → store `CI_DISCOVERY = runtime`,
@@ -767,7 +817,22 @@ content.
 
 **Skip if** `work_item_interview` capability is absent (no `interview` section in config).
 
-**Trigger decision:**
+**Goal-context override (v1.22.0):** If `goal_context` in `ORCHESTRATION_CAPS`:
+- Check config `interview.work_item.goal_override` (default: `never`).
+- If `goal_override: never` → skip GRILL entirely. Log: "GRILL skipped —
+  running under /goal context. Requirements should be clarified BEFORE
+  setting the goal (see /goal Integration section)."
+- If `goal_override: allow` → proceed with normal trigger logic below
+  (backward-compatible; useful when the user intentionally runs grill-me
+  inside a /goal session with manual monitoring).
+
+This override exists because interactive skills (AskUserQuestion, grill-me)
+are counterproductive under unattended /goal evaluators — a human may not be
+monitoring, and the evaluator loop will keep triggering turns regardless of
+interview state.
+The recommended pattern: run `/grill-me` BEFORE setting `/goal`.
+
+**Trigger decision (standard, when goal_override does not apply):**
 - `trigger: never` → skip. Fully automated mode.
 - `trigger: manual` → run only if work item has `grill: true`. Skip otherwise.
 - `trigger: auto` (default) → run ambiguity detection:
@@ -1175,6 +1240,32 @@ empty, write the retro to the work item only.
 Append the same retro format to `.claude/dev-loop-work/{work-slug}/retro.md`.
 No vault log exists. If a git commit was made this cycle, include a
 one-line summary of the commit in the retro.
+
+#### Goal-context continuation hint (v1.22.0, when `goal_context` in ORCHESTRATION_CAPS)
+
+After logging the retro, query for remaining `status: planned` work
+items in the current project:
+
+- If `query_vault` in BACKEND_CAPS: query
+  `{vault}/projects/{slug}/work/` for items with `status: planned`.
+- If `query_vault` not in BACKEND_CAPS: scan
+  `.claude/dev-loop-work/` for items with `status: planned` in their
+  YAML header.
+
+Emit a one-line continuation hint in the transcript:
+- If remaining > 0: "Goal progress: {N} planned items remaining for
+  project {slug} — /goal evaluator will trigger next cycle."
+- If remaining == 0: "Goal progress: All planned items completed for
+  project {slug} — /goal condition may be satisfied."
+
+This hint is critical because /goal continuation decisions are primarily
+made from the conversation transcript (Haiku on Claude Code, continuation.md
+on Codex; Antigravity-style planners also benefit when they are not reading
+the vault directly). The hint surfaces work-item status into the transcript
+so the evaluator can make an informed continue/stop decision.
+
+Skip when `goal_context` not in `ORCHESTRATION_CAPS` — the hint is
+only useful under /goal and adds noise in manual cycles.
 
 #### Auto-capture (sub-step of RETRO, only when `query_vault` in BACKEND_CAPS)
 
@@ -1808,6 +1899,70 @@ Skip Step B when `query_vault` not in BACKEND_CAPS — no vault to initialize.
 
 **Both steps are required** for full vault integration. After bootstrap,
 re-run REFRESH to load the new config.
+
+## /goal Integration (v1.22.0)
+
+dev-loop is single-pass by design — it processes one work item per
+invocation and exits. This makes it naturally compatible with `/goal`
+on any platform (Claude Code v2.1.139+, Codex v0.128.0+, Antigravity 2.0).
+
+### How It Works
+
+`/goal` is the outer loop; dev-loop is the inner engine. The platform's
+/goal evaluator checks if the overall objective is met. Each turn,
+dev-loop picks up the next work item, drives it through the pipeline,
+and exits. If work remains, the evaluator triggers another turn →
+another dev-loop cycle.
+
+```
+/goal evaluator loop (platform-provided)
+  └─ turn N: invoke dev-loop
+       └─ REFRESH → QUERY → WORK → SPEC → PLAN → EXECUTE → REVIEW → MERGE → RETRO
+  └─ evaluator check: all planned items completed? NO → turn N+1
+  └─ turn N+1: invoke dev-loop (picks next item)
+       └─ REFRESH → QUERY → WORK → ... → RETRO
+  └─ evaluator check: YES → goal clears
+```
+
+### Recommended Pipeline: grill-me → /goal → dev-loop
+
+**Phase 1: CLARIFY** (human-attended, ~5-10 min)
+1. `/grill-me` — adaptive interview to sharpen requirements
+2. Write requirements to vault work items (`status: planned`)
+
+**Phase 2: CONFIGURE** (human-attended, ~2 min)
+3. Verify dev-loop config (`.claude/dev-loop.config.md`).
+4. Set goal condition:
+   `/goal "All status:planned items for project <slug> completed,
+   all tests pass, vault clean"`
+
+**Phase 3: EXECUTE** (autonomous, hours-long)
+5. /goal evaluator triggers turn → dev-loop REFRESH detects goal
+   context (`ORCHESTRATION_CAPS`) → picks next planned item → drives
+   full pipeline → RETRO logs remaining items → evaluator re-checks
+   → repeats until all items completed.
+
+**Key rule:** Interactive work (grill-me, AskUserQuestion) happens
+BEFORE `/goal`. Autonomous work (dev-loop pipeline) happens INSIDE
+`/goal`. AskUserQuestion is counterproductive under /goal evaluators —
+the default assumption is unattended execution.
+
+### Platform Behavior
+
+| Platform | Evaluator | dev-loop Interaction |
+|----------|-----------|---------------------|
+| **Claude Code** | Haiku checks transcript each turn | RETRO continuation hint (§11) surfaces remaining items for Haiku to read |
+| **Codex** | continuation.md prompts same model | RETRO hint provides structured progress for the continuation decision |
+| **Antigravity** | Subagent planner decomposes tasks | Best-effort SKILL.md compatibility; if invoked as a nested worker, keep dev-loop single-pass and avoid adding platform-specific branching |
+
+### What dev-loop Does NOT Do
+
+- **Does not branch on platform.** No `if claude_code` or `if codex` logic —
+  capability-based only (existing pattern).
+- **Does not manage the /goal lifecycle.** Setting, clearing, pausing /goal
+  is the user's responsibility.
+- **Does not replace /goal.** dev-loop + /loop cron is the legacy pattern;
+  dev-loop + /goal is the recommended pattern for new work.
 
 ## Research Agent
 

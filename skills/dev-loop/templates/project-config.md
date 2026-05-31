@@ -604,6 +604,7 @@ interview:
     source: mattpocock/skills      # install source for upgrade
     install: "npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y"
     trigger: auto                  # auto | manual | never
+    goal_override: never           # never | allow — behavior when goal_context in ORCHESTRATION_CAPS (v1.22.0)
 ```
 
 **Interview backends:**
@@ -619,6 +620,13 @@ interview:
 - `auto` — run ambiguity detection before SPEC, grill if ambiguous (default)
 - `manual` — only grill when work item has `grill: true`
 - `never` — fully automated, no interviews
+
+**Goal override (v1.22.0):**
+- `never` (default) — skip GRILL entirely when running under /goal context.
+  Requirements should be clarified BEFORE setting /goal.
+- `allow` — proceed with normal trigger logic even under /goal. Useful when
+  the user intentionally monitors a /goal session and wants to answer
+  interview questions manually.
 
 ## Code layout
 
