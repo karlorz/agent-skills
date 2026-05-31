@@ -1,0 +1,11 @@
+{
+  "name": "deep-research",
+  "version": "2.4.0",
+  "description": "Multi-source research engine with tiered model pinning (sonnet/haiku agents for research, parent model for synthesis), deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration with schema-compatible follow-up queueing. v2.4.0: Codex CLI/App compatibility — references/codex-tools.md maps the Agent tool to spawn_agent/wait_agent/close_agent, documents the multi_agent config gate, the sonnet/haiku model-tier fallback, and detached-HEAD sandbox handling for vault writes.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": ["research", "deep-research", "multi-source", "context7", "deepwiki", "codex", "codex-app"],
+  "skills": "./"
+}

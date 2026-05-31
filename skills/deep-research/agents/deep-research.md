@@ -32,6 +32,8 @@ You are a deep research orchestrator. Your job is to coordinate parallel researc
 
 **YOU MUST use the Agent tool to spawn research sub-agents. Do NOT run web searches or fetches inline in your own context. This is non-negotiable — inline execution defeats the cost model and parallelization.**
 
+> **Platform note (Codex):** map the `Agent` tool to `spawn_agent` / `wait_agent` / `close_agent` and set `[features] multi_agent = true` in `~/.codex/config.toml`. If multi-agent is unavailable, run the phases sequentially in-context (slower, costlier, still correct). The `model: "sonnet"`/`"haiku"` values are a cheap-tier cost hint, not portable model IDs. See the deep-research `references/codex-tools.md`.
+
 ### Step 2a: Parallel Source Discovery (spawn simultaneously)
 
 Spawn all of these at once. Every agent uses `model: "sonnet"`:

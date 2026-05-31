@@ -1,7 +1,7 @@
 ---
 name: dev-loop
-version: "1.22.2"
-description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Also use when the user says "investigate", "find work", "scan for work items", or "what needs doing" to proactively queue structured findings. v1.22.2: investigate/deep-research queue contracts are schema-adaptive — use proposed work items only when validation supports them, otherwise raw transcript captures. v1.22.0: /goal compatible mode — ORCHESTRATION_CAPS for goal-context detection (Claude Code, Codex, Antigravity), GRILL goal_override:never suppresses interview under /goal, RETRO emits continuation hints for evaluators, /goal Integration section documents grill-me → /goal → dev-loop pipeline. v1.21.0: investigate mode — proactive finding creation from code/vault/transcript/deep-research sources, tiered output (full spec or stub), vault required. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
+version: "1.23.0"
+description: 'Use this skill when the user says "run a dev cycle", "implement a feature", "make a code change", "start a loop", or wants to work on a task with automated planning, execution, code review, and knowledge capture. Also use when the user says "investigate", "find work", "scan for work items", or "what needs doing" to proactively queue structured findings. v1.23.0: Codex CLI/App compatibility — references/codex-tools.md maps worker Agent spawns to spawn_agent/wait_agent, documents the multi_agent config gate, and the detached-HEAD Codex App sandbox-finishing contract (MERGE/PUSH/SAVE); .codex-plugin manifest brought into the version-bump set. v1.22.2: investigate/deep-research queue contracts are schema-adaptive — use proposed work items only when validation supports them, otherwise raw transcript captures. v1.22.0: /goal compatible mode — ORCHESTRATION_CAPS for goal-context detection (Claude Code, Codex, Antigravity), GRILL goal_override:never suppresses interview under /goal, RETRO emits continuation hints for evaluators, /goal Integration section documents grill-me → /goal → dev-loop pipeline. v1.21.0: investigate mode — proactive finding creation from code/vault/transcript/deep-research sources, tiered output (full spec or stub), vault required. v1.20.0: compact-counter visibility — proactive 0-count emit, tuned thresholds {0-1 silent emit, 2 note, 3 warn, 4+ block}, HUD bridge writes ~/.claude/dev-loop/last-doctor.json. v1.19.0: release_policy.trigger_globs consumer in PUSH step — opt-in auto-bump on shippable commits, skip on vault/doc-only cycles. v1.18.1: vault-local wiki-presync skill discovery — probe and invoke before vault push. v1.18.0: peer-aware vault push gate — SAVE/MERGE acquire skillwiki advisory lockfile. v1.17.1: doctor-worker skillwiki doctor bridge (probe 3), research-worker stale bucket aggregation (Track B5), wiki-sync registered as optional dependency. v1.17.0: vault auto-commit gate + AUDIT dirty-tree check. v1.16.0: auto-archive closes: transcripts. v1.15.0: pluggable multi-backend code review. Pass `high` for aggressive mode.'
 argument-hint: "[high] [investigate [high] [topic]]"
 ---
 
@@ -1961,11 +1961,37 @@ the default assumption is unattended execution.
 ### What dev-loop Does NOT Do
 
 - **Does not branch on platform.** No `if claude_code` or `if codex` logic —
-  capability-based only (existing pattern).
+  capability-based only (existing pattern). For Codex tool-name mapping
+  (`Agent` → `spawn_agent`/`wait_agent`), the `multi_agent` config gate, and the
+  Codex App sandbox-finishing contract, see `references/codex-tools.md` — a
+  reference the agent consults, not branching in the loop logic.
 - **Does not manage the /goal lifecycle.** Setting, clearing, pausing /goal
   is the user's responsibility.
 - **Does not replace /goal.** dev-loop + /loop cron is the legacy pattern;
   dev-loop + /goal is the recommended pattern for new work.
+
+## Codex Platform Adaptation
+
+dev-loop targets Claude Code first but runs under OpenAI Codex CLI / Codex App
+without platform branching. Two concerns sit outside the capability-based loop
+logic and are documented in `references/codex-tools.md`:
+
+1. **Subagent dispatch.** The worker spawns (doctor-, research-, simplify-,
+   codex-review-, ci-health-worker; browser-worker) use the Claude `Agent` tool.
+   On Codex, map these to `spawn_agent` / `wait_agent` / `close_agent` and set
+   `[features] multi_agent = true` in `~/.codex/config.toml`. Without multi-agent,
+   each worker degrades to inline `Skill(...)` execution — the same path
+   `DEP_DRIFT` already uses.
+2. **Codex App sandbox finishing.** The App executes in an externally-managed
+   worktree (often detached HEAD) where push/branch/PR is blocked. Before the
+   git-mutating steps (MERGE 6b, PUSH 10, SAVE 7 / MERGE 6b-2 vault push),
+   detect the environment (`GIT_DIR`/`GIT_COMMON`/`BRANCH` + submodule guard).
+   On detached HEAD, commit in place and hand off via the App's "Create branch"
+   / "Hand off to local" controls instead of pushing. Surface the deferral in
+   RETRO, not as a cycle failure.
+
+Discovery on Codex is via `~/.agents/skills/`; the `.codex-plugin/plugin.json`
+manifest declares the plugin for Codex tooling.
 
 ## Research Agent
 
