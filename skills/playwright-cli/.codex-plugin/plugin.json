@@ -6,6 +6,6 @@
     "name": "karlorz"
   },
   "license": "MIT",
-  "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "chrome-debug", "agent", "browser-worker"],
-  "skills": "./"
+  "keywords": ["playwright", "browser", "cdp", "automation", "scraping", "chrome-debug", "agent", "browser-worker", "codex", "codex-app"],
+  "skills": "./skills/"
 }

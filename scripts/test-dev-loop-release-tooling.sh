@@ -41,6 +41,25 @@ assert_contains() {
   fi
 }
 
+active_plugin_roots() {
+  local source
+  jq -r '.plugins[] | select(.source | startswith("./skills/")) | .source' "$ROOT/.claude-plugin/marketplace.json" |
+    while IFS= read -r source; do
+      printf '%s/%s\n' "$ROOT" "${source#./}"
+    done | sort
+}
+
+read_frontmatter_name() {
+  awk '
+    /^name:[[:space:]]*/ {
+      sub(/^name:[[:space:]]*/, "", $0)
+      gsub(/^["'\''[:space:]]+|["'\''[:space:]]+$/, "", $0)
+      print
+      exit
+    }
+  ' "$1"
+}
+
 write_skill_fixture() {
   local repo="$1" skill="$2" version="$3" with_codex="$4"
   mkdir -p "$repo/skills/$skill/.claude-plugin"
@@ -131,10 +150,53 @@ run_sync_script_contract_checks() {
   sync_script="$(cat "$ROOT/skills/dev-loop/sync-plugin-cache.sh")"
 
   assert_contains "sync-plugin-cache includes dependencies manifest" "$sync_script" 'dependencies.yaml'
+  assert_contains "sync-plugin-cache syncs Codex skills subtree" "$sync_script" 'Sync Codex skills subtree'
+}
+
+run_plugin_manifest_contract_checks() {
+  local manifest rel root skills_path type
+
+  while IFS= read -r manifest; do
+    rel="${manifest#$ROOT/}"
+    type="$(jq -r '.skills | type' "$manifest")"
+    assert_eq "$rel skills field type" "$type" "string"
+  done < <(
+    find "$ROOT/skills" -maxdepth 3 -type f \
+      \( -path '*/.codex-plugin/plugin.json' -o -path '*/.claude-plugin/plugin.json' \) \
+      -print | sort
+  )
+
+  while IFS= read -r root; do
+    manifest="$root/.codex-plugin/plugin.json"
+    rel="${manifest#$ROOT/}"
+    [ -f "$manifest" ] || fail "$rel missing"
+    skills_path="$(jq -r '.skills // empty' "$manifest")"
+    assert_eq "$rel skills path" "$skills_path" "./skills/"
+  done < <(active_plugin_roots)
+}
+
+run_codex_skill_mirror_contract_checks() {
+  local root canonical name mirror
+
+  while IFS= read -r root; do
+    while IFS= read -r canonical; do
+      name="$(read_frontmatter_name "$canonical")"
+      [ -n "$name" ] || fail "${canonical#$ROOT/} missing frontmatter name"
+      mirror="$root/skills/$name/SKILL.md"
+      [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing mirror for ${canonical#$ROOT/}"
+      cmp -s "$canonical" "$mirror" || fail "${mirror#$ROOT/} differs from ${canonical#$ROOT/}"
+    done < <(
+      find "$root" -maxdepth 3 -type f -name SKILL.md \
+        -not -path "$root/skills/*" \
+        -print | sort
+    )
+  done < <(active_plugin_roots)
 }
 
 run_bump_version_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
+run_plugin_manifest_contract_checks
+run_codex_skill_mirror_contract_checks
 
 printf 'test-dev-loop-release-tooling: ok\n'

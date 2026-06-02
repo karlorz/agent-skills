@@ -6,6 +6,6 @@
     "name": "karlorz"
   },
   "license": "MIT",
-  "keywords": ["simplify", "review", "refactor", "quality"],
-  "skills": "./"
+  "keywords": ["simplify", "review", "refactor", "quality", "codex", "codex-app"],
+  "skills": "./skills/"
 }

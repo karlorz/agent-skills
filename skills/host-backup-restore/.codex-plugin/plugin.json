@@ -18,7 +18,9 @@
     "profiles",
     "deep-research",
     "agent",
-    "hermes-backup"
+    "hermes-backup",
+    "codex",
+    "codex-app"
   ],
-  "skills": "./"
+  "skills": "./skills/"
 }

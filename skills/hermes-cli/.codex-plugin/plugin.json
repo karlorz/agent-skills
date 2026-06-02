@@ -6,6 +6,6 @@
     "name": "karlorz"
   },
   "license": "MIT",
-  "keywords": ["hermes", "hermes-agent", "cli", "reference", "nousresearch", "commands"],
-  "skills": "./"
+  "keywords": ["hermes", "hermes-agent", "cli", "reference", "nousresearch", "commands", "codex", "codex-app"],
+  "skills": "./skills/"
 }

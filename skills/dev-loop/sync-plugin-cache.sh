@@ -42,6 +42,14 @@ for file in SKILL.md dependencies.yaml research/SKILL.md setup/SKILL.md investig
   fi
 done
 
+# Sync Codex skills subtree
+if [[ -d "${SOURCE_DIR}/skills" ]]; then
+  rm -rf "${CACHE_DIR}/skills"
+  mkdir -p "${CACHE_DIR}/skills"
+  cp -R "${SOURCE_DIR}/skills/." "${CACHE_DIR}/skills/"
+  echo "  ✓ skills/ (Codex mirror)"
+fi
+
 # Sync agents directory
 if [[ -d "${SOURCE_DIR}/agents" ]]; then
   mkdir -p "${CACHE_DIR}/agents"

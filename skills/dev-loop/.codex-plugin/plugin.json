@@ -1,6 +1,6 @@
 {
   "name": "dev-loop",
-  "version": "1.23.1",
+  "version": "1.23.2",
   "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.23.1: fixes Codex manifest version bumping, dependencies.yaml cache sync, and doctor-worker dependency probes for plugin-root skills/frontmatter-named agents. v1.23.0: Codex CLI/App compatibility — references/codex-tools.md maps worker Agent spawns to spawn_agent/wait_agent/close_agent, documents the multi_agent config gate, and the detached-HEAD Codex App sandbox-finishing contract for MERGE/PUSH/SAVE; this .codex-plugin manifest is now part of the version-bump set (resolves prior 1.22.1 drift). v1.22.2: schema-adaptive investigate/deep-research queue contracts (proposed work items only when validation supports them, else raw transcript captures). v1.22.0: /goal compatible mode (ORCHESTRATION_CAPS goal-context detection, grill-me -> /goal -> dev-loop). v1.21.0: investigate mode. v1.15.0+: pluggable multi-backend code review, MERGE CI gate, vault auto-commit, peer-aware vault push.",
   "author": {
     "name": "karlorz"
@@ -33,5 +33,5 @@
     "codex",
     "codex-app"
   ],
-  "skills": ["./", "./investigate", "./research", "./setup"]
+  "skills": "./skills/"
 }
