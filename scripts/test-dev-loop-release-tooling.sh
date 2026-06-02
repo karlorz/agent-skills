@@ -60,6 +60,40 @@ read_frontmatter_name() {
   ' "$1"
 }
 
+validate_skill_frontmatter() {
+  local file="$1"
+  python3 - "$file" <<'PY'
+import sys
+
+try:
+    import yaml
+except Exception as exc:
+    raise SystemExit(f"{sys.argv[1]}: could not import yaml parser: {exc}")
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    lines = fh.read().splitlines()
+
+if not lines or lines[0].strip() != "---":
+    raise SystemExit(f"{path}: missing YAML frontmatter")
+
+end_idx = next((idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == "---"), None)
+if end_idx is None:
+    raise SystemExit(f"{path}: missing YAML frontmatter terminator")
+
+frontmatter = "\n".join(lines[1:end_idx])
+
+try:
+    data = yaml.safe_load(frontmatter) or {}
+except Exception as exc:
+    raise SystemExit(f"{path}: invalid YAML: {exc}")
+
+description = str(data.get("description", ""))
+if len(description) > 1024:
+    raise SystemExit(f"{path}: invalid description: exceeds maximum length of 1024 characters")
+PY
+}
+
 write_skill_fixture() {
   local repo="$1" skill="$2" version="$3" with_codex="$4"
   mkdir -p "$repo/skills/$skill/.claude-plugin"
@@ -153,6 +187,16 @@ run_sync_script_contract_checks() {
   assert_contains "sync-plugin-cache syncs Codex skills subtree" "$sync_script" 'Sync Codex skills subtree'
 }
 
+run_skill_frontmatter_contract_checks() {
+  while IFS= read -r skill; do
+    validate_skill_frontmatter "$ROOT/$skill"
+  done < <(
+    cd "$ROOT" && find skills -maxdepth 3 -type f -name SKILL.md \
+      -not -path '*/skills/*' \
+      -print | sort
+  )
+}
+
 run_plugin_manifest_contract_checks() {
   local manifest rel root skills_path type
 
@@ -196,6 +240,7 @@ run_codex_skill_mirror_contract_checks() {
 run_bump_version_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
+run_skill_frontmatter_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 

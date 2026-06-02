@@ -1,7 +1,12 @@
 ---
 name: playwright-cli
-version: "1.1.3"
-description: This skill should be used when the user asks to "open a browser", "browse a website", "scrape a page", "automate Chrome", "take a screenshot of a webpage", "fill out a form", "click a button on a page", "interact with a website", or mentions any browser automation, web scraping, or CDP task. Use this skill even if the user just says "go to" a URL, "check a website", or wants to see what's on a page. Includes a browser-worker agent (model: sonnet) for delegating mechanical Chrome lifecycle and interaction tasks.
+version: "1.1.4"
+description: >
+  Use this skill when the user asks to open a browser, browse a website,
+  scrape a page, automate Chrome, take a screenshot, fill out a form,
+  click a button, or otherwise interact with a website. Includes a
+  browser-worker agent (model: sonnet) for mechanical Chrome lifecycle and
+  interaction tasks.
 allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(bash\ scripts/chrome-debug.sh:*)
 ---
 

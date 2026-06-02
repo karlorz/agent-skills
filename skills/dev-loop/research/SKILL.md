@@ -1,7 +1,11 @@
 ---
 name: research
 version: "1.5.4"
-description: Pluggable research agent for dev-loop. Spawn with model: sonnet — scans code health (CLI, tests, skills, specs) and optional vault health (coverage, links, quality). v1.5.4: Track B3 missing_tldr placeholder detection for high-confidence pages. Outputs prioritized work items. Pass 'high' for aggressive mode.
+description: >
+  Pluggable research agent for dev-loop. Spawn with model: sonnet.
+  Scans code health (CLI, tests, skills, specs) and optional vault health
+  (coverage, links, quality). Outputs prioritized work items. Pass `high`
+  for aggressive mode.
 type: companion-prompt
 mode: recurring
 ---
