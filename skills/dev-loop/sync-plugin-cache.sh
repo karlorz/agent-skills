@@ -32,7 +32,7 @@ echo "  Source: ${SOURCE_DIR}"
 echo "  Cache:  ${CACHE_DIR}"
 
 # Sync core files (preserving cache-only files like package.json if present)
-for file in SKILL.md dependencies.yaml research/SKILL.md setup/SKILL.md investigate/SKILL.md .claude-plugin/plugin.json .codex-plugin/plugin.json; do
+for file in SKILL.md dependencies.yaml research/SKILL.md setup-dev-loop/SKILL.md investigate/SKILL.md .claude-plugin/plugin.json .codex-plugin/plugin.json; do
   src="${SOURCE_DIR}/${file}"
   dst="${CACHE_DIR}/${file}"
   if [[ -f "$src" ]]; then
@@ -41,6 +41,13 @@ for file in SKILL.md dependencies.yaml research/SKILL.md setup/SKILL.md investig
     echo "  ✓ ${file}"
   fi
 done
+
+# Remove the pre-1.24.2 companion path whose directory name did not match
+# frontmatter name: setup-dev-loop.
+if [[ -d "${CACHE_DIR}/setup" ]]; then
+  rm -rf "${CACHE_DIR}/setup"
+  echo "  ✓ removed legacy setup/"
+fi
 
 # Sync Codex skills subtree
 if [[ -d "${SOURCE_DIR}/skills" ]]; then

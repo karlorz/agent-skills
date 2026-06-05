@@ -1,8 +1,6 @@
 ---
 name: hermes-cli
-version: "1.0.1"
 description: Hermes Agent CLI commands reference. Use when the user asks about hermes-agent CLI usage, commands, flags, or subcommands. Covers the full hermes terminal command surface.
-argument-hint: "[command-family]"
 ---
 
 # Hermes Agent CLI Reference

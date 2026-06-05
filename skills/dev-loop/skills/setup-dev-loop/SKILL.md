@@ -1,7 +1,6 @@
 ---
 name: setup-dev-loop
 description: Scaffold per-repo dev-loop config (PRD layer, knowledge layer, release config, vault path) and build the project glossary with grill-with-docs. Run once per repo before using dev-loop.
-disable-model-invocation: true
 ---
 
 # Setup Dev-Loop

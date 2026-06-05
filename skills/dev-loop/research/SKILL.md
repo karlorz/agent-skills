@@ -1,13 +1,10 @@
 ---
 name: research
-version: "1.5.4"
 description: >
   Pluggable research agent for dev-loop. Spawn with model: sonnet.
   Scans code health (CLI, tests, skills, specs) and optional vault health
   (coverage, links, quality). Outputs prioritized work items. Pass `high`
   for aggressive mode.
-type: companion-prompt
-mode: recurring
 ---
 
 # Dev-Loop Research Agent

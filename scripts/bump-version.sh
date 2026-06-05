@@ -2,17 +2,18 @@
 #
 # bump-version.sh — bump a skill's version across its manifests.
 #
-# A skill version lives in three or four places that must stay in sync:
-#   1. skills/<skill>/SKILL.md                  frontmatter:  version: "X.Y.Z"
-#   2. skills/<skill>/.claude-plugin/plugin.json              "version": "X.Y.Z"
-#   3. skills/<skill>/.codex-plugin/plugin.json               "version": "X.Y.Z" (if present)
-#   4. .claude-plugin/marketplace.json          matching plugin entry's "version"
+# A plugin version lives in two or three manifests that must stay in sync:
+#   1. skills/<skill>/.claude-plugin/plugin.json              "version": "X.Y.Z"
+#   2. skills/<skill>/.codex-plugin/plugin.json               "version": "X.Y.Z" (if present)
+#   3. .claude-plugin/marketplace.json          matching plugin entry's "version"
 #
-# This script reads the current version from SKILL.md (source of truth),
+# This script reads the current version from .claude-plugin/plugin.json,
 # computes the next version, and rewrites all manifest files in place while
-# preserving their exact formatting. It does NOT git add/commit/tag/push —
-# the dev-loop PUSH step owns that. It prints the suggested tag in the
-# repo's tag_format ({skill}-{version}, e.g. dev-loop-1.20.1).
+# preserving their exact formatting. SKILL.md frontmatter follows the Agent
+# Skills schema and must not carry release version fields. This script does
+# NOT git add/commit/tag/push — the dev-loop PUSH step owns that. It prints
+# the suggested tag in the repo's tag_format ({skill}-{version}, e.g.
+# dev-loop-1.20.1).
 #
 # Usage:
 #   scripts/bump-version.sh <skill> [patch|minor|major] [options]
@@ -86,9 +87,6 @@ else
 fi
 
 # --- read current versions ---------------------------------------------------
-read_skill_version() {
-  awk -F'"' '/^version:[[:space:]]*"/{print $2; exit}' "$SKILL_MD"
-}
 read_plugin_version() {
   awk -F'"' '/"version"[[:space:]]*:/{print $4; exit}' "$PLUGIN_JSON"
 }
@@ -103,8 +101,8 @@ read_market_version() {
     }' "$MARKETPLACE"
 }
 
-CUR="$(read_skill_version)"
-[ -n "$CUR" ] || die "could not read current version from $SKILL_MD"
+CUR="$(read_plugin_version)"
+[ -n "$CUR" ] || die "could not read current version from $PLUGIN_JSON"
 P_CUR="$(read_plugin_version)"
 M_CUR="$(read_market_version)"
 [ -n "$M_CUR" ] || die "no marketplace.json entry for plugin '$SKILL'"
@@ -115,14 +113,11 @@ else
 fi
 
 # --- pre-check: warn on pre-existing drift -----------------------------------
-if [ "$P_CUR" != "$CUR" ]; then
-  printf 'bump-version: WARNING plugin.json (%s) != SKILL.md (%s) before bump\n' "$P_CUR" "$CUR" >&2
-fi
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ] && [ "$C_CUR" != "$CUR" ]; then
-  printf 'bump-version: WARNING .codex-plugin/plugin.json (%s) != SKILL.md (%s) before bump\n' "$C_CUR" "$CUR" >&2
+  printf 'bump-version: WARNING .codex-plugin/plugin.json (%s) != .claude-plugin/plugin.json (%s) before bump\n' "$C_CUR" "$CUR" >&2
 fi
 if [ "$M_CUR" != "$CUR" ]; then
-  printf 'bump-version: WARNING marketplace.json (%s) != SKILL.md (%s) before bump\n' "$M_CUR" "$CUR" >&2
+  printf 'bump-version: WARNING marketplace.json (%s) != .claude-plugin/plugin.json (%s) before bump\n' "$M_CUR" "$CUR" >&2
 fi
 
 # --- semver validation -------------------------------------------------------
@@ -190,7 +185,7 @@ printf 'skill:    %s\n' "$SKILL"
 printf 'channel:  %s\n' "$CHANNEL"
 printf 'version:  %s -> %s\n' "$CUR" "$NEW"
 printf 'tag:      %s\n' "$TAG"
-FILES="skills/$SKILL/SKILL.md, skills/$SKILL/.claude-plugin/plugin.json"
+FILES="skills/$SKILL/.claude-plugin/plugin.json"
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
   FILES="$FILES, skills/$SKILL/.codex-plugin/plugin.json"
 fi
@@ -203,13 +198,6 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 # --- apply edits (in-place, formatting-preserving) ---------------------------
-# SKILL.md: replace the frontmatter version line.
-tmp="$(mktemp)"
-awk -v ver="$NEW" '
-  !done && /^version:[[:space:]]*"/ { print "version: \"" ver "\""; done=1; next }
-  { print }
-' "$SKILL_MD" > "$tmp" && mv "$tmp" "$SKILL_MD"
-
 # plugin.json: replace the first "version": "..." occurrence.
 tmp="$(mktemp)"
 awk -v ver="$NEW" '
@@ -244,15 +232,14 @@ awk -v name="$SKILL" -v ver="$NEW" '
 ' "$MARKETPLACE" > "$tmp" && mv "$tmp" "$MARKETPLACE"
 
 # --- verify all manifests now agree ------------------------------------------
-S_NEW="$(read_skill_version)"
 P_NEW="$(read_plugin_version)"
 M_NEW="$(read_market_version)"
 C_NEW=""
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
   C_NEW="$(read_codex_plugin_version)"
 fi
-if [ "$S_NEW" != "$NEW" ] || [ "$P_NEW" != "$NEW" ] || [ "$M_NEW" != "$NEW" ]; then
-  die "post-edit mismatch: SKILL.md=$S_NEW plugin.json=$P_NEW marketplace.json=$M_NEW (wanted $NEW)"
+if [ "$P_NEW" != "$NEW" ] || [ "$M_NEW" != "$NEW" ]; then
+  die "post-edit mismatch: plugin.json=$P_NEW marketplace.json=$M_NEW (wanted $NEW)"
 fi
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ] && [ "$C_NEW" != "$NEW" ]; then
   die "post-edit mismatch: .codex-plugin/plugin.json=$C_NEW (wanted $NEW)"

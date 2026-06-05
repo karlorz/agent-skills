@@ -1,6 +1,5 @@
 ---
 name: dev-loop
-version: "1.24.1"
 description: >
   Use this skill when the user says "run a dev cycle", "implement a feature",
   "make a code change", "start a loop", or wants automated planning, execution,
@@ -12,7 +11,6 @@ description: >
   preflight prep mode for batch readiness approval.
   v1.23.2: Codex skills/ subtree
   packaging. Pass `high` for aggressive mode.
-argument-hint: "[high] [prep [--limit N|--all|--lane work,captures,hygiene|--work slug]] [investigate [high] [topic]]"
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -626,12 +624,12 @@ prd_disciplines:
      **Resolve `critical_paths`** — parse into `CRITICAL_PATHS` dict (name →
      `{code, vault, history_pins}`). Absent or empty → `{}` (equal priority).
      Schema: see `templates/project-config.md` § Critical paths. Setup flow:
-     `setup/SKILL.md` Section G.
+     `setup-dev-loop/SKILL.md` Section G.
      **Resolve `fact_check`** — parse into `FACT_CHECK_CAPS` (`source_order`,
      `web_available` bool after validating `web_tools.primary` against installed
      MCP tools, `evidence_contract`). Absent or `enabled: false` → `{}`. Pass to
      SPEC/PLAN steps. Schema: `templates/project-config.md` § Fact-check tier.
-     Setup flow: `setup/SKILL.md` Section H.
+     Setup flow: `setup-dev-loop/SKILL.md` Section H.
      **Resolve `code_review`** — parse the `code_review` block (since v1.15.0).
      Build `CODE_REVIEW_BACKENDS` session list (order: always-on backends
      first, optional backends appended per intensity gate):
@@ -644,7 +642,7 @@ prd_disciplines:
      - If `code_review` block absent → defaults to base-only (preserves
        pre-v1.15.0 behavior).
      Schema: `templates/project-config.md` § Code review. Setup flow:
-     `setup/SKILL.md` Section M.
+     `setup-dev-loop/SKILL.md` Section M.
      **Resolve `vault_auto_commit`** — read from config, default `true`.
      Store as session variable `VAULT_AUTO_COMMIT`. When true, SAVE step 7
      commits dirty vault files; AUDIT step 13 warns if tree is dirty.
@@ -726,7 +724,7 @@ prd_disciplines:
        bump_script '{path}' not found — auto-bump will fail at PUSH step."
        Do NOT downgrade auto_bump; the script may be created before PUSH.
      Schema: `templates/project-config.md` § Release policy. Setup flow:
-     `setup/SKILL.md` Section N.
+     `setup-dev-loop/SKILL.md` Section N.
 
      If `query_vault` in
      BACKEND_CAPS, discover vault type directories by
@@ -1118,7 +1116,7 @@ fact-checked. Output specs must include a `## Sources Used` section if
   first-match-wins. Different groups are independent (matching TDD on execute
   does not suppress security-audit on execute). Schema:
   `templates/project-config.md` § Cross-cutting disciplines. Setup flow:
-  `setup/SKILL.md` Section L.
+  `setup-dev-loop/SKILL.md` Section L.
 - Changed files for fresh items: diff `release_branch`..HEAD at cycle start;
   fall back to spec's referenced files on first cycle.
 - `when: execute` → pass discipline + resolved `mode` to the execute skill.
@@ -1134,7 +1132,7 @@ fact-checked. Output specs must include a `## Sources Used` section if
   `raw/transcripts/` keyed by error-signature hash (future cycles dedup).
   `evidence_dir` MUST be in `.gitignore`. Schema:
   `templates/project-config.md` § Reactive debugging. Setup flow:
-  `setup/SKILL.md` Section K.
+  `setup-dev-loop/SKILL.md` Section K.
 
   **Without `reactive_debugging` config (legacy):** invoke the reactive
   discipline and resume — no retry cap, no evidence, no escalation.
@@ -1198,7 +1196,7 @@ documented fallback (skip step entirely, or run `e2e_fallback` if configured).
 
 **Gate:** pass → MERGE; fail → EXECUTE → SIMPLIFY → BROWSER-VERIFY.
 Schema: `templates/project-config.md` § Browser verification. Setup flow:
-`setup/SKILL.md` Section J.
+`setup-dev-loop/SKILL.md` Section J.
 
 ### 6b. MERGE — post-cycle commit + push/PR (conditional on pipeline)
 
@@ -1723,7 +1721,7 @@ instead:
    With `knowledge_layer: none`, the vault capture path is unavailable —
    outputs go to `.claude/dev-loop-work/` instead.
    Schema: `templates/project-config.md` § Idle deep-research. Setup flow:
-   `setup/SKILL.md` Section I.
+   `setup-dev-loop/SKILL.md` Section I.
 
 5. **Pick up P3 work if no P2+ items exist** (normal mode). After
    research completes, if the backlog contains only P3 items, pick the

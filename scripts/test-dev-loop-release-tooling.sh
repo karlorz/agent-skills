@@ -14,10 +14,6 @@ fail() {
 # jq is absent rather than letting a downstream jq invocation error out.
 command -v jq >/dev/null 2>&1 || fail "jq is required to run this test; install it (e.g. 'brew install jq')"
 
-read_skill_version() {
-  awk -F'"' '/^version:[[:space:]]*"/{print $2; exit}' "$1"
-}
-
 read_json_version() {
   jq -r '.version' "$1"
 }
@@ -88,6 +84,11 @@ try:
 except Exception as exc:
     raise SystemExit(f"{path}: invalid YAML: {exc}")
 
+allowed = {"allowed-tools", "compatibility", "description", "license", "metadata", "name"}
+unexpected = sorted(set(data) - allowed)
+if unexpected:
+    raise SystemExit(f"{path}: unsupported frontmatter fields: {', '.join(unexpected)}")
+
 description = str(data.get("description", ""))
 if len(description) > 1024:
     raise SystemExit(f"{path}: invalid description: exceeds maximum length of 1024 characters")
@@ -100,7 +101,6 @@ write_skill_fixture() {
   cat > "$repo/skills/$skill/SKILL.md" <<EOF
 ---
 name: $skill
-version: "$version"
 description: fixture
 ---
 EOF
@@ -153,13 +153,11 @@ EOF
   assert_contains "dry-run file list" "$dry_run" "skills/demo-codex/.codex-plugin/plugin.json"
 
   (cd "$tmp" && ./scripts/bump-version.sh demo-codex --set 1.2.4 >/dev/null)
-  assert_eq "demo-codex SKILL.md" "$(read_skill_version "$tmp/skills/demo-codex/SKILL.md")" "1.2.4"
   assert_eq "demo-codex Claude manifest" "$(read_json_version "$tmp/skills/demo-codex/.claude-plugin/plugin.json")" "1.2.4"
   assert_eq "demo-codex Codex manifest" "$(read_json_version "$tmp/skills/demo-codex/.codex-plugin/plugin.json")" "1.2.4"
   assert_eq "demo-codex marketplace" "$(read_market_version "$tmp/.claude-plugin/marketplace.json" demo-codex)" "1.2.4"
 
   (cd "$tmp" && ./scripts/bump-version.sh demo-basic --set 0.4.1 >/dev/null)
-  assert_eq "demo-basic SKILL.md" "$(read_skill_version "$tmp/skills/demo-basic/SKILL.md")" "0.4.1"
   assert_eq "demo-basic Claude manifest" "$(read_json_version "$tmp/skills/demo-basic/.claude-plugin/plugin.json")" "0.4.1"
   assert_eq "demo-basic marketplace" "$(read_market_version "$tmp/.claude-plugin/marketplace.json" demo-basic)" "0.4.1"
 }
@@ -220,10 +218,10 @@ run_dev_loop_metadata_contract_checks() {
   local setup_source setup_mirror
 
   skill_root="$ROOT/skills/dev-loop"
-  skill_version="$(read_skill_version "$skill_root/SKILL.md")"
   claude_manifest="$skill_root/.claude-plugin/plugin.json"
   codex_manifest="$skill_root/.codex-plugin/plugin.json"
   marketplace="$ROOT/.claude-plugin/marketplace.json"
+  skill_version="$(read_json_version "$claude_manifest")"
 
   assert_eq "dev-loop Claude manifest version" "$(read_json_version "$claude_manifest")" "$skill_version"
   assert_eq "dev-loop Codex manifest version" "$(read_json_version "$codex_manifest")" "$skill_version"
@@ -249,7 +247,7 @@ run_dev_loop_metadata_contract_checks() {
   assert_json_array_contains "dev-loop marketplace prep keyword" "$marketplace" '.plugins[] | select(.name == "dev-loop") | .keywords' "prep"
   assert_json_array_contains "dev-loop marketplace preflight keyword" "$marketplace" '.plugins[] | select(.name == "dev-loop") | .keywords' "preflight"
 
-  setup_source="$skill_root/setup/SKILL.md"
+  setup_source="$skill_root/setup-dev-loop/SKILL.md"
   setup_mirror="$skill_root/skills/setup-dev-loop/SKILL.md"
   [ -f "$setup_mirror" ] || fail "${setup_mirror#$ROOT/} missing setup-dev-loop Codex mirror"
   cmp -s "$setup_source" "$setup_mirror" || fail "${setup_mirror#$ROOT/} differs from ${setup_source#$ROOT/}"

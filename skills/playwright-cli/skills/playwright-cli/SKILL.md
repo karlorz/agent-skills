@@ -1,6 +1,5 @@
 ---
 name: playwright-cli
-version: "1.1.4"
 description: >
   Use this skill when the user asks to open a browser, browse a website,
   scrape a page, automate Chrome, take a screenshot, fill out a form,

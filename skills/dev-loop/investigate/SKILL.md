@@ -1,13 +1,10 @@
 ---
 name: investigate
-version: "1.0.0"
 description: >
   Companion prompt for dev-loop investigate mode. Proactively scans project
   health (code, vault, transcripts, deep-research) and queues structured,
   schema-valid findings in the vault. Invoked via /dev-loop investigate [high]
   [topic]. Requires query_vault in BACKEND_CAPS.
-type: companion-prompt
-mode: on-demand
 ---
 
 # Dev-Loop Investigate Mode
