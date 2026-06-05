@@ -257,9 +257,33 @@ run_skill_frontmatter_contract_checks() {
   while IFS= read -r skill; do
     validate_skill_frontmatter "$ROOT/$skill"
   done < <(
-    cd "$ROOT" && find skills -maxdepth 3 -type f -name SKILL.md \
+    cd "$ROOT" && find skills -maxdepth 4 -type f -name SKILL.md \
       -not -path '*/skills/*' \
       -print | sort
+  )
+}
+
+run_plugin_version_sync_contract_checks() {
+  local name version source root claude_manifest codex_manifest
+
+  while IFS=$'\t' read -r name version source; do
+    root="$ROOT/${source#./}"
+    claude_manifest="$root/.claude-plugin/plugin.json"
+    codex_manifest="$root/.codex-plugin/plugin.json"
+
+    [ -d "$root" ] || fail "$name source directory missing: $source"
+    [ -f "$claude_manifest" ] || fail "$name missing Claude plugin manifest"
+
+    assert_eq "$name Claude manifest name" "$(jq -r '.name' "$claude_manifest")" "$name"
+    assert_eq "$name Claude manifest version" "$(read_json_version "$claude_manifest")" "$version"
+
+    if [ -f "$codex_manifest" ]; then
+      assert_eq "$name Codex manifest name" "$(jq -r '.name' "$codex_manifest")" "$name"
+      assert_eq "$name Codex manifest version" "$(read_json_version "$codex_manifest")" "$version"
+    fi
+  done < <(
+    jq -r '.plugins[] | select(.source | startswith("./skills/")) | [.name, .version, .source] | @tsv' \
+      "$ROOT/.claude-plugin/marketplace.json" | sort
   )
 }
 
@@ -309,6 +333,7 @@ run_sync_script_contract_checks
 run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_metadata_contract_checks
 run_skill_frontmatter_contract_checks
+run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 
