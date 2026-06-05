@@ -1,0 +1,500 @@
+#!/usr/bin/env node
+"use strict";
+
+const { spawnSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ACTIVE_STATUSES = new Set(["planned", "in-progress", "in_progress"]);
+const DONE_STATUSES = new Set(["completed", "complete", "abandoned"]);
+const CAPTURE_KINDS = new Set(["task", "bug"]);
+const SKIPPED_CAPTURE_KINDS = new Set(["idea", "note"]);
+
+function usage() {
+  return [
+    "Usage: preflight-inventory.js --project <slug> --vault <path> --repo <path> [options]",
+    "",
+    "Options:",
+    "  --limit <n>              Candidate limit when --all is not set (default: 5)",
+    "  --all                    Return all matching candidates",
+    "  --lane <lane>            Restrict to work, captures, or hygiene; repeatable or comma-separated",
+    "  --work <slug>            Restrict to one work folder/slug",
+    "  --help                   Show this help",
+  ].join("\n");
+}
+
+function parseArgs(argv) {
+  const opts = {
+    all: false,
+    errors: [],
+    lanes: new Set(["work", "captures", "hygiene"]),
+    limit: 5,
+    project: "",
+    repo: "",
+    vault: "",
+    work: "",
+  };
+
+  let lanesWereSet = false;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--help") {
+      opts.help = true;
+      continue;
+    }
+    if (arg === "--all") {
+      opts.all = true;
+      continue;
+    }
+    if (arg === "--project" || arg === "--vault" || arg === "--repo" || arg === "--limit" || arg === "--work") {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--")) {
+        opts.errors.push(`${arg} requires a value`);
+        continue;
+      }
+      index += 1;
+      if (arg === "--limit") {
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          opts.errors.push("--limit must be a positive integer");
+        } else {
+          opts.limit = parsed;
+        }
+      } else {
+        opts[arg.slice(2)] = value;
+      }
+      continue;
+    }
+    if (arg === "--lane") {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--")) {
+        opts.errors.push("--lane requires a value");
+        continue;
+      }
+      index += 1;
+      if (!lanesWereSet) {
+        opts.lanes = new Set();
+        lanesWereSet = true;
+      }
+      for (const lane of value.split(",")) {
+        const trimmed = lane.trim();
+        if (!["work", "captures", "hygiene"].includes(trimmed)) {
+          opts.errors.push(`unsupported lane: ${trimmed}`);
+        } else {
+          opts.lanes.add(trimmed);
+        }
+      }
+      continue;
+    }
+    opts.errors.push(`unknown argument: ${arg}`);
+  }
+
+  for (const required of ["project", "vault", "repo"]) {
+    if (!opts[required]) {
+      opts.errors.push(`--${required} is required`);
+    }
+  }
+
+  opts.vault = opts.vault ? path.resolve(opts.vault) : "";
+  opts.repo = opts.repo ? path.resolve(opts.repo) : "";
+
+  return opts;
+}
+
+function readText(filePath) {
+  return fs.readFileSync(filePath, "utf8");
+}
+
+function listDirSafe(dirPath) {
+  try {
+    return fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function cleanScalar(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "";
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function parseFrontmatter(text) {
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== "---") return { data: {}, bodyStart: 0 };
+
+  const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+  if (end === -1) return { data: {}, bodyStart: 0 };
+
+  const data = {};
+  for (let index = 1; index < end; index += 1) {
+    const line = lines[index];
+    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!match) continue;
+
+    const key = match[1];
+    const rawValue = match[2];
+    if (rawValue.trim() === "") {
+      const values = [];
+      let cursor = index + 1;
+      while (cursor < end) {
+        const item = lines[cursor].match(/^\s*-\s*(.*)$/);
+        if (!item) break;
+        values.push(cleanScalar(item[1]));
+        cursor += 1;
+      }
+      if (values.length > 0) {
+        data[key] = values;
+        index = cursor - 1;
+      } else {
+        data[key] = "";
+      }
+    } else {
+      data[key] = cleanScalar(rawValue);
+    }
+  }
+
+  return { data, bodyStart: end + 1 };
+}
+
+function sha256(filePath) {
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function relPath(vault, filePath) {
+  return path.relative(vault, filePath).split(path.sep).join("/");
+}
+
+function runSkillwikiValidate(filePath) {
+  const result = spawnSync("skillwiki", ["validate", filePath], { encoding: "utf8" });
+  const stdout = result.stdout ? result.stdout.trim() : "";
+  const stderr = result.stderr ? result.stderr.trim() : "";
+
+  if (result.error) {
+    return {
+      available: false,
+      code: null,
+      errors: [result.error.message],
+      raw: result.error.message,
+      schema: null,
+      valid: false,
+    };
+  }
+
+  let parsed = null;
+  if (stdout.startsWith("{")) {
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  return {
+    available: true,
+    code: result.status,
+    errors: parsed?.data?.errors ?? [],
+    raw: stdout || stderr,
+    schema: parsed?.data?.schema ?? null,
+    valid: parsed?.data?.valid === true,
+  };
+}
+
+function gitMatches(repo, terms) {
+  const matches = [];
+  const seen = new Set();
+
+  for (const term of terms.filter(Boolean)) {
+    if (seen.has(term)) continue;
+    seen.add(term);
+
+    const result = spawnSync("git", ["-C", repo, "log", "--oneline", "-30", "--grep", term], {
+      encoding: "utf8",
+    });
+    if (result.status !== 0 || !result.stdout.trim()) continue;
+
+    for (const line of result.stdout.trim().split(/\r?\n/)) {
+      matches.push(line);
+    }
+  }
+
+  return [...new Set(matches)];
+}
+
+function candidateBase(opts, fields) {
+  const absolutePath = fields.absolute_path ?? "";
+  const frontmatter = fields.frontmatter ?? {};
+  const title = frontmatter.title || fields.id;
+
+  return {
+    id: fields.id,
+    lane: fields.lane,
+    path: absolutePath ? relPath(opts.vault, absolutePath) : fields.path,
+    absolute_path: absolutePath,
+    kind: frontmatter.kind || fields.kind || "",
+    lanes: fields.lanes ?? [fields.lane],
+    priority: frontmatter.priority || fields.priority || "",
+    project: frontmatter.project || `[[${opts.project}]]`,
+    repairable: fields.repairable === true,
+    sha256: absolutePath && fs.existsSync(absolutePath) ? sha256(absolutePath) : "",
+    status: frontmatter.status || fields.status || "",
+    title,
+    valid: fields.valid === true,
+    validation: fields.validation ?? null,
+    findings: fields.findings ?? [],
+    git_matches: [],
+  };
+}
+
+function workTerms(candidate) {
+  return [...new Set([candidate.id, candidate.title, candidate.name].filter(Boolean))];
+}
+
+function readWorkItems(opts) {
+  const workRoot = path.join(opts.vault, "projects", opts.project, "work");
+  const candidates = [];
+  const skipped = [];
+  const activeCloses = new Set();
+
+  for (const entry of listDirSafe(workRoot).filter((item) => item.isDirectory())) {
+    const id = entry.name;
+    const dirPath = path.join(workRoot, id);
+    const specPath = path.join(dirPath, "spec.md");
+    const planPath = path.join(dirPath, "plan.md");
+    const hasSpec = fs.existsSync(specPath);
+    const hasPlan = fs.existsSync(planPath);
+    const primaryPath = hasSpec ? specPath : hasPlan ? planPath : "";
+    const findings = [];
+
+    if (!hasSpec) findings.push("missing_spec");
+    if (!hasPlan) findings.push("missing_plan");
+
+    if (!primaryPath) {
+      candidates.push(candidateBase(opts, {
+        id,
+        lane: "hygiene",
+        path: relPath(opts.vault, dirPath),
+        status: "",
+        valid: false,
+        repairable: true,
+        findings: ["missing_spec", "missing_plan"],
+      }));
+      continue;
+    }
+
+    const parsed = parseFrontmatter(readText(primaryPath));
+    const frontmatter = parsed.data;
+    const status = frontmatter.status || "";
+    const validation = runSkillwikiValidate(primaryPath);
+    const itemFindings = [...findings];
+    if (status === "in_progress") itemFindings.push("legacy_status_in_progress");
+    if (validation.available !== false && !validation.valid) itemFindings.push("validation_failed");
+    const common = {
+      absolute_path: primaryPath,
+      frontmatter,
+      id,
+      validation,
+      findings: itemFindings,
+    };
+
+    for (const closed of Array.isArray(frontmatter.closes) ? frontmatter.closes : []) {
+      if (closed) activeCloses.add(closed);
+    }
+
+    if (ACTIVE_STATUSES.has(status)) {
+      const hasRepairableFindings = itemFindings.length > 0;
+      candidates.push(candidateBase(opts, {
+        ...common,
+        lane: "work",
+        lanes: hasRepairableFindings ? ["work", "hygiene"] : ["work"],
+        repairable: hasRepairableFindings,
+        valid: validation.valid && !hasRepairableFindings,
+      }));
+      continue;
+    }
+
+    if (status === "proposed") {
+      candidates.push(candidateBase(opts, {
+        ...common,
+        lane: "work",
+        repairable: true,
+        valid: false,
+        findings: [...findings, "legacy_status_proposed"],
+      }));
+      continue;
+    }
+
+    if (DONE_STATUSES.has(status)) {
+      skipped.push({
+        id,
+        lane: "work",
+        path: relPath(opts.vault, primaryPath),
+        reason: status === "abandoned" ? "abandoned" : "completed",
+        status,
+      });
+      continue;
+    }
+
+    candidates.push(candidateBase(opts, {
+      ...common,
+      lane: "hygiene",
+      repairable: true,
+      valid: false,
+      findings: [...findings, status ? `unsupported_status:${status}` : "missing_status"],
+    }));
+  }
+
+  return { activeCloses, candidates, skipped };
+}
+
+function readCaptures(opts, activeCloses) {
+  const transcriptRoot = path.join(opts.vault, "raw", "transcripts");
+  const candidates = [];
+  const skipped = [];
+
+  for (const entry of listDirSafe(transcriptRoot).filter((item) => item.isFile() && item.name.endsWith(".md"))) {
+    const filePath = path.join(transcriptRoot, entry.name);
+    const parsed = parseFrontmatter(readText(filePath));
+    const frontmatter = parsed.data;
+    const kind = frontmatter.kind || "";
+    const project = frontmatter.project || "";
+    const relativePath = relPath(opts.vault, filePath);
+
+    if (activeCloses.has(relativePath)) {
+      skipped.push({ id: entry.name, lane: "captures", path: relativePath, reason: "already_claimed" });
+      continue;
+    }
+
+    if (!CAPTURE_KINDS.has(kind)) {
+      skipped.push({
+        id: entry.name,
+        kind,
+        lane: "captures",
+        path: relativePath,
+        reason: SKIPPED_CAPTURE_KINDS.has(kind) ? "non_executable_capture_kind" : "unsupported_capture_kind",
+      });
+      continue;
+    }
+
+    if (project !== `[[${opts.project}]]`) {
+      skipped.push({
+        id: entry.name,
+        kind,
+        lane: "captures",
+        path: relativePath,
+        project,
+        reason: project ? "project_mismatch" : "missing_project",
+      });
+      continue;
+    }
+
+    candidates.push(candidateBase(opts, {
+      absolute_path: filePath,
+      frontmatter,
+      id: entry.name.replace(/\.md$/, ""),
+      lane: "captures",
+      kind,
+      repairable: true,
+      valid: true,
+    }));
+  }
+
+  return { candidates, skipped };
+}
+
+function score(candidate) {
+  const status = candidate.status;
+  const priority = candidate.priority;
+  if (candidate.lane === "work" && (status === "in-progress" || status === "in_progress")) return 10;
+  if (candidate.lane === "work" && priority === "high" && status === "planned") return 20;
+  if (candidate.findings.length > 0 && candidate.lane === "work") return 30;
+  if (candidate.lane === "captures") return 40;
+  if (candidate.lane === "work" && priority === "medium" && status === "planned") return 50;
+  if (candidate.lane === "work" && priority === "low" && status === "planned") return 60;
+  if (candidate.lane === "hygiene") return 70;
+  return 80;
+}
+
+function filterAndSelect(opts, candidates) {
+  const filtered = candidates
+    .map((candidate) => {
+      if (opts.lanes.has(candidate.lane)) return candidate;
+      const matchingLane = candidate.lanes.find((lane) => opts.lanes.has(lane));
+      return matchingLane ? { ...candidate, lane: matchingLane } : null;
+    })
+    .filter(Boolean)
+    .filter((candidate) => {
+      if (!opts.work) return true;
+      const target = opts.work.replace(/\/$/, "");
+      return candidate.id === target || candidate.path.includes(`/work/${target}/`) || candidate.path.endsWith(`/work/${target}`);
+    })
+    .sort((a, b) => {
+      const scoreDiff = score(a) - score(b);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.id.localeCompare(b.id);
+    });
+
+  const selected = opts.all ? filtered : filtered.slice(0, opts.limit);
+  for (const candidate of selected) {
+    candidate.git_matches = gitMatches(opts.repo, workTerms(candidate));
+  }
+  return { selected, total: filtered.length };
+}
+
+function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  if (opts.help) {
+    process.stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  const output = {
+    candidates: [],
+    errors: [...opts.errors],
+    project: opts.project,
+    repo: opts.repo,
+    scope: {
+      all: opts.all,
+      lanes: [...opts.lanes],
+      limit: opts.limit,
+      work: opts.work || null,
+    },
+    skipped: [],
+    totals: {
+      selected: 0,
+      unfiltered_candidates: 0,
+      filtered_candidates: 0,
+      skipped: 0,
+    },
+    vault: opts.vault,
+  };
+
+  if (opts.errors.length > 0) {
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    return 2;
+  }
+
+  const work = readWorkItems(opts);
+  const captures = readCaptures(opts, work.activeCloses);
+  const allCandidates = [...work.candidates, ...captures.candidates];
+  const { selected, total } = filterAndSelect(opts, allCandidates);
+
+  output.candidates = selected;
+  output.skipped = [...work.skipped, ...captures.skipped];
+  output.totals = {
+    selected: selected.length,
+    unfiltered_candidates: allCandidates.length,
+    filtered_candidates: total,
+    skipped: output.skipped.length,
+  };
+
+  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  return 0;
+}
+
+process.exitCode = main();

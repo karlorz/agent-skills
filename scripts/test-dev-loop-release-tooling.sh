@@ -185,6 +185,26 @@ run_sync_script_contract_checks() {
 
   assert_contains "sync-plugin-cache includes dependencies manifest" "$sync_script" 'dependencies.yaml'
   assert_contains "sync-plugin-cache syncs Codex skills subtree" "$sync_script" 'Sync Codex skills subtree'
+  assert_contains "sync-plugin-cache syncs scripts directory" "$sync_script" 'Sync scripts directory'
+  assert_contains "sync-plugin-cache copies scripts recursively" "$sync_script" 'scripts/.'
+}
+
+run_dev_loop_prep_prompt_contract_checks() {
+  local prompt template
+  prompt="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
+  template="$(cat "$ROOT/skills/dev-loop/templates/project-config.md")"
+
+  assert_contains "dev-loop parses prep mode" "$prompt" 'MODE = prep'
+  assert_contains "dev-loop dispatches prep mode" "$prompt" '**`prep`**'
+  assert_contains "dev-loop references preflight inventory helper" "$prompt" 'preflight-inventory.js'
+  assert_contains "dev-loop resolves preflight policy" "$prompt" 'PREFLIGHT_POLICY'
+  assert_contains "dev-loop gates automation readiness" "$prompt" 'automation_ready'
+  assert_contains "dev-loop reports readiness skips" "$prompt" 'Automation Readiness Skips'
+  assert_contains "dev-loop prep never starts goal" "$prompt" 'Do not start `/goal`'
+
+  assert_contains "project config includes preflight block" "$template" 'preflight:'
+  assert_contains "project config includes unattended skip behavior" "$template" 'unattended_not_ready_behavior: skip'
+  assert_contains "project config includes readiness state" "$template" 'preflight_state: ready'
 }
 
 run_skill_frontmatter_contract_checks() {
@@ -240,6 +260,7 @@ run_codex_skill_mirror_contract_checks() {
 run_bump_version_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
+run_dev_loop_prep_prompt_contract_checks
 run_skill_frontmatter_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks

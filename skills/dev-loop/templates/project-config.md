@@ -349,6 +349,125 @@ Omit the section to use defaults (max_items: 5, topic_seeds from
 idle_deep_research). Investigate mode itself is always available when
 `query_vault` in BACKEND_CAPS — the config section only controls tuning.
 
+## Preflight prep mode (optional)
+
+Human-attended readiness mode. When invoked via `/dev-loop prep`, the loop
+inventories current project work, dry-runs selection, batches all questions
+that would otherwise interrupt implementation, and writes only approved
+readiness metadata plus managed body sections. It does not execute code
+changes and does not start `/goal`.
+
+```yaml
+preflight:
+  enabled: true
+  default_limit: 5
+  default_lanes: [work, captures, hygiene]
+  require_approved_spec_and_plan: true
+  unattended_not_ready_behavior: skip
+  defaults:
+    compatibility_policy: "Platform compatibility changes are additive unless explicitly scoped otherwise."
+```
+
+**Fields:**
+- `enabled` (bool, default `true`): Allows `/dev-loop prep`. Set false only
+  when a project intentionally manages readiness outside dev-loop.
+- `default_limit` (int, default 5): Small batch size for attended review.
+  Use `/dev-loop prep --all` for full-project sweeps.
+- `default_lanes` (list, default `[work, captures, hygiene]`): Inventory
+  lanes scanned by default. Override per invocation with `--lane`.
+- `require_approved_spec_and_plan` (bool, default true): Marks items
+  executable only after both the spec and plan are approved.
+- `unattended_not_ready_behavior` (`skip`, default): In `/goal` or other
+  unattended contexts, not-ready work is skipped and reported instead of
+  prompting a human.
+- `defaults` (map, optional): Stable project-level answers that preflight
+  can recommend in the batch question manifest. Promote defaults only after
+  explicit human approval.
+
+At REFRESH, dev-loop resolves this block into `PREFLIGHT_POLICY`.
+`/dev-loop prep` applies the policy when constructing inventory commands,
+question manifests, readiness writes, and suggested `/goal` text.
+
+### Readiness metadata
+
+Preflight stores fast gates in work-item frontmatter and durable rationale
+in managed body sections. Unknown frontmatter fields are advisory and must
+be backed by body text so future schema rewrites can repair them.
+
+```yaml
+automation_ready: true
+human_questions_resolved: true
+spec_preflight_approved: true
+plan_preflight_approved: true
+preflight_state: ready
+last_preflight: 2026-06-05
+```
+
+Recommended managed sections:
+- `## Preflight Approval` - approval timestamp, approved defaults, deferred
+  questions, and human overrides.
+- `## Automation Readiness` - why the item is or is not safe for unattended
+  execution.
+- `## Open Questions` - any unresolved decisions that must block `/goal`
+  pickup.
+
+Common `preflight_state` values:
+
+```yaml
+# Ready for unattended /goal pickup.
+automation_ready: true
+human_questions_resolved: true
+spec_preflight_approved: true
+plan_preflight_approved: true
+preflight_state: ready
+
+# A human answer is still required.
+automation_ready: false
+human_questions_resolved: false
+spec_preflight_approved: true
+plan_preflight_approved: false
+preflight_state: needs_human
+
+# The user deferred this item from the approved batch.
+automation_ready: false
+human_questions_resolved: true
+spec_preflight_approved: false
+plan_preflight_approved: false
+preflight_state: deferred
+
+# Disk/git evidence suggests the item may already be obsolete or shipped.
+automation_ready: false
+human_questions_resolved: true
+spec_preflight_approved: false
+plan_preflight_approved: false
+preflight_state: stale_or_done
+
+# The item needs schema or structural repair before it can be approved.
+automation_ready: false
+human_questions_resolved: true
+spec_preflight_approved: false
+plan_preflight_approved: false
+preflight_state: invalid
+```
+
+### Runtime behavior
+
+`/dev-loop prep` calls `scripts/preflight-inventory.js` with the resolved
+project slug, vault path, repo path, `default_limit`, and selected lanes. It
+then verifies selected items against disk/git state, synthesizes one batch
+question manifest with recommended defaults, asks for approval in the main
+session, writes only approved items, validates touched specs/plans, and writes
+a report under `projects/{slug}/requirements/`.
+
+Invocation examples:
+```
+/dev-loop prep
+/dev-loop prep --limit 10
+/dev-loop prep --lane work --lane captures
+/dev-loop prep --work 2026-06-05-dev-loop-preflight-prep-mode
+/dev-loop prep --all
+```
+
 ## Browser verification (optional)
 
 Automated browser verification gate for projects with browser-facing code.

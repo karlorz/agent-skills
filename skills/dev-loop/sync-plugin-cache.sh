@@ -57,6 +57,14 @@ if [[ -d "${SOURCE_DIR}/agents" ]]; then
   echo "  ✓ agents/"
 fi
 
+# Sync scripts directory
+if [[ -d "${SOURCE_DIR}/scripts" ]]; then
+  rm -rf "${CACHE_DIR}/scripts"
+  mkdir -p "${CACHE_DIR}/scripts"
+  cp -R "${SOURCE_DIR}/scripts/." "${CACHE_DIR}/scripts/"
+  echo "  ✓ scripts/"
+fi
+
 # Sync templates directory
 if [[ -d "${SOURCE_DIR}/templates" ]]; then
   mkdir -p "${CACHE_DIR}/templates"

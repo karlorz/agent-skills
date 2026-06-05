@@ -1,15 +1,16 @@
 ---
 name: dev-loop
-version: "1.23.3"
+version: "1.24.0"
 description: >
   Use this skill when the user says "run a dev cycle", "implement a feature",
   "make a code change", "start a loop", or wants automated planning, execution,
   code review, and knowledge capture. Also use for "investigate", "find work",
-  or "what needs doing" to proactively queue structured findings. Supports /goal
-  compatibility, Codex CLI/App, investigate mode, peer-aware vault sync,
-  multi-backend code review, and auto-archive. v1.23.2: Codex skills/ subtree
+  "what needs doing", or "prep" to proactively queue or prepare structured
+  findings. Supports /goal compatibility, Codex CLI/App, preflight prep mode,
+  investigate mode, peer-aware vault sync, multi-backend code review, and
+  auto-archive. v1.23.2: Codex skills/ subtree
   packaging. Pass `high` for aggressive mode.
-argument-hint: "[high] [investigate [high] [topic]]"
+argument-hint: "[high] [prep [--limit N|--all|--lane work,captures,hygiene|--work slug]] [investigate [high] [topic]]"
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -40,19 +41,26 @@ autodiscovers conventions or asks the user to bootstrap one.
 
 ## Mode
 
-Parse arguments for the keyword `investigate` (case-insensitive). If present,
-set **MODE = investigate**; otherwise **MODE = core** (default).
+Parse arguments for the keywords `prep` and `investigate` (case-insensitive).
+If `prep` is present, set **MODE = prep**. Else if `investigate` is present,
+set **MODE = investigate**. Otherwise set **MODE = core** (default).
 
 ### Argument Parsing Order
 
-1. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
-2. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
-3. Remaining args → `INVESTIGATE_TOPIC` (only meaningful when MODE = investigate).
+1. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
+   Remaining non-`high` args are preserved as `PREP_ARGS`.
+2. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
+3. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
+4. Remaining args → `PREP_ARGS` when MODE = prep; otherwise
+   `INVESTIGATE_TOPIC` (only meaningful when MODE = investigate).
 
 Examples:
 ```
 /dev-loop                                → MODE=core, INTENSITY=normal
 /dev-loop high                           → MODE=core, INTENSITY=high
+/dev-loop prep                           → MODE=prep, INTENSITY=normal
+/dev-loop prep --limit 10                → MODE=prep, PREP_ARGS="--limit 10"
+/dev-loop prep --lane work --work foo    → MODE=prep, PREP_ARGS="--lane work --work foo"
 /dev-loop investigate                    → MODE=investigate, INTENSITY=normal
 /dev-loop investigate high               → MODE=investigate, INTENSITY=high
 /dev-loop investigate "plugin SDK"       → MODE=investigate, INTENSITY=normal, TOPIC="plugin SDK"
@@ -64,6 +72,10 @@ Examples:
 After REFRESH (step 0), branch on MODE:
 
 - **`core`** → run The Loop (steps 1–14) or IDLE DISCOVERY as documented below.
+- **`prep`** → gate on `query_vault` in BACKEND_CAPS. If absent, refuse:
+  "Prep mode requires a vault — run `/setup-dev-loop` to configure one."
+  If present and `PREFLIGHT_POLICY.enabled != false`, run the Preflight Prep
+  Pipeline below. If disabled, refuse with the config path to update.
 - **`investigate`** → gate on `query_vault` in BACKEND_CAPS. If absent,
   refuse: "Investigate mode requires a vault — run `/setup-dev-loop` to
   configure one." If present, run the investigate pipeline from
@@ -94,6 +106,122 @@ See `investigate/SKILL.md` for full step details. Key properties:
 - Dedup: slug-based + status-aware + archive check
 - Cap: `max_items` (normal) or `max_items * 2` (high). Default 5/10.
 - Vault required (ADR: `investigate-mode-vault-required`)
+
+### Preflight Prep Pipeline
+
+`/dev-loop prep` is a human-attended pre-implementation workflow. It
+discovers current project work, dry-runs what an autonomous cycle would
+try to pick up, batches all human questions, and writes readiness state only
+after explicit approval. It never implements code and never starts `/goal`.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ PREFLIGHT PREP (when MODE = prep)                        │
+│  P0. REFRESH    Load config and PREFLIGHT_POLICY          │
+│  P1. INVENTORY  scripts/preflight-inventory.js            │
+│  P2. VERIFY     Cross-check selected items on disk/git    │
+│  P3. QUESTIONS  Build one batch manifest + defaults       │
+│  P4. APPROVE    AskUserQuestion in main session           │
+│  P5. WRITE      Approved metadata/managed sections only   │
+│  P6. VALIDATE   skillwiki validate touched specs/plans    │
+│  P7. REPORT     projects/{slug}/requirements/ report      │
+│  P8. SUGGEST    Suggested /goal text; do not start it     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**P0. REFRESH config.** Reuse normal REFRESH state. Require
+`query_vault` in BACKEND_CAPS. Resolve `preflight` config into
+`PREFLIGHT_POLICY` with defaults:
+- `enabled: true`
+- `default_limit: 5`
+- `default_lanes: [work, captures, hygiene]`
+- `require_approved_spec_and_plan: true`
+- `unattended_not_ready_behavior: skip`
+- `defaults: {}`
+
+**P1. INVENTORY.** Run the deterministic helper from the skill directory:
+```
+node scripts/preflight-inventory.js \
+  --project <slug> \
+  --vault <vault> \
+  --repo <cwd> \
+  <PREP_ARGS or defaults from PREFLIGHT_POLICY>
+```
+
+Supported prep args: `--limit <n>`, `--all`, `--lane <work|captures|hygiene>`
+(repeatable or comma-separated), and `--work <slug>`. Default to a small
+prioritized batch. The helper returns three lanes:
+- `work`: active work items (`planned`, `in-progress`) plus repairable
+  legacy `proposed`/schema issues.
+- `captures`: unclaimed executable raw transcripts (`kind: task|bug`).
+- `hygiene`: structural/staleness findings such as missing spec/plan or
+  unsupported status values.
+
+**P2. VERIFY selected candidates.** Before asking or writing, verify every
+selected candidate against current disk and git state:
+- Re-read the selected `spec.md`/`plan.md` or raw transcript path.
+- Compare the current sha256 to inventory output; if changed, mark the
+  item stale and exclude it from writes until re-inventoried.
+- Re-run `skillwiki validate` on selected specs/plans.
+- Re-check lightweight git history matches surfaced by inventory to avoid
+  preparing work that has already shipped.
+
+**P3. SYNTHESIZE question manifest.** Build one batch manifest, grouped by
+candidate, with recommended defaults first. Include:
+- Scope, acceptance, compatibility, and execution-risk questions that would
+  otherwise interrupt SPEC/PLAN/EXECUTE.
+- Any repair actions required for legacy `proposed`, `in_progress`,
+  missing spec/plan, missing status, or stale git evidence.
+- Explicit actions per candidate: `approve`, `override`, or `defer`.
+- Project-level defaults from `PREFLIGHT_POLICY.defaults`, clearly labelled
+  as recommendations. Promote new stable answers into config only after
+  separate explicit approval.
+
+**P4. ASK batch approval.** Ask in the main session only. Do not spawn a
+subagent for approval; AskUserQuestion is interactive and must remain in
+the parent session. One approval can cover the whole manifest, but partial
+approval is first-class: approved candidates proceed to P5, deferred
+candidates keep or receive `preflight_state: needs_human|deferred`.
+
+**P5. WRITE approved readiness state.** No writes are allowed before P4
+approval. After approval, write only selected approved items and only:
+- Managed frontmatter fields:
+  `automation_ready`, `human_questions_resolved`,
+  `spec_preflight_approved`, `plan_preflight_approved`,
+  `preflight_state`, `last_preflight`.
+- Managed body sections: `## Preflight Approval`,
+  `## Automation Readiness`, and `## Open Questions`.
+- Spec/plan refinements that directly encode approved execution-critical
+  answers. Batch-level summaries belong under `projects/{slug}/requirements/`,
+  not inside every work item.
+
+Use a vault lock when `VAULT_SYNC_PEER_AWARE` is true. Re-read and hash each
+target immediately before writing; if the hash differs from P2, skip that
+target and report it as stale. Preserve unrelated frontmatter/body content.
+
+**P6. VALIDATE touched specs/plans.** Run `skillwiki validate` for every
+touched `spec.md` and `plan.md`. If validation fails, repair only the
+managed edits when the fix is obvious; otherwise leave the item not-ready
+and report the blocker. Do not mark an invalid item executable.
+
+**P7. REPORT.** Write a batch report under:
+`projects/{slug}/requirements/YYYY-MM-DD-dev-loop-preflight-prep.md`.
+Include inventory scope, approved items, deferred items, questions answered,
+defaults used, validation results, stale/hash conflicts, and remaining
+automation readiness skips. This report is the project-level audit trail.
+
+**P8. SUGGEST /goal.** Emit a suggested `/goal` command for the approved
+ready batch, for example:
+```
+/goal "Run /dev-loop until all automation-ready planned work for project <slug> is completed, tests pass, and the vault is clean."
+```
+Do not start `/goal`; the user owns that lifecycle.
+
+**Write safety contract:** inventory and validation are deterministic
+tooling; synthesis and approval are prompt-driven. The preflight write phase
+must satisfy all of these gates: explicit approval, selected items only,
+managed frontmatter whitelist, managed body sections, hash check, vault lock
+when available, and validation after write.
 
 ## Intensity Level
 
@@ -302,6 +430,25 @@ workflows continue unchanged.
 Steps that need interactive input check for `non_interactive_goal` before
 calling AskUserQuestion. If present, use the documented fallback (skip, or use
 config defaults).
+
+**Automation readiness gate (unattended contexts):** When
+`non_interactive_goal` is present, CORE must only select work items that are
+explicitly marked ready for unattended execution. Required frontmatter:
+
+```yaml
+automation_ready: true
+human_questions_resolved: true
+spec_preflight_approved: true
+plan_preflight_approved: true
+preflight_state: ready
+```
+
+Work items missing any field, or carrying any false/non-ready value, are not
+claimable in unattended mode. Skip them, continue scanning for ready work, and
+emit an `Automation Readiness Skips` summary with item slugs and missing
+fields. Do not stop the cycle just because not-ready work exists. The
+configured `PREFLIGHT_POLICY.unattended_not_ready_behavior` defaults to
+`skip`; any future behavior must remain non-interactive under `/goal`.
 
 ### Pipeline Templates
 
@@ -530,6 +677,19 @@ prd_disciplines:
      - Investigate mode itself is always available when `query_vault` in
        BACKEND_CAPS — the config section only controls tuning parameters.
 
+     **Resolve `preflight`** — parse the `preflight` block from config.
+     Store as `PREFLIGHT_POLICY`. If the block is absent, use:
+     `enabled: true`, `default_limit: 5`,
+     `default_lanes: [work, captures, hygiene]`,
+     `require_approved_spec_and_plan: true`,
+     `unattended_not_ready_behavior: skip`, and `defaults: {}`.
+     Validate `default_limit` is a positive integer and `default_lanes`
+     only contains `work`, `captures`, and `hygiene`; fall back to defaults
+     with a warning for invalid values. `PREFLIGHT_POLICY` controls
+     `/dev-loop prep` inventory defaults and unattended readiness skip
+     behavior, but prep mode itself still requires `query_vault` in
+     BACKEND_CAPS.
+
      **Resolve `release_policy`** — parse the `release_policy` block from config.
      - If block is absent → store `RELEASE_POLICY = None`. PUSH step uses
        pre-1.19.0 behavior (no auto-bump; user/upstream bumps manifests
@@ -716,6 +876,23 @@ scan for uncited raw articles that have no downstream concept page
 citations. If found, treat them as claimable work items alongside any
 QUERY results. Prioritize: uncited raw > other work.
 
+**Automation readiness filter (mandatory when `non_interactive_goal` in
+ORCHESTRATION_CAPS):** When building the claimable work set, include only
+items with all readiness gates set:
+`automation_ready: true`, `human_questions_resolved: true`,
+`spec_preflight_approved: true`, `plan_preflight_approved: true`, and
+`preflight_state: ready`. Skip every other planned/in-progress candidate and
+continue looking for ready work. Emit an `Automation Readiness Skips` block
+listing skipped slugs and missing/non-ready fields. If no ready work remains,
+fall through to the normal idle/goal continuation reporting instead of asking
+the user a question.
+
+When `non_interactive_goal` is absent, preserve attended fallback behavior:
+warn before selecting an item without readiness metadata, then allow the
+existing GRILL/SPEC/PLAN interactive path. Include a recommendation to run
+`/dev-loop prep <project>` for future batches instead of resolving questions
+one at a time.
+
 **If `query_vault` not in BACKEND_CAPS:**
 Use git-based context: `git log --oneline -20` for recent activity,
 `git diff --stat HEAD~5` for recent changes, and `grep -r` across the
@@ -839,7 +1016,8 @@ This override exists because interactive skills (AskUserQuestion, grill-me)
 are counterproductive under unattended /goal evaluators — a human may not be
 monitoring, and the evaluator loop will keep triggering turns regardless of
 interview state.
-The recommended pattern: run `/grill-me` BEFORE setting `/goal`.
+The recommended pattern: run `/grill-me` and `/dev-loop prep` BEFORE setting
+`/goal`, so questions are answered in one attended batch.
 
 **Trigger decision (standard, when goal_override does not apply):**
 - `trigger: never` → skip. Fully automated mode.
@@ -1253,7 +1431,10 @@ one-line summary of the commit in the retro.
 #### Goal-context continuation hint (v1.22.0, when `goal_context` in ORCHESTRATION_CAPS)
 
 After logging the retro, query for remaining `status: planned` work
-items in the current project:
+items in the current project. When `non_interactive_goal` is present,
+count only items that pass the automation readiness gate
+(`automation_ready`, `human_questions_resolved`, both preflight approval
+fields, and `preflight_state: ready`) as remaining executable work:
 
 - If `query_vault` in BACKEND_CAPS: query
   `{vault}/projects/{slug}/work/` for items with `status: planned`.
@@ -1262,10 +1443,13 @@ items in the current project:
   YAML header.
 
 Emit a one-line continuation hint in the transcript:
-- If remaining > 0: "Goal progress: {N} planned items remaining for
+- If remaining > 0: "Goal progress: {N} automation-ready planned items remaining for
   project {slug} — /goal evaluator will trigger next cycle."
-- If remaining == 0: "Goal progress: All planned items completed for
+- If remaining == 0 and no readiness skips exist: "Goal progress: All planned items completed for
   project {slug} — /goal condition may be satisfied."
+- If remaining == 0 but readiness skips exist: "Goal progress: No automation-ready
+  planned items remain for project {slug}; {N} planned items need `/dev-loop prep`
+  before autonomous execution can continue."
 
 This hint is critical because /goal continuation decisions are primarily
 made from the conversation transcript (Haiku on Claude Code, continuation.md
@@ -1934,28 +2118,39 @@ another dev-loop cycle.
   └─ evaluator check: YES → goal clears
 ```
 
-### Recommended Pipeline: grill-me → /goal → dev-loop
+### Recommended Pipeline: grill-me → dev-loop prep → /goal → dev-loop
 
 **Phase 1: CLARIFY** (human-attended, ~5-10 min)
 1. `/grill-me` — adaptive interview to sharpen requirements
 2. Write requirements to vault work items (`status: planned`)
 
-**Phase 2: CONFIGURE** (human-attended, ~2 min)
-3. Verify dev-loop config (`.claude/dev-loop.config.md`).
-4. Set goal condition:
+**Phase 2: PREFLIGHT** (human-attended, batch approval)
+3. `/dev-loop prep` — inventory active work, captures, and hygiene findings;
+   batch all questions with recommended defaults; approve the items safe for
+   unattended execution.
+4. Verify approved items carry readiness gates:
+   `automation_ready: true`, `human_questions_resolved: true`,
+   `spec_preflight_approved: true`, `plan_preflight_approved: true`,
+   and `preflight_state: ready`.
+
+**Phase 3: CONFIGURE** (human-attended, ~2 min)
+5. Verify dev-loop config (`.claude/dev-loop.config.md`).
+6. Set goal condition:
    `/goal "All status:planned items for project <slug> completed,
    all tests pass, vault clean"`
 
-**Phase 3: EXECUTE** (autonomous, hours-long)
-5. /goal evaluator triggers turn → dev-loop REFRESH detects goal
-   context (`ORCHESTRATION_CAPS`) → picks next planned item → drives
-   full pipeline → RETRO logs remaining items → evaluator re-checks
-   → repeats until all items completed.
+**Phase 4: EXECUTE** (autonomous, hours-long)
+7. /goal evaluator triggers turn → dev-loop REFRESH detects goal
+   context (`ORCHESTRATION_CAPS`) → picks next automation-ready planned
+   item → drives full pipeline → RETRO logs remaining ready items and
+   readiness skips → evaluator re-checks → repeats until all ready items
+   complete or unprepared items require another attended prep pass.
 
-**Key rule:** Interactive work (grill-me, AskUserQuestion) happens
-BEFORE `/goal`. Autonomous work (dev-loop pipeline) happens INSIDE
-`/goal`. AskUserQuestion is counterproductive under /goal evaluators —
-the default assumption is unattended execution.
+**Key rule:** Interactive work (grill-me, AskUserQuestion, `/dev-loop prep`)
+happens BEFORE `/goal`. Autonomous work (dev-loop pipeline) happens INSIDE
+`/goal`. AskUserQuestion is counterproductive under /goal evaluators — the
+default assumption is unattended execution. `/dev-loop prep` may suggest a
+goal command, but it must not start or manage `/goal`.
 
 ### Platform Behavior
 
