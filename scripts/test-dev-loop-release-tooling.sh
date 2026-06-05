@@ -207,6 +207,54 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "project config includes readiness state" "$template" 'preflight_state: ready'
 }
 
+assert_json_array_contains() {
+  local label="$1" file="$2" jq_filter="$3" expected="$4"
+  if ! jq -e --arg expected "$expected" "$jq_filter | index(\$expected) != null" "$file" >/dev/null; then
+    fail "$label: missing '$expected'"
+  fi
+}
+
+run_dev_loop_metadata_contract_checks() {
+  local skill_root skill_version claude_manifest codex_manifest marketplace
+  local claude_description codex_description marketplace_description
+  local setup_source setup_mirror
+
+  skill_root="$ROOT/skills/dev-loop"
+  skill_version="$(read_skill_version "$skill_root/SKILL.md")"
+  claude_manifest="$skill_root/.claude-plugin/plugin.json"
+  codex_manifest="$skill_root/.codex-plugin/plugin.json"
+  marketplace="$ROOT/.claude-plugin/marketplace.json"
+
+  assert_eq "dev-loop Claude manifest version" "$(read_json_version "$claude_manifest")" "$skill_version"
+  assert_eq "dev-loop Codex manifest version" "$(read_json_version "$codex_manifest")" "$skill_version"
+  assert_eq "dev-loop marketplace version" "$(read_market_version "$marketplace" dev-loop)" "$skill_version"
+
+  claude_description="$(jq -r '.description' "$claude_manifest")"
+  codex_description="$(jq -r '.description' "$codex_manifest")"
+  marketplace_description="$(jq -r '.plugins[] | select(.name == "dev-loop") | .description' "$marketplace")"
+
+  assert_contains "dev-loop SKILL.md current version headline" "$(cat "$skill_root/SKILL.md")" "v${skill_version}:"
+  assert_contains "dev-loop Claude manifest current version headline" "$claude_description" "v${skill_version}:"
+  assert_contains "dev-loop Codex manifest current version headline" "$codex_description" "v${skill_version}:"
+  assert_contains "dev-loop marketplace current version headline" "$marketplace_description" "v${skill_version}:"
+
+  assert_contains "dev-loop Claude manifest mentions prep mode" "$claude_description" "preflight prep mode"
+  assert_contains "dev-loop Codex manifest mentions prep mode" "$codex_description" "preflight prep mode"
+  assert_contains "dev-loop marketplace mentions prep mode" "$marketplace_description" "preflight prep mode"
+
+  assert_json_array_contains "dev-loop Claude manifest prep keyword" "$claude_manifest" ".keywords" "prep"
+  assert_json_array_contains "dev-loop Claude manifest preflight keyword" "$claude_manifest" ".keywords" "preflight"
+  assert_json_array_contains "dev-loop Codex manifest prep keyword" "$codex_manifest" ".keywords" "prep"
+  assert_json_array_contains "dev-loop Codex manifest preflight keyword" "$codex_manifest" ".keywords" "preflight"
+  assert_json_array_contains "dev-loop marketplace prep keyword" "$marketplace" '.plugins[] | select(.name == "dev-loop") | .keywords' "prep"
+  assert_json_array_contains "dev-loop marketplace preflight keyword" "$marketplace" '.plugins[] | select(.name == "dev-loop") | .keywords' "preflight"
+
+  setup_source="$skill_root/setup/SKILL.md"
+  setup_mirror="$skill_root/skills/setup-dev-loop/SKILL.md"
+  [ -f "$setup_mirror" ] || fail "${setup_mirror#$ROOT/} missing setup-dev-loop Codex mirror"
+  cmp -s "$setup_source" "$setup_mirror" || fail "${setup_mirror#$ROOT/} differs from ${setup_source#$ROOT/}"
+}
+
 run_skill_frontmatter_contract_checks() {
   while IFS= read -r skill; do
     validate_skill_frontmatter "$ROOT/$skill"
@@ -261,6 +309,7 @@ run_bump_version_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_dev_loop_prep_prompt_contract_checks
+run_dev_loop_metadata_contract_checks
 run_skill_frontmatter_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
