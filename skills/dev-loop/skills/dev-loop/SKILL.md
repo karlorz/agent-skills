@@ -7,8 +7,10 @@ description: >
   "what needs doing", or "prep" to proactively queue or prepare structured
   findings. Supports /goal compatibility, Codex CLI/App, preflight prep mode,
   investigate mode, peer-aware vault sync, multi-backend code review, and
-  auto-archive. v1.24.2: all-active-plugin version sync and companion skill
-  schema coverage. v1.24.1: simple CI/main-first setup contract. v1.24.0:
+  auto-archive. v1.24.3: Claude plugin skills path uses ./skills/ so
+  setup-dev-loop/investigate/research are user-invocable in CLI. v1.24.2:
+  all-active-plugin version sync and companion skill schema coverage. v1.24.1:
+  simple CI/main-first setup contract. v1.24.0:
   preflight prep mode for batch readiness approval.
   v1.23.2: Codex skills/ subtree
   packaging. Pass `high` for aggressive mode.
