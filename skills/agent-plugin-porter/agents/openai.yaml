@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Plugin Porter"
+  short_description: "Port Claude plugins into Codex/Agy packages"
+  default_prompt: "Use $agent-plugin-porter to port a Claude Code plugin into Codex and Agy packages and prepare publish checks."

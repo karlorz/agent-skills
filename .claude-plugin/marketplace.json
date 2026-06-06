@@ -33,6 +33,14 @@
       "keywords": ["dev-loop", "loop", "cycle", "prd", "skillwiki", "retro", "resilience", "capability", "agent", "investigate", "prep", "preflight", "simplify-worker", "ci-health-worker", "interview", "grill", "setup", "native-interview", "merge", "ci", "ci-discovery", "vault-auto-commit", "doctor", "stale", "wiki-sync", "presync"]
     },
     {
+      "name": "agent-plugin-porter",
+      "source": "./skills/agent-plugin-porter",
+      "description": "Guide for using agent-plugin-porter to convert Claude Code plugins into Codex and Agy/Gemini packages, verify generated output, install Codex personal-marketplace packages, and prepare npm publish checks.",
+      "version": "0.1.0",
+      "category": "automation",
+      "keywords": ["agent-plugin-porter", "plugins", "porting", "codex", "agy", "gemini", "claude-code", "npm", "publish", "marketplace"]
+    },
+    {
       "name": "hermes-cli",
       "source": "./skills/hermes-cli",
       "description": "Hermes Agent CLI commands reference — full terminal command surface for hermes-agent by NousResearch",

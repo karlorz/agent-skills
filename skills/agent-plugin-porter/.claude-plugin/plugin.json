@@ -1,0 +1,12 @@
+{
+  "name": "agent-plugin-porter",
+  "version": "0.1.0",
+  "description": "Guide for using agent-plugin-porter to convert Claude Code plugins into Codex and Agy/Gemini packages, verify generated output, install Codex personal-marketplace packages, and prepare npm publish checks.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": ["agent-plugin-porter", "plugins", "porting", "codex", "agy", "gemini", "claude-code", "npm", "publish", "marketplace"],
+  "skills": "./"
+}
+
