@@ -12,5 +12,12 @@ This repo works main-first:
 - Create a PR only if direct push conflicts, `main` moved, permissions fail, or branch protection blocks the push.
 - Tag releases only after main CI passes.
 
+Marketplace gotcha:
+
+- `codex plugin list` reads the root `.claude-plugin/marketplace.json`; a
+  `skills/<plugin>` directory with `.codex-plugin/plugin.json` is not
+  discoverable unless the root marketplace has a matching entry.
+- `scripts/test-dev-loop-release-tooling.sh` enforces this inventory contract.
+
 The ignored `.claude/dev-loop.config.md` is the local instantiated config.
 Durable setup-policy changes belong in `.claude/dev-loop.config.example.md`.
