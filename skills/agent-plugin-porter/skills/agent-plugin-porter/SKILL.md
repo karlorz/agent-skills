@@ -121,5 +121,42 @@ add GitHub repository metadata, configure an npm trusted publisher or
 npm publish --provenance
 ```
 
+## GitHub Release Workflow
+
+Publishing to npm does not automatically create a GitHub Release. For
+tag-based GitHub Actions releases that should publish npm packages and create
+GitHub Releases for `v*` tags, grant repository contents write access alongside
+OIDC access:
+
+```yaml
+permissions:
+  contents: write
+  id-token: write
+```
+
+Add the release step after npm publish handling, and make it idempotent so
+workflow reruns do not fail when the release already exists:
+
+```yaml
+- name: Create GitHub release
+  if: startsWith(github.ref, 'refs/tags/v')
+  env:
+    GH_TOKEN: ${{ github.token }}
+  run: |
+    if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+      echo "Release $GITHUB_REF_NAME already exists."
+    else
+      gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"
+    fi
+```
+
+If a package version is already on npm but its GitHub Release is missing, rerun
+a workflow that includes the idempotent release step or create the release
+manually:
+
+```bash
+gh release create vX.Y.Z --repo <owner>/<repo> --title "vX.Y.Z" --generate-notes
+```
+
 Never publish from an unverified build, a dirty tree you have not audited, or a
 tarball whose `npm pack --dry-run` output you have not inspected.

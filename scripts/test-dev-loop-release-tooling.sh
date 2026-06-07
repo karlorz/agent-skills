@@ -253,6 +253,32 @@ run_dev_loop_metadata_contract_checks() {
   cmp -s "$setup_source" "$setup_mirror" || fail "${setup_mirror#$ROOT/} differs from ${setup_source#$ROOT/}"
 }
 
+run_agent_plugin_porter_release_workflow_contract_checks() {
+  local skill_root canonical mirror canonical_body mirror_body version
+
+  skill_root="$ROOT/skills/agent-plugin-porter"
+  canonical="$skill_root/SKILL.md"
+  mirror="$skill_root/skills/agent-plugin-porter/SKILL.md"
+  version="$(read_json_version "$skill_root/.claude-plugin/plugin.json")"
+
+  [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
+  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
+
+  canonical_body="$(cat "$canonical")"
+  mirror_body="$(cat "$mirror")"
+
+  assert_contains "agent-plugin-porter SKILL.md release workflow heading" "$canonical_body" "## GitHub Release Workflow"
+  assert_contains "agent-plugin-porter SKILL.md contents permission" "$canonical_body" "contents: write"
+  assert_contains "agent-plugin-porter SKILL.md oidc permission" "$canonical_body" "id-token: write"
+  assert_contains "agent-plugin-porter SKILL.md GitHub token" "$canonical_body" 'GH_TOKEN: ${{ github.token }}'
+  assert_contains "agent-plugin-porter SKILL.md idempotent release check" "$canonical_body" 'gh release view "$GITHUB_REF_NAME"'
+  assert_contains "agent-plugin-porter SKILL.md release create" "$canonical_body" 'gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"'
+  assert_contains "agent-plugin-porter SKILL.md missing release remediation" "$canonical_body" 'gh release create vX.Y.Z --repo <owner>/<repo> --title "vX.Y.Z" --generate-notes'
+
+  assert_contains "agent-plugin-porter mirror release workflow heading" "$mirror_body" "## GitHub Release Workflow"
+  assert_contains "agent-plugin-porter current version" "$version" "0.2.0"
+}
+
 run_skill_frontmatter_contract_checks() {
   while IFS= read -r skill; do
     validate_skill_frontmatter "$ROOT/$skill"
@@ -332,6 +358,7 @@ run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_metadata_contract_checks
+run_agent_plugin_porter_release_workflow_contract_checks
 run_skill_frontmatter_contract_checks
 run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
