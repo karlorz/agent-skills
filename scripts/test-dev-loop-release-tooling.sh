@@ -313,6 +313,36 @@ run_plugin_version_sync_contract_checks() {
   )
 }
 
+run_marketplace_inventory_contract_checks() {
+  local root name source count version marketplace_version
+
+  while IFS= read -r root; do
+    name="$(jq -r '.name' "$root/.claude-plugin/plugin.json")"
+    version="$(read_json_version "$root/.claude-plugin/plugin.json")"
+    source="./skills/${root##*/}"
+
+    count="$(
+      jq -r --arg name "$name" '[.plugins[] | select(.name == $name)] | length' \
+        "$ROOT/.claude-plugin/marketplace.json"
+    )"
+    assert_eq "$name root marketplace entry count" "$count" "1"
+
+    assert_eq "$name root marketplace source" "$(
+      jq -r --arg name "$name" '.plugins[] | select(.name == $name) | .source' \
+        "$ROOT/.claude-plugin/marketplace.json"
+    )" "$source"
+
+    marketplace_version="$(read_market_version "$ROOT/.claude-plugin/marketplace.json" "$name")"
+    assert_eq "$name root marketplace version" "$marketplace_version" "$version"
+  done < <(
+    find "$ROOT/skills" -mindepth 3 -maxdepth 3 -type f \
+      -path '*/.claude-plugin/plugin.json' -print0 |
+      xargs -0 -n1 dirname |
+      xargs -n1 dirname |
+      sort
+  )
+}
+
 run_plugin_manifest_contract_checks() {
   local manifest rel root skills_path type
 
@@ -360,6 +390,7 @@ run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_metadata_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
 run_skill_frontmatter_contract_checks
+run_marketplace_inventory_contract_checks
 run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks

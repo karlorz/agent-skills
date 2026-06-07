@@ -41,6 +41,14 @@
       "keywords": ["agent-plugin-porter", "plugins", "porting", "codex", "agy", "gemini", "claude-code", "npm", "publish", "marketplace"]
     },
     {
+      "name": "claude-md-management",
+      "source": "./skills/claude-md-management",
+      "description": "Tools to maintain and improve CLAUDE.md files - audit quality, capture session learnings, and keep project memory current.",
+      "version": "1.0.0",
+      "category": "productivity",
+      "keywords": ["claude-md", "claude", "memory", "context", "project-instructions"]
+    },
+    {
       "name": "hermes-cli",
       "source": "./skills/hermes-cli",
       "description": "Hermes Agent CLI commands reference — full terminal command surface for hermes-agent by NousResearch",
