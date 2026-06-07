@@ -1,0 +1,20 @@
+{
+  "name": "claude-md-management",
+  "interface": {
+    "displayName": "claude-md-management"
+  },
+  "plugins": [
+    {
+      "name": "claude-md-management",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

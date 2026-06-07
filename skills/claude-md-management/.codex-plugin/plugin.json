@@ -1,0 +1,12 @@
+{
+  "name": "claude-md-management",
+  "version": "1.0.0",
+  "description": "Tools to maintain and improve CLAUDE.md files - audit quality, capture session learnings, and keep project memory current.",
+  "author": {
+    "name": "Anthropic",
+    "email": "support@anthropic.com"
+  },
+  "license": "Apache-2.0",
+  "keywords": [],
+  "skills": "./skills/"
+}
