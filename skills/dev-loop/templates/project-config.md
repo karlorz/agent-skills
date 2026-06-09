@@ -8,9 +8,8 @@ type: template
 
 > **Edit this file when porting the dev-loop to a new project.**
 > Every field here replaces a hardcoded value in the engine.
-> Empty fields disable the corresponding step (e.g., empty `vault` skips
-> wiki-* steps; empty `e2e_scripts` skips step 8; empty `publish_via`
-> skips step 9).
+> Empty fields disable the corresponding step (e.g., empty `e2e_scripts`
+> skips step 8; empty `publish_via` skips step 9).
 >
 > Set `knowledge_layer: none` to run the loop without a vault or wiki —
 > all knowledge steps use git-based alternatives.
@@ -23,7 +22,6 @@ type: template
 
 ```yaml
 slug: <project-slug>
-vault: <vault-path>            # e.g., ~/wiki, or empty to skip vault steps
 release_branch: <branch-name>  # e.g., main, dev, master
 ```
 
@@ -617,16 +615,34 @@ knowledge_layer: skillwiki       # skillwiki | none
 ### Knowledge backends registry (optional)
 
 Override backend-specific config or add future backends. If absent,
-defaults are derived from `knowledge_layer` + `vault`.
+defaults are derived from `knowledge_layer`.
 
 ```yaml
 knowledge_backends:
   skillwiki:
-    vault: ~/wiki
+    vault: auto                 # portable: resolve with `skillwiki path`
     cli_entry: skillwiki         # or npx tsx packages/cli/src/cli.ts for local dev
   none:
     work_dir: .claude/dev-loop-work/
 ```
+
+For SkillWiki, `vault: auto` is the portable default. At REFRESH, dev-loop
+resolves it by running `skillwiki path`; if that fails, it may use a
+validated `~/wiki` fallback only when `~/wiki/SCHEMA.md` and `~/wiki/projects/`
+exist. If neither resolves, vault-backed capabilities are disabled for the
+cycle with a clear warning. Explicit non-`auto` paths remain supported as
+intentional overrides, but dev-loop warns when an explicit path differs from
+`skillwiki path`:
+
+```
+Configured SkillWiki vault '<configured>' differs from `skillwiki path` '<resolved>'.
+Use `vault: auto` for portable configs, or keep the explicit path only if this
+repo is intentionally pinned to one machine.
+```
+
+Legacy top-level `vault` is still supported as an alias for older configs, but
+new and migrated configs should put vault settings under
+`knowledge_backends.skillwiki.vault`.
 
 **Capabilities by backend:**
 
@@ -652,8 +668,8 @@ not hardcoded here. The REFRESH step parses the `## Layers` section of
 If SCHEMA.md doesn't exist or can't be parsed, the REFRESH step falls back
 to listing directories in the vault root that contain `.md` files.
 
-When `query_vault` not in BACKEND_CAPS, `vault` is ignored — the loop uses
-git history and local work items instead of a vault.
+When `query_vault` not in BACKEND_CAPS, vault settings are ignored — the loop
+uses git history and local work items instead of a vault.
 
 ## Vault write hygiene (optional, since v1.17.0)
 
@@ -929,10 +945,13 @@ items live in the vault, not the repo.
 
 <!--
 slug: llm-wiki
-vault: ~/wiki
 release_branch: dev
 
 knowledge_layer: skillwiki
+knowledge_backends:
+  skillwiki:
+    vault: auto
+    cli_entry: skillwiki
 
 cli_src: packages/cli/src/commands/
 cli_test: packages/cli/test/commands/

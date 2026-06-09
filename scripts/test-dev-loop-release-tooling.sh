@@ -203,6 +203,13 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "project config includes preflight block" "$template" 'preflight:'
   assert_contains "project config includes unattended skip behavior" "$template" 'unattended_not_ready_behavior: skip'
   assert_contains "project config includes readiness state" "$template" 'preflight_state: ready'
+
+  assert_contains "project config uses portable skillwiki vault auto" "$template" 'vault: auto'
+  assert_contains "project config documents legacy top-level vault alias" "$template" 'Legacy top-level `vault` is still supported as an alias'
+  assert_contains "dev-loop documents vault auto resolution" "$prompt" '`vault: auto`'
+  assert_contains "dev-loop documents skillwiki path precedence" "$prompt" 'run `skillwiki path`'
+  assert_contains "dev-loop documents validated wiki fallback" "$prompt" 'validated `~/wiki` fallback'
+  assert_contains "dev-loop documents explicit vault mismatch warning" "$prompt" 'Configured SkillWiki vault'
 }
 
 assert_json_array_contains() {

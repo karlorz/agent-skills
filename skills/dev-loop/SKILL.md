@@ -1,19 +1,15 @@
 ---
 name: dev-loop
 description: >
-  Use this skill when the user says "run a dev cycle", "implement a feature",
-  "make a code change", "start a loop", or wants automated planning, execution,
-  code review, and knowledge capture. Also use for "investigate", "find work",
-  "what needs doing", or "prep" to proactively queue or prepare structured
-  findings. Supports /goal compatibility, Codex CLI/App, preflight prep mode,
-  investigate mode, peer-aware vault sync, multi-backend code review, and
-  auto-archive. v1.24.3: Claude plugin skills path uses ./skills/ so
-  setup-dev-loop/investigate/research are user-invocable in CLI. v1.24.2:
-  all-active-plugin version sync and companion skill schema coverage. v1.24.1:
-  simple CI/main-first setup contract. v1.24.0:
-  preflight prep mode for batch readiness approval.
-  v1.23.2: Codex skills/ subtree
-  packaging. Pass `high` for aggressive mode.
+  Use for "run a dev cycle", "implement a feature", "make a code change",
+  "start a loop", "investigate", "find work", or "prep" to drive automated
+  planning, execution, code review, and knowledge capture. Supports /goal
+  compatibility, Codex CLI/App, preflight prep mode, investigate mode,
+  peer-aware vault sync, multi-backend code review, auto-archive, and portable
+  SkillWiki vault resolution. v1.24.4: portable SkillWiki vault
+  auto-resolution via `vault: auto`, `skillwiki path` precedence, validated
+  `~/wiki` fallback, and explicit-path mismatch warnings. v1.24.3:
+  .claude-plugin skills path uses ./skills/. Pass `high` for aggressive mode.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -577,7 +573,27 @@ prd_disciplines:
      Parse `knowledge_layer` (default: `skillwiki`). Then resolve
      `BACKEND_CAPS` — read the `knowledge_backends` map if present in
      config (see templates/project-config.md for schema); otherwise derive
-     defaults from `knowledge_layer` + `vault` fields.
+     defaults from `knowledge_layer` plus the legacy top-level `vault`
+     alias when present.
+     **SkillWiki vault resolution:** canonical vault config lives at
+     `knowledge_backends.skillwiki.vault`; legacy top-level `vault` is
+     still supported as an alias for older configs. If the configured
+     SkillWiki vault is `auto` or absent, run `skillwiki path`. If that
+     succeeds, store the returned path as `vault` and enable SkillWiki
+     BACKEND_CAPS. If `skillwiki path` fails, use a validated `~/wiki`
+     fallback only when `~/wiki/SCHEMA.md` and `~/wiki/projects/` both
+     exist; this is the validated `~/wiki` fallback. Emit "vault: auto
+     could not resolve via `skillwiki path`. Using validated fallback
+     ~/wiki." If neither resolves, disable
+     vault-backed capabilities for this cycle and warn "vault: auto could
+     not resolve a SkillWiki vault. Vault-backed steps are disabled for
+     this cycle. Configure `skillwiki path` or set an explicit vault path."
+     Explicit non-`auto` paths remain supported as intentional overrides.
+     When an explicit path disagrees with `skillwiki path`, keep the
+     explicit path but warn: "Configured SkillWiki vault '<configured>'
+     differs from `skillwiki path` '<resolved>'. Use `vault: auto` for
+     portable configs, or keep the explicit path only if this repo is
+     intentionally pinned to one machine."
      Then resolve `PRD_CAPS` — read `prd_layer` from config. If absent,
      auto-discover: if `superpowers:brainstorming` is available →
      `superpowers`; else if `superpowers:test-driven-development` is
@@ -738,8 +754,9 @@ prd_disciplines:
      subdirectories of `{vault}/` that contain `.md` files.
      Store these as session variables for conditional step logic.
    - **Fallback 1**: extract from `CLAUDE.md` body where possible:
-     `slug` (parent dir basename), `vault` (first `~/wiki` tilde-path
-     or run `skillwiki path` if available), `knowledge_layer` (default
+     `slug` (parent dir basename), `vault` (legacy alias only; prefer
+     `knowledge_backends.skillwiki.vault: auto` and run `skillwiki path`
+     when available), `knowledge_layer` (default
      `skillwiki` if vault exists, `none` otherwise — then derive
      BACKEND_CAPS from it), `prd_layer` (default `superpowers` if
      superpowers skills are available, else `manual` — then derive
@@ -755,8 +772,9 @@ prd_disciplines:
      - CLI src: `packages/*/src/commands/`, `src/commands/`, or `cli/`
      - Skills glob: `packages/*/SKILL.md` or `skills/*/SKILL.md`
      - E2E scripts: `scripts/e2e-*.sh` or `test/e2e/*.sh`
-     - Vault: run `skillwiki path` if available; else `~/wiki` if it
-       exists; else skip vault-dependent steps
+     - Vault: run `skillwiki path` if available; else use the validated
+       `~/wiki` fallback only when `~/wiki/SCHEMA.md` and
+       `~/wiki/projects/` exist; else skip vault-dependent steps
      - Knowledge layer: `skillwiki` if vault exists AND `skillwiki doctor`
        passes; else `none` — then derive BACKEND_CAPS from the resolved
        knowledge layer
