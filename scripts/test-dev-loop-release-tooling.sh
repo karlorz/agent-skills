@@ -185,6 +185,11 @@ run_sync_script_contract_checks() {
   assert_contains "sync-plugin-cache syncs Codex skills subtree" "$sync_script" 'Sync Codex skills subtree'
   assert_contains "sync-plugin-cache syncs scripts directory" "$sync_script" 'Sync scripts directory'
   assert_contains "sync-plugin-cache copies scripts recursively" "$sync_script" 'scripts/.'
+  assert_contains "sync-plugin-cache syncs skill-relative references" "$sync_script" 'skills/dev-loop/references'
+  [ -f "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ] ||
+    fail "skills/dev-loop/skills/dev-loop/references/codex-tools.md missing"
+  cmp -s "$ROOT/skills/dev-loop/references/codex-tools.md" "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ||
+    fail "skills/dev-loop/skills/dev-loop/references/codex-tools.md differs from canonical reference"
 }
 
 run_dev_loop_prep_prompt_contract_checks() {

@@ -84,6 +84,12 @@ if [[ -d "${SOURCE_DIR}/references" ]]; then
   mkdir -p "${CACHE_DIR}/references"
   cp "${SOURCE_DIR}/references/"* "${CACHE_DIR}/references/"
   echo "  ✓ references/"
+
+  if [[ -d "${CACHE_DIR}/skills/dev-loop" ]]; then
+    mkdir -p "${CACHE_DIR}/skills/dev-loop/references"
+    cp "${SOURCE_DIR}/references/"* "${CACHE_DIR}/skills/dev-loop/references/"
+    echo "  ✓ skills/dev-loop/references/"
+  fi
 fi
 
 echo ""

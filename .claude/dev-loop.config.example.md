@@ -1,14 +1,15 @@
 # Dev Loop — agent-skills Example
 
-Copy this file to `.claude/dev-loop.config.md` in a new workspace, then adjust
-only local paths such as `vault` if needed. The real config file is ignored so
-each workspace can keep local settings without committing them.
+Copy this file to `.claude/dev-loop.config.md` in a new workspace. Keep
+SkillWiki portable with `knowledge_backends.skillwiki.vault: auto`; hardcode an
+absolute vault path only when a workspace is intentionally pinned to one host.
+The real config file is ignored so each workspace can keep local settings
+without committing them.
 
 ## Identity
 
 ```yaml
 slug: agent-skills
-vault: ~/wiki
 release_branch: main
 ```
 
@@ -42,7 +43,7 @@ prd_disciplines:
 knowledge_layer: skillwiki
 knowledge_backends:
   skillwiki:
-    vault: ~/wiki
+    vault: auto
     cli_entry: skillwiki
 ```
 
@@ -53,7 +54,7 @@ interview:
   setup:
     skill: setup-dev-loop
   work_item:
-    default: native
+    # Native interview is the implied fallback when no upgrade is installed.
     trigger: auto
     goal_override: never
 ```

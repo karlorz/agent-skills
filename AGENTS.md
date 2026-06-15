@@ -2,7 +2,10 @@
 
 If `.claude/dev-loop.config.md` is missing, copy
 `.claude/dev-loop.config.example.md` to `.claude/dev-loop.config.md`.
-Adjust only local paths such as `vault` unless the project policy changes.
+Keep SkillWiki resolution portable: use
+`knowledge_backends.skillwiki.vault: auto` so dev-loop resolves the vault with
+`skillwiki path`. Hardcode an absolute vault path only for a deliberately
+machine-pinned workspace.
 
 This repo works main-first:
 

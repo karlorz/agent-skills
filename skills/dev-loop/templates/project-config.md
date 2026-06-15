@@ -25,21 +25,6 @@ slug: <project-slug>
 release_branch: <branch-name>  # e.g., main, dev, master
 ```
 
-## Memory layer (optional)
-
-Controls whether dev-loop is aware of a cross-session memory backend (e.g.,
-claude-mem, agentmemory). When declared, REFRESH step 1 can search prior
-sessions for related work; RETRO step 11 can write structured observations
-for future recall. Most memory MCP servers auto-capture via hooks — the
-loop's role is awareness, not driving the capture.
-
-```yaml
-memory_layer: none              # claude-mem | agentmemory | none
-```
-
-When `none` (default), the loop relies on the skillwiki vault for long-term
-memory and session JSONL for short-term — current behavior, no change.
-
 ## PRD layer
 
 Controls which skill suite drives the brainstorm → spec → plan → execute →
@@ -740,10 +725,8 @@ interview:
     skill: setup-dev-loop          # bundled, always available
     glossary: grill-with-docs      # delegates domain section when installed (optional)
   work_item:
-    default: native                # built-in three questions (zero-dependency)
+    # Native interview is the implied fallback when no upgrade is installed.
     upgrade: grill-with-docs       # optional: grill-with-docs | grill-me
-    source: mattpocock/skills      # install source for upgrade
-    install: "npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y"
     trigger: auto                  # auto | manual | never
     goal_override: never           # never | allow — behavior when goal_context in ORCHESTRATION_CAPS (v1.22.0)
 ```

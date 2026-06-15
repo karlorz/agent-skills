@@ -2,6 +2,13 @@
 
 Extending the dev-loop orchestration engine with interactive interview capabilities — a setup bootstrap and per-work-item grilling phase — with pluggable backends that default to native (zero-dependency) and optionally upgrade to external interview skills.
 
+## Current Dev-Loop Maintenance Notes
+
+- SkillWiki config should be portable by default: use `knowledge_backends.skillwiki.vault: auto` and resolve the actual vault root with `skillwiki path`.
+- Durable docs should refer to project wiki locations as vault-relative paths such as `projects/agent-skills`, not `/Users/.../wiki/projects/agent-skills`.
+- Do not add `memory_layer`, `interview.work_item.default`, or `interview.work_item.source` to generated dev-loop configs unless the engine grows explicit parser support for those fields.
+- The 2026-06-15 OpenHanako closeout produced three dev-loop follow-ups now tracked in the agent-skills wiki: dirty critical-path code can be invisible when related work items are completed, worker `Agent(...)` spawn failure needs inline fallback, and Codex packages must include skill-relative reference docs such as `skills/dev-loop/references/codex-tools.md`.
+
 ## Language
 
 **Interview phase**:

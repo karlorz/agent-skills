@@ -6,10 +6,11 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep mode, investigate mode,
   peer-aware vault sync, multi-backend code review, auto-archive, and portable
-  SkillWiki vault resolution. v1.24.4: portable SkillWiki vault
-  auto-resolution via `vault: auto`, `skillwiki path` precedence, validated
-  `~/wiki` fallback, and explicit-path mismatch warnings. v1.24.3:
-  .claude-plugin skills path uses ./skills/. Pass `high` for aggressive mode.
+  SkillWiki vault resolution. v1.24.5: portable config cleanup,
+  doctor-worker spawn fallback, and skill-relative Codex reference packaging.
+  v1.24.4: portable SkillWiki vault auto-resolution via `vault: auto`,
+  `skillwiki path` precedence, validated `~/wiki` fallback, and explicit-path
+  mismatch warnings. Pass `high` for aggressive mode.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -837,6 +838,21 @@ prd_disciplines:
    ```
    Agent(description: "Dev-loop dep + compact doctor", subagent_type: "dev-loop:doctor-worker", model: "sonnet", prompt: "Probe skills/dev-loop/dependencies.yaml AND auto-compact count for the current session. Report JSON with status, missing_required[], missing_optional[], compact_count, session_jsonl_path.")
    ```
+
+   **Agent spawn fallback:** If the `Agent(...)` call itself fails before
+   returning worker JSON (for example `balance_insufficient_error`, subagent
+   unavailable, `multi_agent` disabled, or another platform/tool error), do
+   not treat the missing report as success. Emit the spawn error, then run a
+   bounded inline fallback:
+   - Probe required and optional refs from `dependencies.yaml` with ordinary
+     filesystem checks and available CLI probes.
+   - Set `compact_count: null` when the session JSONL cannot be discovered
+     inline.
+   - Write a best-effort HUD record to `~/.claude/dev-loop/last-doctor.json`
+     when possible.
+   - Apply the same status rules below: missing required refs block,
+     missing optional refs populate `DEP_DRIFT`, and a fallback probe error is
+     reported but does not block by itself.
 
    **Behavior on dependency status:**
    - `broken` → BLOCK the cycle. Print missing required refs + install hints.
