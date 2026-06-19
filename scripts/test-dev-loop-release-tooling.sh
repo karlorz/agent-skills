@@ -37,6 +37,13 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local label="$1" haystack="$2" needle="$3"
+  if grep -Fq "$needle" <<<"$haystack"; then
+    fail "$label: unexpected '$needle'"
+  fi
+}
+
 active_plugin_roots() {
   local source
   jq -r '.plugins[] | select(.source | startswith("./skills/")) | .source' "$ROOT/.claude-plugin/marketplace.json" |
@@ -291,6 +298,36 @@ run_agent_plugin_porter_release_workflow_contract_checks() {
   assert_contains "agent-plugin-porter current version" "$version" "0.2.0"
 }
 
+run_deep_research_freshness_contract_checks() {
+  local skill_root canonical mirror agent canonical_body mirror_body agent_body
+
+  skill_root="$ROOT/skills/deep-research"
+  canonical="$skill_root/SKILL.md"
+  mirror="$skill_root/skills/deep-research/SKILL.md"
+  agent="$skill_root/agents/deep-research.md"
+
+  [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
+  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
+  [ -f "$agent" ] || fail "${agent#$ROOT/} missing"
+
+  canonical_body="$(cat "$canonical")"
+  mirror_body="$(cat "$mirror")"
+  agent_body="$(cat "$agent")"
+
+  assert_contains "deep-research source triage" "$canonical_body" "Phase 1.5: Source Triage"
+  assert_contains "deep-research grok-search freshness" "$canonical_body" "grok-search"
+  assert_contains "deep-research freshness status section" "$canonical_body" "Freshness & Verification Status"
+  assert_contains "deep-research key claims table" "$canonical_body" "| Claim | Status | Source route | Notes |"
+  assert_contains "deep-research local inline triage" "$canonical_body" "local triage inline"
+  assert_contains "deep-research mirror source triage" "$mirror_body" "Phase 1.5: Source Triage"
+
+  assert_contains "deep-research agent source triage" "$agent_body" "Phase 1.5: Source Triage"
+  assert_contains "deep-research agent grok-search freshness" "$agent_body" "grok-search"
+  assert_contains "deep-research agent freshness status section" "$agent_body" "Freshness & Verification Status"
+  assert_contains "deep-research agent local inline triage" "$agent_body" "local triage inline"
+  assert_not_contains "deep-research agent no mandatory web search" "$agent_body" "always spawn at least 1"
+}
+
 run_skill_frontmatter_contract_checks() {
   while IFS= read -r skill; do
     validate_skill_frontmatter "$ROOT/$skill"
@@ -401,6 +438,7 @@ run_sync_script_contract_checks
 run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_metadata_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
+run_deep_research_freshness_contract_checks
 run_skill_frontmatter_contract_checks
 run_marketplace_inventory_contract_checks
 run_plugin_version_sync_contract_checks

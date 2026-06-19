@@ -1,17 +1,18 @@
 ---
 name: deep-research
-description: Use when user requests comprehensive research on a topic, wants multi-source investigation (web, docs, repos), or mentions deep research, literature review, competitive analysis, or technology comparison. Works with or without a knowledge base vault.
+description: Use when user requests comprehensive research on a topic, wants source-triaged investigation across local files, freshness sources, docs, repos, or mentions deep research, literature review, competitive analysis, technology comparison, latest versions, changelogs, or current facts. Works with or without a knowledge base vault.
 ---
 
 # Deep Research
 
 ## Overview
 
-Multi-source research engine that queries web search, Context7, and DeepWiki in parallel, deep-fetches top sources for richer content, then synthesizes findings into a structured report with optional content refinement. Output is flexible: print to terminal, save as markdown file, or integrate with a skillwiki vault.
+Source-triaged research engine that starts with local evidence, assumes externally mutable topics need current truth, selects the smallest source plan that can answer the question, escalates only when evidence is thin or contradictory, then synthesizes findings into a structured report with freshness and verification status. Output is flexible: print to terminal, save as markdown file, or integrate with a skillwiki vault.
 
 ```mermaid
 flowchart LR
-    A[Phase 1: Topic Analysis] --> B[Phase 2: Multi-Source Research]
+    A[Phase 1: Topic Analysis] --> T[Phase 1.5: Source Triage]
+    T --> B[Phase 2: Targeted Source Plan]
     B --> C{All sources failed?}
     C -- yes --> STOP[STOP: total failure]
     C -- no --> D[Phase 3: Synthesis]
@@ -23,10 +24,12 @@ flowchart LR
     FAIL -- no --> F
     F --> H[Phase 6: Report]
 
-    B --- B1[Web Search x2-3]
-    B --- B2[Deep-fetch top URLs]
-    B --- B3[Context7 MCP x3]
+    B --- B1[Local files inline]
+    B --- B2[grok-search freshness]
+    B --- B3[Context7 MCP]
     B --- B4[DeepWiki MCP]
+    B --- B5[WebSearch fallback]
+    B --- B6[Deep-fetch top URLs]
 
     F --- F1[--ephemeral: stdout only]
     F --- F2[--save: write file]
@@ -67,10 +70,12 @@ handling for vault writes. Discovery on Codex is via `~/.agents/skills/`.
 - User wants deep investigation across multiple sources
 - Topic involves libraries, frameworks, GitHub repos, or general concepts
 - User mentions "research", "investigate", "compare", "analyze", or "deep dive"
+- Topic involves "latest", current behavior, versions, releases, changelogs, marketplace state, package metadata, GitHub issues/PRs, or other externally mutable facts
 
 Do NOT use for:
 - Quick factual lookups (use direct web search or docs lookup)
-- Single-source questions (use Context7 or web search directly)
+- Single-source questions (use Context7, local files, or web search directly)
+- Fully local, non-freshness-sensitive answers when ordinary local file inspection is enough; read local files directly and note that external verification was intentionally skipped
 
 ## Output Modes
 
@@ -92,36 +97,81 @@ The skill auto-detects the best output mode based on vault availability:
 1. Parse topic string for keywords, libraries, frameworks
 2. **Auto-detect output mode**: run `skillwiki path` — if it returns a valid vault, default to vault mode. If `NO_VAULT_CONFIGURED`, use stdout.
 3. If vault mode active: run `skillwiki lang` for output language, search existing pages for cross-linking
-4. If no vault: proceed with research in user's language
+4. Read applicable workspace instructions such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, or repo policy files. If they define a source matrix, follow it. Otherwise use the default source ordering from Phase 1.5.
+5. If no vault: proceed with research in user's language
 
-### Phase 2: Multi-Source Research
+### Phase 1.5: Source Triage
 
-Spawn research agents in parallel. All agents use `model: "sonnet"` for cost efficiency — research tasks (search, fetch, read, summarize) are mechanical work that Sonnet handles well. For trivial single-page fetches, drop to `model: "haiku"`.
+Classify the topic with combinable tags, then build the smallest source plan that can answer those tags. Do local triage inline; reading local files to classify the task is not a violation of the cost model.
 
-**Web Search Agents** (2-3 parallel)
+**Default source order** when workspace instructions do not override it:
+
+1. Local repository, cache, installed plugin, lockfile, release-note, and implementation files
+2. Context7 for library/framework/API behavior and usage details
+3. DevTools/browser verification only for browser-facing live behavior
+4. grok-search for latest/current/freshness-sensitive external facts, with native WebSearch as fallback
+5. DeepWiki for remote repository architecture when useful
+
+**Tags:**
+
+- `local-answerable`: authoritative evidence is on disk
+- `externally-mutable`: external state may have changed since local files were written
+- `freshness-sensitive`: the topic involves latest/current versions, releases, changelogs, package or marketplace state, GitHub issues/PRs, or recent docs
+- `library-framework-api`: the topic asks about library/framework/API behavior or usage
+- `repo-architecture`: the topic asks about repository structure or implementation design
+- `general-exploratory`: the user asks for a broad survey, comparison, literature review, or multi-source research
+- `browser-live`: the topic requires browser snapshots, console, network, or live UI verification
+
+**Source plan rules:**
+
+- `local-answerable` only: read local files inline and skip the full Phase 2 fan-out.
+- `local-answerable + externally-mutable`: read local files inline, then run one focused grok-search freshness probe. Treat local files as evidence, not final current truth.
+- `freshness-sensitive`: assume the user wants the latest/current truth unless they explicitly request historical, offline, or local-only analysis. Prefer grok-search, then deep-fetch authoritative sources found by it.
+- `library-framework-api`: lead with Context7. Add grok-search when the question also involves versions, releases, deprecations, regressions, or latest/current behavior.
+- `repo-architecture`: use local repo files first if checked out locally; use DeepWiki when remote repo insight is needed.
+- `general-exploratory`: use the broader fan-out after the minimal tagged plan is insufficient or when the user explicitly wants exhaustive multi-source research.
+- `browser-live`: use DevTools/browser verification only for browser-facing live behavior.
+
+Escalate from the minimal source plan to broader fan-out only when local and targeted external sources disagree, key claims remain unverified, the topic is genuinely broad/exploratory/comparative, the user explicitly asks for exhaustive research, or the minimal plan returns too little evidence.
+
+### Phase 2: Targeted Source Research
+
+Run the source plan from Phase 1.5. Spawn external research agents only for the sources selected by the tags. All spawned agents use `model: "sonnet"` for cost efficiency — research tasks (search, fetch, read, summarize) are mechanical work that Sonnet handles well. For trivial single-page fetches, drop to `model: "haiku"`.
+
+**Local evidence** (inline)
 ```
-Agent(description: "Web search 1", model: "sonnet", prompt: "Search for: <topic> (primary). Report key findings with source URLs.")
-Agent(description: "Web search 2", model: "sonnet", prompt: "Search for: <topic> best practices OR <topic> tutorial. Report key findings with source URLs.")
-Agent(description: "Web search 3", model: "sonnet", prompt: "Search for: <topic> current year. Report key findings with source URLs.")  // optional, for freshness
+Read the relevant local files directly: repo files, plugin caches, installed plugin metadata, lockfiles, release notes, package manifests, and prior vault query pages. Record exact paths and commands used.
 ```
 
-**Deep-Fetch Agents** (after search results arrive, 2-3 parallel)
+**grok-search Freshness Agent** (preferred for latest/current facts)
 ```
-Agent(description: "Deep-fetch N", model: "haiku", prompt: "Fetch and extract key passages from <URL>. Focus on specific facts, code examples, or claims relevant to <topic>. Skip navigation and boilerplate.")
+Agent(description: "Freshness search", model: "sonnet", prompt: "Use grok-search MCP tools, preferring mcp__grok-search__web_search and get_sources when available, to verify current facts for: <topic>. Focus on official release notes, changelogs, package registries, marketplace metadata, GitHub releases/issues/PRs, and owning-project docs. Report underlying source URLs and mark whether each key claim is externally verified, locally verified only, or unverified.")
 ```
-- Prioritize official docs, changelogs, and primary sources over aggregator sites
+- If grok-search is unavailable or fails, fall back to native WebSearch and state the degradation.
+- grok-search is a discovery route, not the authority by itself; cite the underlying authoritative sources returned via `get_sources` or deep-fetch.
 
-**Context7 Agent** (parallel with web search)
+**Context7 Agent** (library/framework/API behavior)
 ```
-Agent(description: "Context7 docs", model: "sonnet", prompt: "Using Context7 MCP: resolve-library-id for <library>, then query-docs for <topic> usage patterns and code examples. Max 3 total Context7 calls. Report findings.")
+Agent(description: "Context7 docs", model: "sonnet", prompt: "Using Context7 MCP: resolve-library-id for <library>, then query-docs for <topic> usage patterns and code examples. Max 3 total Context7 calls. Report findings and note whether they verify current API/library behavior.")
 ```
 
-**DeepWiki Agent** (parallel with web search)
+**DeepWiki Agent** (remote repository architecture)
 ```
 Agent(description: "DeepWiki repo", model: "sonnet", prompt: "Using DeepWiki MCP: ask_question on <repo> about architecture, patterns, and implementation relevant to <topic>. Report findings.")
 ```
 
-**Graceful degradation**: If any agent fails, continue with remaining agents. Note failures in report.
+**Native WebSearch Agents** (fallback or broad exploration)
+```
+Agent(description: "Web search fallback", model: "sonnet", prompt: "Use native WebSearch for: <topic>. Use only if grok-search is unavailable, insufficient, or broader exploratory web coverage is explicitly needed. Focus on official and primary sources. Report key findings with source URLs.")
+```
+
+**Deep-Fetch Agents** (after search results arrive, 1-3 parallel)
+```
+Agent(description: "Deep-fetch N", model: "haiku", prompt: "Fetch and extract key passages from <URL>. Focus on specific facts, code examples, or claims relevant to <topic>. Skip navigation and boilerplate.")
+```
+- Prioritize official docs, changelogs, release notes, package registries, GitHub sources, and primary project pages over aggregators and forums.
+
+**Graceful degradation**: If any selected source fails, continue with remaining sources. Note failures and degraded freshness checks in the report. Only stop when every source required by the selected source plan fails and no useful local evidence exists.
 
 ### Phase 3: Synthesis
 
@@ -143,15 +193,22 @@ Compose research report with these sections:
 | Timeline / changelog | `gantt` or timeline `flowchart` | v0.125 -> v0.128 feature rollout |
 | Simple factual | Skip diagram | "API accepts these 5 parameters" |
 4. **Findings** -- organized by source type with collapsible callouts
+   - `> [!note]- Local Evidence`
+   - `> [!abstract]- Freshness Search (grok-search/WebSearch)`
    - `> [!abstract]- Web Search Findings`
    - `> [!info]- Documentation (Context7)`
    - `> [!tip]- Repository Insights (DeepWiki)`
-5. **Verification Methods** -- how to verify or reproduce the findings. This is critical: research that documents WHAT was found but not HOW to verify it creates fragile knowledge. Include:
+5. **Freshness & Verification Status** -- compact audit table for key claims:
+   | Claim | Status | Source route | Notes |
+   |---|---|---|---|
+   | <claim> | externally verified / locally verified only / unverified freshness claim | local -> grok-search -> official source | <conflicts, cache freshness, fallback notes> |
+   Include the selected source-plan tags, freshness channel used, fallback/degradation, source conflicts, and stale local cache warnings. Use one authoritative external source as enough verification by default; require a second source for high-risk, indirect, ambiguous, or contradictory claims.
+6. **Verification Methods** -- how to verify or reproduce the findings. This is critical: research that documents WHAT was found but not HOW to verify it creates fragile knowledge. Include:
    - The correct tools or commands to confirm the finding
    - Common wrong verification methods and why they fail (e.g., "checking `claude --help` for slash commands" vs "type `/` in session")
    - Links to canonical reference pages
-6. **Analysis** -- merged patterns, recommendations, caveats
-7. **Sources** -- numbered list with access dates
+7. **Analysis** -- merged patterns, recommendations, caveats
+8. **Sources** -- numbered list with access dates
 
 ### Phase 4: Content Refinement (unless --no-refine)
 
@@ -212,10 +269,14 @@ Topic: <topic>
 Mode: vault | stdout | file
 
 Sources Queried:
-  - Web search: <count> agents (model: sonnet)
+  - Source plan tags: <tags>
+  - Local evidence: <paths or "not used">
+  - grok-search freshness: <used/fallback/unavailable/not needed> (model: sonnet when spawned)
+  - Web search fallback: <count or "not used"> (model: sonnet)
   - Deep-fetch: <count> agents (model: haiku)
   - Context7: <library-id or "not used"> (model: sonnet)
   - DeepWiki: <repo or "not used"> (model: sonnet)
+  - Freshness status: <externally verified / locally verified only / unverified freshness claim>
 
 Synthesis: parent session (model: inherit)
 Refinement: <"applied (model: sonnet)" or "skipped (--no-refine)">
@@ -237,7 +298,7 @@ Warnings: <any>
 
 ## Stop Conditions
 
-- All three source types fail (web, Context7, DeepWiki)
+- Every source required by the selected source plan fails and no useful local evidence exists
 - `--vault` flag explicitly set but `skillwiki path` returns NO_VAULT_CONFIGURED
 - Vault mode: validation fails (do not write index/log)
 - `wiki-add-task` skill activates during Phase 5 output routing (abort wiki-add-task, resume vault-pipeline.md directly)
@@ -246,11 +307,12 @@ Warnings: <any>
 
 | Failure | Action |
 |---------|--------|
-| Web search fails | Continue; omit web findings section |
+| grok-search fails | Fall back to native WebSearch; if that also fails, mark freshness-sensitive claims as locally verified only or unverified |
+| Web search fails | Continue; omit web findings section or mark fallback unavailable |
 | Deep-fetch fails | Continue with search snippets; note in report |
 | Context7 fails | Continue; omit Context7 section |
 | DeepWiki fails | Continue; omit DeepWiki section |
-| All sources fail | STOP; report total failure |
+| Selected source plan fails | STOP only when no useful local evidence exists; otherwise report degraded verification |
 | Refinement fails | Keep pre-refinement version; warn in report |
 | Vault not configured (auto mode) | Fall back to stdout; note in report |
 | Vault not configured (`--vault` flag) | Abort with advisory to run `skillwiki init` |
@@ -259,7 +321,9 @@ Warnings: <any>
 ## Tool Usage
 
 - **Agent tool** (`model: "sonnet"` or `"haiku"`): Spawn research and refinement agents. The `model` parameter is mandatory for Phase 2 and 4 agents — see Model Strategy section. See `concepts/claude-code-agent-model-specification` for the full model resolution rules.
-- **Web search**: Current information (used inside web search agents)
+- **Local file tools**: Source triage, local evidence, installed caches, release notes, repo files
+- **grok-search MCP**: Preferred latest/current/freshness-sensitive source discovery; use `get_sources` for provenance when available
+- **Web search**: Fallback or supplementary current information when grok-search is unavailable or insufficient
 - **Web fetch**: Deep-fetch top sources for richer content extraction (used inside deep-fetch agents)
 - **Context7 MCP**: Library/framework documentation (used inside Context7 agent)
 - **DeepWiki MCP**: GitHub repository insights (used inside DeepWiki agent)

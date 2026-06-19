@@ -1,13 +1,16 @@
 interface:
   display_name: "Deep Research"
-  short_description: "Deep research across web, docs, and repos with content refinement. Output to terminal, file, or vault."
-  default_prompt: "Research <topic> deeply using web search, documentation, and repository sources."
+  short_description: "Source-triaged research across local files, freshness sources, docs, and repos with verification status."
+  default_prompt: "Research <topic> deeply using local evidence first, freshness checks when current truth matters, documentation, and repository sources."
 
 policy:
   allow_implicit_invocation: true
 
 dependencies:
   tools:
+    - type: "mcp"
+      value: "grok-search"
+      description: "grok-search MCP server for latest/current freshness discovery with source provenance"
     - type: "mcp"
       value: "context7"
       description: "Context7 MCP server for current library and framework documentation"
