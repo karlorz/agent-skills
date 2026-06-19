@@ -6,9 +6,11 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep mode, investigate mode,
   peer-aware vault sync, multi-backend code review, auto-archive, and portable
-  SkillWiki vault resolution. v1.24.6: required simplify:simplify review gate
-  prefers the simplify-worker subagent adapter with inline fallback only when
-  worker dispatch is unavailable. v1.24.5: portable config cleanup,
+  SkillWiki vault resolution. v1.24.7: simplify-worker reads and follows
+  simplify:simplify as source of truth, with structural release-tooling checks
+  for the review-gate contract. v1.24.6: required simplify:simplify review
+  gate prefers the simplify-worker subagent adapter with inline fallback only
+  when worker dispatch is unavailable. v1.24.5: portable config cleanup,
   doctor-worker spawn fallback, and skill-relative Codex reference packaging.
   v1.24.4: portable SkillWiki vault auto-resolution via `vault: auto`,
   `skillwiki path` precedence, validated `~/wiki` fallback, and explicit-path

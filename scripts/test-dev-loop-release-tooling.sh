@@ -190,22 +190,116 @@ run_sync_script_contract_checks() {
 
   assert_contains "sync-plugin-cache includes dependencies manifest" "$sync_script" 'dependencies.yaml'
   assert_contains "sync-plugin-cache syncs Codex skills subtree" "$sync_script" 'Sync Codex skills subtree'
+  assert_contains "sync-plugin-cache syncs agents directory" "$sync_script" 'Sync agents directory'
+  assert_contains "sync-plugin-cache copies agents directory" "$sync_script" 'cp "${SOURCE_DIR}/agents/"* "${CACHE_DIR}/agents/"'
   assert_contains "sync-plugin-cache syncs scripts directory" "$sync_script" 'Sync scripts directory'
   assert_contains "sync-plugin-cache copies scripts recursively" "$sync_script" 'scripts/.'
   assert_contains "sync-plugin-cache syncs skill-relative references" "$sync_script" 'skills/dev-loop/references'
+  [ -f "$ROOT/skills/dev-loop/agents/simplify-worker.md" ] ||
+    fail "skills/dev-loop/agents/simplify-worker.md missing"
   [ -f "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ] ||
     fail "skills/dev-loop/skills/dev-loop/references/codex-tools.md missing"
   cmp -s "$ROOT/skills/dev-loop/references/codex-tools.md" "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ||
     fail "skills/dev-loop/skills/dev-loop/references/codex-tools.md differs from canonical reference"
 }
 
+run_simplify_worker_adapter_contract_checks() {
+  local worker
+  worker="$(cat "$ROOT/skills/dev-loop/agents/simplify-worker.md")"
+
+  assert_contains "simplify-worker reads source skill" "$worker" 'read and follow'
+  assert_contains "simplify-worker source of truth" "$worker" '`simplify:simplify` as the source of truth'
+  assert_contains "simplify-worker optional path override" "$worker" '`simplify_skill_path` (optional)'
+  assert_contains "simplify-worker Claude skill path" "$worker" '~/.claude/skills/simplify/simplify/SKILL.md'
+  assert_contains "simplify-worker Codex skill path" "$worker" '~/.agents/skills/simplify/SKILL.md'
+  assert_contains "simplify-worker Codex plugin cache path" "$worker" '~/.codex/plugins/cache/*/simplify/*/skills/simplify/SKILL.md'
+  assert_contains "simplify-worker fallback trigger" "$worker" 'If no `simplify:simplify` SKILL.md can be resolved'
+  assert_contains "simplify-worker scopes diff" "$worker" '### Scope the review'
+  assert_contains "simplify-worker reuse pass" "$worker" '### Pass A: Reuse'
+  assert_contains "simplify-worker quality pass" "$worker" '### Pass B: Quality'
+  assert_contains "simplify-worker efficiency pass" "$worker" '### Pass C: Efficiency'
+  assert_contains "simplify-worker report-only behavior" "$worker" 'Report-only behavior'
+  assert_contains "simplify-worker preserves behavior" "$worker" 'Preserve behavior'
+  assert_contains "simplify-worker validates" "$worker" '### Validate'
+  assert_contains "simplify-worker file line output" "$worker" 'file:line references'
+}
+
+run_dev_loop_dependency_contract_checks() {
+  python3 - "$ROOT/skills/dev-loop/dependencies.yaml" <<'PY'
+import sys
+
+try:
+    import yaml
+except Exception as exc:
+    raise SystemExit(f"{sys.argv[1]}: could not import yaml parser: {exc}")
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    data = yaml.safe_load(fh) or {}
+
+entries = []
+for section in ("required", "optional"):
+    section_entries = data.get(section) or []
+    if not isinstance(section_entries, list):
+        raise SystemExit(f"{path}: {section} must be a list")
+    for entry in section_entries:
+        if not isinstance(entry, dict):
+            raise SystemExit(f"{path}: {section} contains a non-object entry")
+        entries.append(entry)
+
+by_ref = {}
+for entry in entries:
+    ref = entry.get("ref")
+    if not ref:
+        raise SystemExit(f"{path}: dependency entry missing ref: {entry!r}")
+    if ref in by_ref:
+        raise SystemExit(f"{path}: duplicate dependency ref: {ref}")
+    by_ref[ref] = entry
+
+def expect_entry(ref, expected, used_by):
+    entry = by_ref.get(ref)
+    if entry is None:
+        raise SystemExit(f"{path}: missing dependency entry {ref}")
+    for key, value in expected.items():
+        if entry.get(key) != value:
+            raise SystemExit(
+                f"{path}: {ref}.{key} expected {value!r}, got {entry.get(key)!r}"
+            )
+    actual_used_by = entry.get("used_by")
+    if actual_used_by != used_by:
+        raise SystemExit(
+            f"{path}: {ref}.used_by expected {used_by!r}, got {actual_used_by!r}"
+        )
+
+expect_entry(
+    "simplify:simplify",
+    {
+        "kind": "skill",
+        "capability": "code_review_gate",
+        "fallback": "block code-changing cycle; no manual substitute for required simplify review",
+    },
+    ["REVIEW step 6 base backend", "Pre-push gate"],
+)
+
+expect_entry(
+    "dev-loop:simplify-worker",
+    {
+        "kind": "agent",
+        "capability": "code_review_gate_adapter",
+        "fallback": "inline Skill('simplify:simplify')",
+        "self": True,
+    },
+    ["REVIEW step 6 preferred subagent adapter for simplify:simplify"],
+)
+PY
+}
+
 run_dev_loop_prep_prompt_contract_checks() {
-  local prompt template setup codex_ref dependencies
+  local prompt template setup codex_ref
   prompt="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
   template="$(cat "$ROOT/skills/dev-loop/templates/project-config.md")"
   setup="$(cat "$ROOT/skills/dev-loop/setup-dev-loop/SKILL.md")"
   codex_ref="$(cat "$ROOT/skills/dev-loop/references/codex-tools.md")"
-  dependencies="$(cat "$ROOT/skills/dev-loop/dependencies.yaml")"
 
   assert_contains "dev-loop parses prep mode" "$prompt" 'MODE = prep'
   assert_contains "dev-loop dispatches prep mode" "$prompt" '**`prep`**'
@@ -218,6 +312,10 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "project config includes preflight block" "$template" 'preflight:'
   assert_contains "project config includes unattended skip behavior" "$template" 'unattended_not_ready_behavior: skip'
   assert_contains "project config includes readiness state" "$template" 'preflight_state: ready'
+  assert_contains "project config requires simplify base skill" "$template" 'The base `simplify:simplify`'
+  assert_contains "project config simplify always runs" "$template" 'skill always runs for code changes'
+  assert_contains "project config prefers simplify-worker" "$template" '`dev-loop:simplify-worker` subagent adapter when worker dispatch is available'
+  assert_contains "project config inline simplify fallback" "$template" 'inline `Skill("simplify:simplify")` when worker dispatch'
 
   assert_contains "project config uses portable skillwiki vault auto" "$template" 'vault: auto'
   assert_contains "project config documents legacy top-level vault alias" "$template" 'Legacy top-level `vault` is still supported as an alias'
@@ -233,9 +331,6 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "codex reference documents multi-agent gate" "$codex_ref" 'multi_agent = true'
   assert_contains "codex reference maps spawn_agent" "$codex_ref" '`Agent(subagent_type=X, model=…)` (spawn worker) | `spawn_agent`'
   assert_contains "codex reference documents simplify-worker adapter" "$codex_ref" '`dev-loop:simplify-worker` | REVIEW step 6 | preferred isolated adapter for `simplify:simplify`'
-  assert_contains "dependencies list simplify required skill" "$dependencies" 'ref: simplify:simplify'
-  assert_contains "dependencies list simplify-worker adapter" "$dependencies" 'capability: code_review_gate_adapter'
-  assert_contains "dependencies block missing simplify" "$dependencies" 'block code-changing cycle; no manual substitute'
   assert_not_contains "dev-loop no stale simplify-worker base backend" "$prompt" 'Always include `dev-loop:simplify-worker` (base backend)'
   assert_not_contains "setup no stale simplify-worker base backend" "$setup" 'Always includes `dev-loop:simplify-worker`'
   assert_not_contains "template no stale simplify-worker base backend" "$template" 'backend (`dev-loop:simplify-worker`) always runs'
@@ -452,6 +547,8 @@ run_codex_skill_mirror_contract_checks() {
 run_bump_version_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
+run_simplify_worker_adapter_contract_checks
+run_dev_loop_dependency_contract_checks
 run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_metadata_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
