@@ -234,7 +234,10 @@ When the compact probe fails (no session dir, no jsonl, grep error), substitute:
 
 ## Self-references
 
-Entries with `self: true` (dev-loop's own agents: simplify-worker, ci-health-worker, research-worker) are always probed but should always resolve when dev-loop is loaded. If a self-ref is missing, the dev-loop plugin install itself is broken — report it but do not retry.
+Entries with `self: true` (dev-loop's own agents such as ci-health-worker and
+research-worker) are always probed but should always resolve when dev-loop is
+loaded. If a self-ref is missing, the dev-loop plugin install itself is broken
+— report it but do not retry.
 
 ## Failure handling
 

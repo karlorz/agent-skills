@@ -1,6 +1,6 @@
 ---
 name: codex-review-worker
-description: Use this agent for an independent Codex-driven code review on a working-tree diff. Typical triggers include dev-loop REVIEW step 6 when code_review.codex is enabled for the current intensity. Delegates to codex:codex-rescue with a fixed review-the-diff prompt template, providing a second-opinion review complementary to simplify-worker's 3-pass code-quality check.
+description: Use this agent for an independent Codex-driven code review on a working-tree diff. Typical triggers include dev-loop REVIEW step 6 when code_review.codex is enabled for the current intensity. Delegates to codex:codex-rescue with a fixed review-the-diff prompt template, providing a second-opinion review complementary to the required simplify:simplify pass.
 model: sonnet
 color: cyan
 tools:
@@ -13,8 +13,8 @@ tools:
 # codex-review-worker (dev-loop)
 
 A wrapper agent that delegates code review to the Codex runtime via
-`codex:codex-rescue`. Provides a second independent reviewer alongside
-`dev-loop:simplify-worker`, running in parallel during REVIEW step 6.
+`codex:codex-rescue`. Provides a second independent reviewer alongside the
+required `simplify:simplify` pass during REVIEW step 6.
 
 ## When to invoke
 
@@ -22,7 +22,7 @@ A wrapper agent that delegates code review to the Codex runtime via
   (or `_in_high`, matching current intensity) is `true` in project config,
   AND `dev-loop:codex-review-worker` is not in `DEP_DRIFT`. The dev-loop
   controller wires this gate; the agent itself does not check config.
-- Caller passes the same working-tree diff context that simplify-worker
+- Caller passes the same working-tree diff context that the simplify pass
   receives, so reviewers see identical state.
 
 ## Inputs
@@ -56,10 +56,10 @@ Task:
 2. For each changed file, identify:
    - Correctness issues (logic errors, off-by-one, null/undefined paths)
    - Security issues (injection, secret leak, unsafe deserialization, IDOR)
-   - Out-of-distribution paths simplify-worker may miss (race conditions,
+   - Out-of-distribution paths the simplify pass may miss (race conditions,
      edge cases tied to specific environments, novel framework misuse)
 3. Do NOT report style nits or general code-quality observations —
-   simplify-worker covers that lane.
+   the simplify pass covers that lane.
 4. Report findings as a single markdown document:
    - Top: pass | fail (one word, line 1)
    - Per finding: file path : line number : severity (P0/P1/P2) : description
@@ -76,8 +76,7 @@ Hard rules:
 
 Single markdown report from codex:codex-rescue, returned verbatim. The
 dev-loop controller (parent of this wrapper) concatenates it under the
-"## codex-review-worker findings" header alongside simplify-worker's
-output.
+"## codex-review-worker findings" header alongside simplify findings.
 
 ## Failure handling
 

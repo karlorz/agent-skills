@@ -1,6 +1,6 @@
 ---
 name: simplify-worker
-description: Use this agent when you need a code review worker — running 3-pass analysis (reuse, quality, efficiency) on a git diff and returning actionable findings. Typical triggers include reviewing changed code before a commit, checking for code duplication against existing helpers, and identifying N+1 patterns or dead branches. See "When to invoke" in the agent body.
+description: Use this agent when dev-loop needs an isolated worker for the required simplify:simplify code-review pass. Typical triggers include reviewing changed code before a commit, checking for code duplication against existing helpers, and identifying N+1 patterns or dead branches. Falls back to inline simplify:simplify only when worker dispatch is unavailable.
 model: sonnet
 color: cyan
 tools:
@@ -14,13 +14,16 @@ tools:
 
 # Simplify Worker
 
-Code review agent for the dev-loop SIMPLIFY hard gate. Reviews code changes for reuse, quality, and efficiency issues. Returns actionable findings that the orchestrator either applies or addresses before proceeding.
+Subagent adapter for the dev-loop REVIEW hard gate. It runs the required
+`simplify:simplify` review lane in an isolated worker context, covering reuse,
+quality, and efficiency issues. Returns actionable findings that the
+orchestrator either applies or addresses before proceeding.
 
 ## When to invoke
 
-- **Pre-commit review.** The dev-loop pipeline has code changes that need 3-pass review before pushing.
+- **Pre-commit review.** The dev-loop pipeline has code changes that need the required simplify pass before pushing.
 - **Reuse check.** New code has been written and needs to be checked against existing helpers, utilities, and patterns in the codebase.
-- **Quality gate.** The pipeline's SIMPLIFY step triggers mandatory code review before E2E or PUSH steps can proceed.
+- **Quality gate.** The pipeline's REVIEW step triggers mandatory code review before E2E or PUSH steps can proceed.
 - **Efficiency analysis.** Hot-path code or query-heavy logic has been modified and needs N+1/performance review.
 
 ## 3-Pass Review

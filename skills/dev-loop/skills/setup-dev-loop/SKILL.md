@@ -412,7 +412,7 @@ prd_disciplines:
 
 **Section M — Code review backends (since v1.15.0).**
 
-> Explainer: dev-loop's REVIEW step always runs `simplify-worker` (sonnet) as the base code reviewer. Optionally, a second reviewer can run in parallel — `codex:codex-rescue` via the `dev-loop:codex-review-worker` wrapper — to provide an independent out-of-distribution second opinion. Two reviewers, two independent reads, no auto-reconciliation. Opt-in per intensity (normal / high) to avoid cost surprises.
+> Explainer: dev-loop's REVIEW step always invokes the `simplify:simplify` skill as the base code reviewer for code changes, preferably through the `dev-loop:simplify-worker` subagent adapter when worker dispatch is available. This is a required skill pass over the current diff, not an informal manual scan. Optionally, a second reviewer can run in parallel — `codex:codex-rescue` via the `dev-loop:codex-review-worker` wrapper — to provide an independent out-of-distribution second opinion. Two reviewers, two independent reads, no auto-reconciliation. Opt-in per intensity (normal / high) to avoid cost surprises.
 
 Detect: probe whether the Codex **runtime** is usable via the companion's
 own self-check (not a file-existence guess).
@@ -448,12 +448,13 @@ file present?"). Do not reuse doctor-worker's filesystem result here.
 If Codex is NOT installed (no companion script found) → skip this
 section with install hint: "Install the Codex plugin to enable Codex
 code review: `/plugin add openai-codex` (or check the marketplace for
-the current install path). For now, dev-loop will run simplify-worker
-only."
+the current install path). For now, dev-loop will run `simplify:simplify`
+through `dev-loop:simplify-worker` when worker dispatch is available, or inline
+when it is not."
 
 If Codex IS installed → present 2 toggles:
 
-> "Enable Codex code review for **normal**-intensity cycles? Each REVIEW step will spawn codex-review-worker in parallel with simplify-worker. Adds latency + Codex cost; useful for catching issues simplify-worker misses (logic errors, security, OOD code paths). Default: no."
+> "Enable Codex code review for **normal**-intensity cycles? Each REVIEW step will run `simplify:simplify`, preferably via simplify-worker when subagents are available, and when enabled also spawn codex-review-worker. Adds latency + Codex cost; useful for catching issues the simplify pass misses (logic errors, security, OOD code paths). Default: no."
 
 > "Enable Codex code review for **high**-intensity cycles (`/dev-loop high`)? High mode already raises aggressiveness; enabling here turns 'aggressive' into 'two independent reviewers per cycle.' Default: no."
 
@@ -470,7 +471,7 @@ code_review:
     agent: dev-loop:codex-review-worker
 ```
 
-**Runtime behavior:** Loaded at REFRESH into `CODE_REVIEW_BACKENDS` session list. Always includes `dev-loop:simplify-worker`. Appends `dev-loop:codex-review-worker` when (a) current intensity's `enabled_in_*` flag is true AND (b) neither `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in `DEP_DRIFT`. REVIEW step 6 spawns each backend in parallel with `model: "sonnet"`; findings are concatenated under per-backend section headers. No auto-reconciliation. Schema reference: `templates/project-config.md` § Code review.
+**Runtime behavior:** Loaded at REFRESH into `CODE_REVIEW_BACKENDS` session list. Always includes `simplify:simplify` as the required base skill invocation for code changes; dev-loop should prefer `dev-loop:simplify-worker` for subagent isolation and fall back to inline `Skill("simplify:simplify")` when worker dispatch is unavailable. Appends `dev-loop:codex-review-worker` when (a) current intensity's `enabled_in_*` flag is true AND (b) neither `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in `DEP_DRIFT`. REVIEW step 6 runs the simplify pass first, then spawns optional worker backends with `model: "sonnet"` when enabled. Findings are concatenated under per-backend section headers. No auto-reconciliation. Schema reference: `templates/project-config.md` § Code review.
 
 **Section N — Release policy (since v1.19.0).** Controls whether step
 10 PUSH auto-bumps version on shippable commits. Optional; omit the

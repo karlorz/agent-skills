@@ -46,7 +46,7 @@ optional:
     ref: superpowers:requesting-code-review
     capability: review (tdd pipeline)
     used_by: ["REVIEW step 6 (tdd-first pipeline)"]
-    fallback: "fall back to dev-loop:simplify-worker"
+    fallback: "fall back to simplify:simplify"
 
   - kind: skill
     ref: superpowers:systematic-debugging
@@ -165,7 +165,20 @@ optional:
     ref: codex:codex-rescue
     capability: codex_code_review_backend
     used_by: ["REVIEW step 6 when code_review.codex.enabled_in_<intensity>: true"]
-    fallback: "drop codex-review-worker from CODE_REVIEW_BACKENDS; simplify-worker reviews alone"
+    fallback: "drop codex-review-worker from CODE_REVIEW_BACKENDS; simplify:simplify reviews alone"
+
+  - kind: skill
+    ref: simplify:simplify
+    capability: code_review_gate
+    used_by: ["REVIEW step 6 base backend", "Pre-push gate"]
+    fallback: "block code-changing cycle; no manual substitute for required simplify review"
+
+  - kind: agent
+    ref: dev-loop:simplify-worker
+    capability: code_review_gate_adapter
+    used_by: ["REVIEW step 6 preferred subagent adapter for simplify:simplify"]
+    fallback: "inline Skill('simplify:simplify')"
+    self: true
 
   # --- Vault sync (skillwiki) ---
   - kind: skill
@@ -182,13 +195,6 @@ optional:
     fallback: "rely on skillwiki vault only; no cross-session compounding"
 
   # --- dev-loop self-references (always present when dev-loop loaded) ---
-  - kind: agent
-    ref: dev-loop:simplify-worker
-    capability: code_review_gate
-    used_by: ["SIMPLIFY step 6", "Pre-push gate", "REVIEW step 6 base backend"]
-    fallback: "manual code review"
-    self: true
-
   - kind: agent
     ref: dev-loop:ci-health-worker
     capability: ci_health_check
@@ -207,7 +213,7 @@ optional:
     ref: dev-loop:codex-review-worker
     capability: codex_code_review_wrapper
     used_by: ["REVIEW step 6 when codex backend enabled"]
-    fallback: "drop from CODE_REVIEW_BACKENDS; simplify-worker reviews alone"
+    fallback: "drop from CODE_REVIEW_BACKENDS; simplify:simplify reviews alone"
     self: true
 
   - kind: agent

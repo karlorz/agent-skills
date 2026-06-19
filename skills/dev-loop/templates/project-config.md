@@ -240,7 +240,7 @@ Common choices:
 
 **Evidence contract:** When `require_sources_used_section: true`, any
 SPEC/PLAN output that used external sources must include a `## Sources Used`
-section. The simplify-worker checks for this on non-trivial outputs.
+section. The simplify review checks for this on non-trivial outputs.
 
 Omit the section or set `enabled: false` to skip fact-checking — agents
 work from local context only. Missing `web_tools` entries are detected at
@@ -546,13 +546,14 @@ runs with unbounded retries (legacy behavior).
 
 ## Code review (optional, since v1.15.0)
 
-Configures the REVIEW step's set of code-review backends. The base
-backend (`dev-loop:simplify-worker`) always runs. An optional
-second-opinion backend (`dev-loop:codex-review-worker`, which wraps
-`codex:codex-rescue`) can be enabled per-intensity. When both are
-active, REVIEW step 6 spawns them in parallel via `Agent(model: "sonnet")`
-calls; findings concatenate under per-backend section headers. No
-auto-reconciliation between reports.
+Configures the REVIEW step's code-review backends. The base `simplify:simplify`
+skill always runs for code changes, preferably through the
+`dev-loop:simplify-worker` subagent adapter when worker dispatch is available.
+An optional second-opinion backend (`dev-loop:codex-review-worker`, which wraps
+`codex:codex-rescue`) can be enabled per-intensity. When enabled, REVIEW step
+6 runs the simplify pass first, then spawns the optional worker via
+`Agent(model: "sonnet")`; findings concatenate under per-backend section
+headers. No auto-reconciliation between reports.
 
 ```yaml
 code_review:
@@ -566,13 +567,16 @@ code_review:
 Engine wiring:
 
 1. **REFRESH** resolves the `code_review` block into `CODE_REVIEW_BACKENDS`:
-   - Always includes `dev-loop:simplify-worker` (base).
+   - Always includes `simplify:simplify` as the required base skill; prefer
+     `dev-loop:simplify-worker` for subagent isolation when available.
    - Conditionally appends `dev-loop:codex-review-worker` when the
      current intensity's `enabled_in_*` toggle is true AND neither
      `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in
      `DEP_DRIFT` (doctor-worker reports the latter at REFRESH step 7).
-2. **REVIEW step 6** spawns each backend in `CODE_REVIEW_BACKENDS`
-   concurrently. Output is concatenated.
+2. **REVIEW step 6** runs the simplify pass via `dev-loop:simplify-worker`
+   when possible, or inline `Skill("simplify:simplify")` when worker dispatch
+   is unavailable. It spawns optional worker backends in
+   `CODE_REVIEW_BACKENDS` when present. Output is concatenated.
 3. Missing config block → defaults to base-only (preserves
    pre-v1.15.0 behavior). Backwards compatible.
 

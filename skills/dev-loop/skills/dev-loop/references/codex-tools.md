@@ -29,16 +29,18 @@ Codex each is a `spawn_agent` + `wait_agent` pair:
 |---|---|---|
 | `dev-loop:doctor-worker` | REFRESH step 7 | dependency + compact probe |
 | `dev-loop:research-worker` | IDLE step 4 / investigate SCAN | code + vault health scan |
-| `dev-loop:simplify-worker` | REVIEW step 6 | code-quality review |
+| `dev-loop:simplify-worker` | REVIEW step 6 | preferred isolated adapter for `simplify:simplify` |
+| `simplify:simplify` | REVIEW step 6 | required code-quality review skill; inline fallback |
 | `dev-loop:codex-review-worker` | REVIEW step 6 (if enabled) | correctness/security (delegates to Codex) |
 | `dev-loop:ci-health-worker` | MERGE 6b / IDLE step 3b | CI health gate |
 | `playwright-cli:browser-worker` | BROWSER-VERIFY 6a | browser smoke check |
 
 ## Subagent dispatch requires multi-agent support
 
-The REVIEW step can fan out two reviewers in parallel (simplify-worker +
-codex-review-worker) and IDLE maintenance spawns several skillwiki workers.
-Codex gates subagent spawning behind a feature flag. Add to
+The REVIEW step always runs `simplify:simplify`, preferably through the
+`dev-loop:simplify-worker` adapter, and can optionally fan out
+`codex-review-worker` as a second reviewer. IDLE maintenance spawns several
+skillwiki workers. Codex gates subagent spawning behind a feature flag. Add to
 `~/.codex/config.toml`:
 
 ```toml
@@ -47,10 +49,11 @@ multi_agent = true
 ```
 
 This enables `spawn_agent`, `wait_agent`, and `close_agent`. Without it,
-dev-loop still runs — each worker step degrades to inline execution
-(`Skill("dev-loop:<worker>")` or the documented inline fallback). dev-loop's
-existing `DEP_DRIFT` / inline-fallback machinery already handles a missing
-worker; treat "no multi_agent" the same way.
+dev-loop still runs — the simplify gate falls back to inline
+`Skill("simplify:simplify")`, and each optional worker step degrades to inline
+execution (`Skill("dev-loop:<worker>")` or the documented inline fallback).
+dev-loop's existing `DEP_DRIFT` / inline-fallback machinery already handles a
+missing worker; treat "no multi_agent" the same way.
 
 Legacy note: Codex builds before `rust-v0.115.0` exposed spawned-agent waiting
 as `wait`. Current Codex uses `wait_agent`; `wait` now belongs to code-mode

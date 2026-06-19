@@ -261,7 +261,7 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 3. SPEC (brainstorm) | Parent session | inherit | Creative exploration, requirements gathering — benefits from parent model |
 | 4. PLAN | Parent session | inherit | Architecture design, dependency mapping — benefits from parent model |
 | 5. EXECUTE (subagents) | Implementation subagents | `sonnet` | Mechanical coding from plan — following spec, no architectural judgment |
-| 6. SIMPLIFY | simplify-worker | `sonnet` | Code review: search, compare, pattern match — integration-level judgment |
+| 6. REVIEW (simplify) | `simplify:simplify` skill, preferably via `dev-loop:simplify-worker` | `sonnet` subagent when available; inline fallback otherwise | Code review: reuse, quality, efficiency — must run as an explicit skill invocation, not an informal manual scan |
 | 6a. BROWSER-VERIFY | playwright-cli:browser-worker | `sonnet` | Browser health check — smoke routes, console errors, a11y violations |
 | 6b. MERGE | gh CLI (inline) + ci-health-worker | inline + `sonnet` | PR creation (inline) + CI health gate (ci-health-worker agent) |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
@@ -340,7 +340,7 @@ The current settings.json at `~/.claude/settings.json` has `"CLAUDE_CODE_SUBAGEN
 |-------|------|------|
 | PRD | Pluggable via `prd_layer` config — default `superpowers`, also `codestable`, `tdd`, `manual`, `none` | Brainstorm, spec, plan, execute, review |
 | Knowledge | Pluggable via `knowledge_layer` config — default `skillwiki`, also `none` | Ingest, validate, query, crystallize, distill, decide, lint, audit |
-| Quality | `simplify-worker` agent (model: sonnet, spawned inline) | Pre-push code review gate |
+| Quality | `simplify:simplify` skill (required) | Pre-push code review gate |
 | Hygiene | `claude-md-management:claude-md-improver` | Long-session context maintenance |
 | Interview | Pluggable via `interview` config — default `native`, optional `grill-with-docs` / `grill-me` | Setup bootstrap + per-work-item grilling |
 
@@ -382,7 +382,7 @@ See config template for `knowledge_backends` registry details.
 | `spec` | (from brainstorm) | codestable:generate | inline | — | — |
 | `plan` | superpowers:writing-plans | — | superpowers:writing-plans | — | — |
 | `execute` | superpowers:subagent-driven-development | codestable:generate | superpowers:test-driven-development | inline | — |
-| `review` | simplify-worker (sonnet agent) | codestable:validate | superpowers:requesting-code-review | manual | — |
+| `review` | simplify:simplify (prefer dev-loop:simplify-worker) | codestable:validate | superpowers:requesting-code-review + simplify:simplify | manual | — |
 | `subagent_dispatch` | yes | no | no | no | no |
 
 At REFRESH, `PRD_CAPS` is resolved alongside `BACKEND_CAPS`: read `prd_layer`
@@ -513,7 +513,8 @@ prd_disciplines:
 │  3. SPEC      <PRD skill> → spec.md at vault path           │
 │  4. PLAN      <PRD skill> → plan.md at vault path           │
 │  5. EXECUTE   <PRD execution skill> → implement             │
-│  6. SIMPLIFY  Agent(simplify-worker, model: sonnet) → fix  │
+│  6. REVIEW    simplify-worker or Skill(simplify:simplify)  │
+│               → fix findings                              │
 │  6b. MERGE    PR from feature branch → main (if branch ≠   │
 │               release_branch and code was committed)        │
 ├─────────────────────────────────────────────────────────────┤
@@ -653,7 +654,11 @@ prd_disciplines:
      **Resolve `code_review`** — parse the `code_review` block (since v1.15.0).
      Build `CODE_REVIEW_BACKENDS` session list (order: always-on backends
      first, optional backends appended per intensity gate):
-     - Always include `dev-loop:simplify-worker` (base backend).
+     - Always include `simplify:simplify` (base backend). Prefer running it
+       through `dev-loop:simplify-worker` for subagent isolation when the
+       platform supports worker dispatch; fall back to inline `Skill("simplify:simplify")`
+       when workers are unavailable. This is a required skill invocation for
+       code changes, not a discretionary manual review.
      - If `intensity == normal` AND `code_review.codex.enabled_in_normal: true`
        AND `dev-loop:codex-review-worker` ∉ `DEP_DRIFT` AND
        `codex:codex-rescue` ∉ `DEP_DRIFT` → append `dev-loop:codex-review-worker`.
@@ -1176,6 +1181,12 @@ fact-checked. Output specs must include a `## Sources Used` section if
 
 ### 6. REVIEW — code quality gate (conditional on `prd_pipeline` + `PRD_CAPS`)
 
+**REQUIRED SUB-SKILL:** Use `simplify:simplify` for code-review cleanup on
+every cycle with code changes. Prefer subagent isolation via
+`dev-loop:simplify-worker` when worker dispatch is available; fall back to
+inline `Skill("simplify:simplify")` only when the platform cannot run the
+worker.
+
 **If `review` step is NOT in the active pipeline template:** skip to step 7.
 
 **If `review` step IS in the active pipeline template:**
@@ -1183,30 +1194,42 @@ fact-checked. Output specs must include a `## Sources Used` section if
 - **`review` in PRD_CAPS:** Invoke the registered review skill on all
   modified/new files. Fix every issue raised before any further step.
   No bypass for `mode: mandatory` disciplines.
-- **`review` not in PRD_CAPS:** Manual code review (or skip for
-  vault-only work where no code was touched).
+- **`review` not in PRD_CAPS:** Skip PRD-specific review, but still run the
+  required `simplify:simplify` code-review gate for code changes. Vault-only
+  work skips code review because no code was touched.
 
-**Multi-backend execution (since v1.15.0):** Iterate over `CODE_REVIEW_BACKENDS`
-(resolved at REFRESH). Spawn every backend in **parallel** via independent
-`Agent()` calls with `model: "sonnet"`; each receives the same diff context.
-Concatenate findings under per-backend section headers:
+**Required simplify code review (base backend):** For any cycle with code
+changes, invoke the `simplify:simplify` skill on the current diff before
+MERGE. Default to the `dev-loop:simplify-worker` subagent adapter for clean
+review context and sonnet pinning when available; if subagents or the adapter
+are unavailable, invoke `simplify:simplify` inline in the parent session. This
+is a hard gate: read and follow the skill body, fix every high-confidence
+finding, and run the focused validation it requires. Do not replace this with
+an informal "I reviewed it" statement.
+
+**Optional multi-backend execution (since v1.15.0):** After the required
+`simplify:simplify` pass, iterate over any additional `CODE_REVIEW_BACKENDS`
+(resolved at REFRESH). Spawn optional worker backends in **parallel** via
+independent `Agent()` calls with `model: "sonnet"`; each receives the same
+diff context. Concatenate findings under per-backend section headers:
 
 ```
-## simplify-worker findings
+## simplify:simplify findings
 <simplify report>
 
 ## codex-review-worker findings
 <codex report — only if codex backend enabled and not in DEP_DRIFT>
 ```
 
-The controller reads both, fixes findings from each before continuing.
-No auto-reconciliation — divergent findings are the value of having two
-reviewers. If `CODE_REVIEW_BACKENDS` has only one entry (default behavior),
-this collapses to the pre-v1.15.0 single-spawn case with no overhead.
+The controller reads all findings, fixes findings from each before continuing,
+and reruns targeted validation after fixes. No auto-reconciliation — divergent
+findings are the value of having two reviewers. If no optional backend is
+enabled, the required `simplify:simplify` pass is the complete code-review
+gate.
 
 **Evidence-contract gate (sub-step of REVIEW):** If `FACT_CHECK_CAPS`
 is non-empty and `evidence_contract.require_sources_used_section` is true,
-the simplify-worker checks that non-trivial SPEC/PLAN outputs include a
+the simplify review checks that non-trivial SPEC/PLAN outputs include a
 `## Sources Used` section. Missing section → flag as review finding,
 require addition before proceeding. This applies only to outputs that
 consulted external sources (web search, context7, vault queries beyond
@@ -1856,7 +1879,7 @@ setup.
 
 | Gate | Condition | Pass | Fail |
 |------|-----------|------|------|
-| SIMPLIFY | simplify-worker review (sonnet) | MERGE (if code changed) | Fix issues, re-run |
+| REVIEW | `simplify:simplify` code review | MERGE (if code changed) | Fix issues, re-run |
 | MERGE | On release_branch | `git push` directly | — |
 | MERGE | On feature branch | Push + create PR | — |
 | MERGE (CI) | `ci_configured: true` | Spawn ci-health-worker (sonnet) → healthy/degraded: auto-merge (squash), broken: skip auto-merge | — |
@@ -1918,7 +1941,7 @@ stale local state:
    `PRD_CAPS` and `prd_pipeline`, not hardcoded skill names. superpowers
    is the default backend, not required.
 4. **Never push without review.** Hard gate for code changes;
-   git-only and vault-only work skip simplify-worker (nothing to review). E2E
+   git-only and vault-only work skip simplify review (nothing to review). E2E
    joins the gate when the project has it.
 5. **Validate before index.** When `audit_vault` in BACKEND_CAPS:
    `skillwiki validate` must pass before touching `index.md` or

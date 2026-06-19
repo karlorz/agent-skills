@@ -200,9 +200,12 @@ run_sync_script_contract_checks() {
 }
 
 run_dev_loop_prep_prompt_contract_checks() {
-  local prompt template
+  local prompt template setup codex_ref dependencies
   prompt="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
   template="$(cat "$ROOT/skills/dev-loop/templates/project-config.md")"
+  setup="$(cat "$ROOT/skills/dev-loop/setup-dev-loop/SKILL.md")"
+  codex_ref="$(cat "$ROOT/skills/dev-loop/references/codex-tools.md")"
+  dependencies="$(cat "$ROOT/skills/dev-loop/dependencies.yaml")"
 
   assert_contains "dev-loop parses prep mode" "$prompt" 'MODE = prep'
   assert_contains "dev-loop dispatches prep mode" "$prompt" '**`prep`**'
@@ -222,6 +225,20 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop documents skillwiki path precedence" "$prompt" 'run `skillwiki path`'
   assert_contains "dev-loop documents validated wiki fallback" "$prompt" 'validated `~/wiki` fallback'
   assert_contains "dev-loop documents explicit vault mismatch warning" "$prompt" 'Configured SkillWiki vault'
+
+  assert_contains "dev-loop requires simplify skill review" "$prompt" '**REQUIRED SUB-SKILL:** Use `simplify:simplify`'
+  assert_contains "dev-loop prefers simplify-worker adapter" "$prompt" 'Default to the `dev-loop:simplify-worker` subagent adapter'
+  assert_contains "dev-loop inline simplify is fallback" "$prompt" 'inline `Skill("simplify:simplify")` only when'
+  assert_contains "setup documents simplify worker preference" "$setup" 'prefer `dev-loop:simplify-worker` for subagent isolation'
+  assert_contains "codex reference documents multi-agent gate" "$codex_ref" 'multi_agent = true'
+  assert_contains "codex reference maps spawn_agent" "$codex_ref" '`Agent(subagent_type=X, model=…)` (spawn worker) | `spawn_agent`'
+  assert_contains "codex reference documents simplify-worker adapter" "$codex_ref" '`dev-loop:simplify-worker` | REVIEW step 6 | preferred isolated adapter for `simplify:simplify`'
+  assert_contains "dependencies list simplify required skill" "$dependencies" 'ref: simplify:simplify'
+  assert_contains "dependencies list simplify-worker adapter" "$dependencies" 'capability: code_review_gate_adapter'
+  assert_contains "dependencies block missing simplify" "$dependencies" 'block code-changing cycle; no manual substitute'
+  assert_not_contains "dev-loop no stale simplify-worker base backend" "$prompt" 'Always include `dev-loop:simplify-worker` (base backend)'
+  assert_not_contains "setup no stale simplify-worker base backend" "$setup" 'Always includes `dev-loop:simplify-worker`'
+  assert_not_contains "template no stale simplify-worker base backend" "$template" 'backend (`dev-loop:simplify-worker`) always runs'
 }
 
 assert_json_array_contains() {
