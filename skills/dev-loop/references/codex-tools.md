@@ -1,11 +1,14 @@
 # Codex Tool Mapping — dev-loop
 
 dev-loop is written with Claude Code tool names. Under OpenAI Codex CLI or the
-Codex App, map them to your platform equivalents. dev-loop's *orchestration* is
-already capability-based (no `if codex` branching — see `/goal Integration` →
-"What dev-loop Does NOT Do"); this file covers the two things that orchestration
-layer does not: the subagent-dispatch mechanism, and the Codex App
-sandbox-finishing contract for git-mutating steps.
+Codex App, the `PLATFORM_DISPATCH` capability (SKILL.md § Platform Dispatch
+Capability) auto-detects which dispatch tools are available and sets
+`DISPATCH_MODE` accordingly. This file documents the full tool mapping table,
+worker inventory, and the Codex App sandbox-finishing contract.
+
+**If `DISPATCH_MODE = codex`**, every `Agent(...)` call in SKILL.md is
+automatically translated to `spawn_agent` + `wait_agent` + `close_agent`.
+No manual tool-name translation is required.
 
 ## Tool Mapping
 
@@ -105,3 +108,42 @@ this is detection + degradation, not platform branching in the loop logic.
 On Claude Code, dev-loop loads from the plugin marketplace. On Codex, place or
 symlink the dev-loop skills into `~/.agents/skills/` so they auto-load. The
 `.codex-plugin/plugin.json` manifest declares the plugin for Codex tooling.
+
+## Troubleshooting: Subagents Not Working on Codex
+
+If dev-loop cycles complete but workers always fall back to inline execution:
+
+1. **Verify `multi_agent` is enabled:**
+   ```bash
+   grep -A1 '\[features\]' ~/.codex/config.toml
+   # Expected: multi_agent = true
+   ```
+
+2. **Check Codex version:**
+   ```bash
+   codex --version
+   # v0.141.0+ recommended; v0.115.0+ required for wait_agent
+   ```
+
+3. **Confirm `DISPATCH_MODE` detection:** At REFRESH, dev-loop should log
+   `DISPATCH_MODE = codex`. If it logs `inline_only`, the `spawn_agent` tool
+   is not being exposed — check if the Codex session loaded the plugin and
+   the project is trusted.
+
+4. **Clear stale session cache:**
+   ```bash
+   rm -rf ~/.codex/sessions/*
+   ```
+
+5. **Disable `multi_agent_v2` if encountering "encrypted parameters" errors:**
+   ```toml
+   [features]
+   multi_agent = true
+   multi_agent_v2 = false
+   ```
+
+6. **Test spawn_agent directly:**
+   ```
+   codex exec "spawn_agent a test agent to echo hello world"
+   ```
+   If this fails, the issue is in Codex's agent infrastructure, not dev-loop.

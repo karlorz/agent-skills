@@ -6,15 +6,12 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep mode, investigate mode,
   peer-aware vault sync, multi-backend code review, auto-archive, and portable
-  SkillWiki vault resolution. v1.24.7: simplify-worker reads and follows
-  simplify:simplify as source of truth, with structural release-tooling checks
-  for the review-gate contract. v1.24.6: required simplify:simplify review
-  gate prefers the simplify-worker subagent adapter with inline fallback only
-  when worker dispatch is unavailable. v1.24.5: portable config cleanup,
-  doctor-worker spawn fallback, and skill-relative Codex reference packaging.
-  v1.24.4: portable SkillWiki vault auto-resolution via `vault: auto`,
-  `skillwiki path` precedence, validated `~/wiki` fallback, and explicit-path
-  mismatch warnings. Pass `high` for aggressive mode.
+  SkillWiki vault resolution. v1.24.8: PLATFORM_DISPATCH auto-detects
+  agent dispatch mechanism (Agent vs spawn_agent vs inline) at REFRESH so
+  Codex subagent dispatch works without manual tool-name translation.
+  v1.24.7: simplify-worker reads and follows simplify:simplify as source
+  of truth, with structural release-tooling checks for the review-gate
+  contract. Pass `high` for aggressive mode.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -454,6 +451,41 @@ fields. Do not stop the cycle just because not-ready work exists. The
 configured `PREFLIGHT_POLICY.unattended_not_ready_behavior` defaults to
 `skip`; any future behavior must remain non-interactive under `/goal`.
 
+### Platform Dispatch Capability (v1.24.8)
+
+`PLATFORM_DISPATCH` is resolved at REFRESH alongside `ORCHESTRATION_CAPS`. It
+detects which agent-dispatch mechanism is available and sets the dispatch syntax
+for all worker call sites. This replaces passive reference-doc lookup.
+
+**Detection (run once at REFRESH):**
+
+1. Probe available tools in the current session:
+   - If `Agent` tool exists → `DISPATCH_MODE = claude_code`
+   - Else if `spawn_agent` tool exists → `DISPATCH_MODE = codex`
+   - Else → `DISPATCH_MODE = inline_only`
+2. Store `DISPATCH_MODE` for all subsequent worker spawns.
+
+**Dispatch rules per mode:**
+
+| Mode | Spawn | Wait | Cleanup | Model hint |
+|------|-------|------|---------|------------|
+| `claude_code` | `Agent(subagent_type=X, model="sonnet", prompt=…)` | Agent returns inline | (automatic) | `model: "sonnet"` |
+| `codex` | `spawn_agent(agent_name=X, prompt=…)` | `wait_agent(agent_id=<id>)` | `close_agent(agent_id=<id>)` | Codex uses session model; `"sonnet"` is a cost hint, not a model ID |
+| `inline_only` | Direct `Skill("X")` invocation | Inline return | (none) | Parent model |
+
+**Every `Agent(...)` call site in this skill implies the Codex equivalent.**
+When `DISPATCH_MODE = codex`, translate each `Agent(...)` pseudo-call to
+`spawn_agent` + `wait_agent` + `close_agent`. The `subagent_type` value maps
+to `agent_name`. The `model: "sonnet"` hint is informational on Codex — the
+session model handles execution. See `references/codex-tools.md` for the full
+tool mapping table and Codex App sandbox-finishing contract.
+
+**Inline fallback applies uniformly:** If any dispatch (Claude or Codex) fails
+at spawn time — tool error, `multi_agent` disabled, balance error, unknown
+agent — fall back to inline `Skill(…)` execution. The existing `DEP_DRIFT` /
+inline-fallback machinery handles this identically regardless of
+`DISPATCH_MODE`.
+
 ### Pipeline Templates
 
 Pipeline templates control which steps run. `PRD_CAPS` controls which skill
@@ -846,6 +878,13 @@ prd_disciplines:
 
    ```
    Agent(description: "Dev-loop dep + compact doctor", subagent_type: "dev-loop:doctor-worker", model: "sonnet", prompt: "Probe skills/dev-loop/dependencies.yaml AND auto-compact count for the current session. Report JSON with status, missing_required[], missing_optional[], compact_count, session_jsonl_path.")
+   ```
+
+   **Codex dispatch (when `DISPATCH_MODE = codex`):**
+   ```
+   spawn_agent(agent_name="doctor-worker", prompt="Probe skills/dev-loop/dependencies.yaml AND auto-compact count for the current session. Report JSON with status, missing_required[], missing_optional[], compact_count, session_jsonl_path.")
+   → wait_agent(agent_id=<returned_id>)
+   → close_agent(agent_id=<returned_id>)
    ```
 
    **Agent spawn fallback:** If the `Agent(...)` call itself fails before
@@ -2239,15 +2278,17 @@ goal command, but it must not start or manage `/goal`.
 ## Codex Platform Adaptation
 
 dev-loop targets Claude Code first but runs under OpenAI Codex CLI / Codex App
-without platform branching. Two concerns sit outside the capability-based loop
-logic and are documented in `references/codex-tools.md`:
+without platform branching. The `PLATFORM_DISPATCH` capability (resolved at
+REFRESH) automatically detects the available dispatch mechanism and sets
+`DISPATCH_MODE` for all worker call sites — no manual translation needed.
 
 1. **Subagent dispatch.** The worker spawns (doctor-, research-, simplify-,
    codex-review-, ci-health-worker; browser-worker) use the Claude `Agent` tool.
-   On Codex, map these to `spawn_agent` / `wait_agent` / `close_agent` and set
-   `[features] multi_agent = true` in `~/.codex/config.toml`. Without multi-agent,
-   each worker degrades to inline `Skill(...)` execution — the same path
-   `DEP_DRIFT` already uses.
+   When `DISPATCH_MODE = codex`, each `Agent(...)` call is automatically
+   translated to `spawn_agent` / `wait_agent` / `close_agent`. Requires
+   `[features] multi_agent = true` in `~/.codex/config.toml`. Without
+   multi-agent, each worker degrades to inline `Skill(...)` execution — the
+   same path `DEP_DRIFT` already uses.
 2. **Codex App sandbox finishing.** The App executes in an externally-managed
    worktree (often detached HEAD) where push/branch/PR is blocked. Before the
    git-mutating steps (MERGE 6b, PUSH 10, SAVE 7 / MERGE 6b-2 vault push),
@@ -2257,7 +2298,8 @@ logic and are documented in `references/codex-tools.md`:
    RETRO, not as a cycle failure.
 
 Discovery on Codex is via `~/.agents/skills/`; the `.codex-plugin/plugin.json`
-manifest declares the plugin for Codex tooling.
+manifest declares the plugin for Codex tooling. Full tool mapping details:
+`references/codex-tools.md`.
 
 ## Research Agent
 
