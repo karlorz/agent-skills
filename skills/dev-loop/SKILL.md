@@ -6,7 +6,9 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep mode, investigate mode,
   peer-aware vault sync, multi-backend code review, auto-archive, and portable
-  SkillWiki vault resolution. v1.24.9: Codex dispatch correction release
+  SkillWiki vault resolution. v1.25.0: attended office-hours companion
+  skill for requirements intake before prep or /goal. v1.24.9: Codex
+  dispatch correction release
   ships task_name-based spawn_agent docs/tests, instruction-level
   PLATFORM_DISPATCH wording, and Codex custom-agent TOML caveats. v1.24.8:
   PLATFORM_DISPATCH documents an instruction-level dispatch routing contract

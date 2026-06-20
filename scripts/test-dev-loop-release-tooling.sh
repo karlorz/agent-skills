@@ -336,6 +336,39 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_not_contains "template no stale simplify-worker base backend" "$template" 'backend (`dev-loop:simplify-worker`) always runs'
 }
 
+run_dev_loop_office_hours_contract_checks() {
+  local skill_root canonical mirror body sync_script
+
+  skill_root="$ROOT/skills/dev-loop"
+  canonical="$skill_root/office-hours/SKILL.md"
+  mirror="$skill_root/skills/office-hours/SKILL.md"
+
+  [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
+  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
+  cmp -s "$canonical" "$mirror" || fail "${mirror#$ROOT/} differs from ${canonical#$ROOT/}"
+
+  body="$(cat "$canonical")"
+  sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
+
+  assert_contains "office-hours uses inventory helper" "$body" 'preflight-inventory.js'
+  assert_contains "office-hours refreshes memory index" "$body" 'skillwiki memory index'
+  assert_contains "office-hours lists memory topics" "$body" 'skillwiki memory topics'
+  assert_contains "office-hours reads project index" "$body" 'skillwiki project-index'
+  assert_contains "office-hours report path contract" "$body" 'projects/<slug>/requirements/YYYY-MM-DD-office-hours-<topic>.md'
+  assert_contains "office-hours no raw mutation rule" "$body" 'Do NOT modify raw transcripts'
+  assert_contains "office-hours no automatic promotion rule" "$body" 'Do NOT auto-create planned work'
+  assert_contains "office-hours no preflight readiness rule" "$body" 'Do NOT set preflight readiness'
+  assert_contains "office-hours no goal lifecycle rule" "$body" 'Do NOT start or manage `/goal`'
+  assert_contains "office-hours Claude structured questions" "$body" 'AskUserQuestion'
+  assert_contains "office-hours Codex structured questions" "$body" 'ask_user_question'
+  assert_contains "office-hours Antigravity structured questions" "$body" 'ask_question'
+  assert_contains "office-hours conversational fallback" "$body" 'conversational fallback'
+  assert_contains "office-hours prompts in main session only" "$body" 'main session only'
+  assert_contains "office-hours forbids subagent prompts" "$body" 'Do NOT call structured question tools from subagents'
+  assert_contains "office-hours optional grill hook" "$body" 'grill-me'
+  assert_contains "sync-plugin-cache syncs office-hours companion" "$sync_script" 'office-hours/SKILL.md'
+}
+
 run_codex_dispatch_contract_checks() {
   local skill canonical_ref
   skill="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
@@ -568,6 +601,7 @@ run_sync_script_contract_checks
 run_simplify_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks
 run_dev_loop_prep_prompt_contract_checks
+run_dev_loop_office_hours_contract_checks
 run_codex_dispatch_contract_checks
 run_dev_loop_metadata_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
