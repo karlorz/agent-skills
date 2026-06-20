@@ -6,12 +6,14 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep mode, investigate mode,
   peer-aware vault sync, multi-backend code review, auto-archive, and portable
-  SkillWiki vault resolution. v1.24.8: PLATFORM_DISPATCH documents an
-  instruction-level dispatch routing contract (Agent vs spawn_agent vs inline)
-  at REFRESH so Codex subagent dispatch follows the live tool surface.
-  v1.24.7: simplify-worker reads and follows simplify:simplify as source
-  of truth, with structural release-tooling checks for the review-gate
-  contract. Pass `high` for aggressive mode.
+  SkillWiki vault resolution. v1.24.9: Codex dispatch correction release
+  ships task_name-based spawn_agent docs/tests, instruction-level
+  PLATFORM_DISPATCH wording, and Codex custom-agent TOML caveats. v1.24.8:
+  PLATFORM_DISPATCH documents an instruction-level dispatch routing contract
+  (Agent vs spawn_agent vs inline) at REFRESH so Codex subagent dispatch
+  follows the live tool surface. v1.24.7: simplify-worker reads and follows
+  simplify:simplify as source of truth, with structural release-tooling checks
+  for the review-gate contract. Pass `high` for aggressive mode.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
