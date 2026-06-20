@@ -71,6 +71,14 @@
       "version": "3.6.4",
       "category": "operations",
       "keywords": ["backup", "restore", "host", "caddy", "hermes", "disaster-recovery", "cli", "ssh", "profiles", "deep-research", "agent", "hermes-backup"]
+    },
+    {
+      "name": "grill-me",
+      "source": "./skills/grill-me",
+      "description": "Relentless plan/design interview skills adapted from Matt Pocock's grilling, with inline cross-platform question style. v1.0.0: packages both skill names for direct invocation.",
+      "version": "1.0.0",
+      "category": "productivity",
+      "keywords": ["grill-me", "grill", "interview", "grilling", "plan", "design", "cross-platform", "ask-question", "codex", "antigravity", "ask-user-question"]
     }
   ]
 }
