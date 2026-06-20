@@ -160,9 +160,14 @@ Use structured question tools for decision points:
 | Platform | Structured question tool |
 |---|---|
 | Claude Code | `AskUserQuestion` |
-| Codex CLI or Codex App | `ask_user_question` |
+| Codex CLI or Codex App | `request_user_input` in Codex Plan mode; numbered conversational fallback in Codex Default mode |
 | Antigravity CLI | `ask_question` |
 | None available | `conversational fallback` |
+
+Probe the live tool surface before calling a structured question tool.
+In Codex App/CLI, use `request_user_input` only in Plan mode when the tool is exposed.
+In Codex Default mode, do not call it; use conversational fallback with numbered
+choices and wait for a normal user reply.
 
 Decision points: choose one focus candidate; continue read-only after stale
 inventory or rerun; choose the final decision; confirm a managed `## Office

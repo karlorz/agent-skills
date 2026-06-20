@@ -4,16 +4,11 @@ description: >
   Use for "run a dev cycle", "implement a feature", "make a code change",
   "start a loop", "investigate", "find work", or "prep" to drive automated
   planning, execution, code review, and knowledge capture. Supports /goal
-  compatibility, Codex CLI/App, preflight prep mode, investigate mode,
-  peer-aware vault sync, multi-backend code review, auto-archive, and portable
-  SkillWiki vault resolution. v1.26.0: compact office-hours prompt with first-run
-  anchoring fix. v1.25.0: attended office-hours companion
-  skill for requirements intake before prep or /goal. v1.24.8:
-  PLATFORM_DISPATCH documents an instruction-level dispatch routing contract
-  (Agent vs spawn_agent vs inline) at REFRESH so Codex subagent dispatch
-  follows the live tool surface. v1.24.7: simplify-worker reads and follows
-  simplify:simplify as source of truth, with structural release-tooling checks
-  for the review-gate contract. Pass `high` for aggressive mode.
+  compatibility, Codex CLI/App, preflight prep, investigate mode,
+  peer-aware vault sync, multi-backend review, auto-archive, and portable
+  SkillWiki vault resolution. v1.26.1: office-hours Codex question flow uses
+  request_user_input only in Plan mode and numbered fallback in Default mode.
+  Pass `high` for aggressive mode.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
