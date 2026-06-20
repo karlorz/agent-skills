@@ -6,8 +6,9 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep, investigate mode,
   peer-aware vault sync, multi-backend review, auto-archive, and portable
-  SkillWiki vault resolution. v1.26.1: office-hours Codex question flow uses
-  request_user_input only in Plan mode and numbered fallback in Default mode.
+  SkillWiki vault resolution. v1.26.2: stable release for stale implemented
+  capture hygiene and office-hours recheck. v1.26.1: office-hours Codex
+  question flow uses request_user_input only in Plan mode and numbered fallback in Default mode.
   Pass `high` for aggressive mode.
 ---
 
