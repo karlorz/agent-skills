@@ -6,9 +6,9 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep mode, investigate mode,
   peer-aware vault sync, multi-backend code review, auto-archive, and portable
-  SkillWiki vault resolution. v1.24.8: PLATFORM_DISPATCH auto-detects
-  agent dispatch mechanism (Agent vs spawn_agent vs inline) at REFRESH so
-  Codex subagent dispatch works without manual tool-name translation.
+  SkillWiki vault resolution. v1.24.8: PLATFORM_DISPATCH documents an
+  instruction-level dispatch routing contract (Agent vs spawn_agent vs inline)
+  at REFRESH so Codex subagent dispatch follows the live tool surface.
   v1.24.7: simplify-worker reads and follows simplify:simplify as source
   of truth, with structural release-tooling checks for the review-gate
   contract. Pass `high` for aggressive mode.
@@ -453,9 +453,11 @@ configured `PREFLIGHT_POLICY.unattended_not_ready_behavior` defaults to
 
 ### Platform Dispatch Capability (v1.24.8)
 
-`PLATFORM_DISPATCH` is resolved at REFRESH alongside `ORCHESTRATION_CAPS`. It
-detects which agent-dispatch mechanism is available and sets the dispatch syntax
-for all worker call sites. This replaces passive reference-doc lookup.
+`PLATFORM_DISPATCH` is an instruction-level dispatch rule resolved by the
+agent at REFRESH alongside `ORCHESTRATION_CAPS`. It probes the model-visible
+tool surface and records which dispatch syntax the agent must use for later
+worker call sites. This is not compiled dispatcher code; it is a required
+prompt contract for the agent following this skill.
 
 **Detection (run once at REFRESH):**
 
@@ -470,15 +472,18 @@ for all worker call sites. This replaces passive reference-doc lookup.
 | Mode | Spawn | Wait | Cleanup | Model hint |
 |------|-------|------|---------|------------|
 | `claude_code` | `Agent(subagent_type=X, model="sonnet", prompt=…)` | Agent returns inline | (automatic) | `model: "sonnet"` |
-| `codex` | `spawn_agent(agent_name=X, prompt=…)` | `wait_agent(agent_id=<id>)` | `close_agent(agent_id=<id>)` | Codex uses session model; `"sonnet"` is a cost hint, not a model ID |
+| `codex` | `spawn_agent(task_name=X, prompt=…)` | `wait_agent(agent_id=<id>)` | `close_agent(agent_id=<id>)` | Codex uses the current session model by default; do not pass `"sonnet"` as a model ID |
 | `inline_only` | Direct `Skill("X")` invocation | Inline return | (none) | Parent model |
 
 **Every `Agent(...)` call site in this skill implies the Codex equivalent.**
 When `DISPATCH_MODE = codex`, translate each `Agent(...)` pseudo-call to
-`spawn_agent` + `wait_agent` + `close_agent`. The `subagent_type` value maps
-to `agent_name`. The `model: "sonnet"` hint is informational on Codex — the
-session model handles execution. See `references/codex-tools.md` for the full
-tool mapping table and Codex App sandbox-finishing contract.
+`spawn_agent` + `wait_agent` + `close_agent`. The Claude `subagent_type` value
+does not become Codex `agent_name`; use it to choose a stable `task_name` and
+to include the worker instructions in the prompt. For example,
+`subagent_type: "dev-loop:doctor-worker"` becomes a child task named
+`doctor-worker` whose prompt tells the child to follow the dev-loop
+doctor-worker contract. See `references/codex-tools.md` for the full tool
+mapping table and Codex App sandbox-finishing contract.
 
 **Inline fallback applies uniformly:** If any dispatch (Claude or Codex) fails
 at spawn time — tool error, `multi_agent` disabled, balance error, unknown
@@ -882,9 +887,9 @@ prd_disciplines:
 
    **Codex dispatch (when `DISPATCH_MODE = codex`):**
    ```
-   spawn_agent(agent_name="doctor-worker", prompt="Probe skills/dev-loop/dependencies.yaml AND auto-compact count for the current session. Report JSON with status, missing_required[], missing_optional[], compact_count, session_jsonl_path.")
-   → wait_agent(agent_id=<returned_id>)
-   → close_agent(agent_id=<returned_id>)
+   spawn_agent(task_name="doctor-worker", prompt="Probe skills/dev-loop/dependencies.yaml AND auto-compact count for the current session. Follow the dev-loop doctor-worker contract. Report JSON with status, missing_required[], missing_optional[], compact_count, session_jsonl_path.")
+   -> wait_agent(agent_id=<returned_id>)
+   -> close_agent(agent_id=<returned_id>)
    ```
 
    **Agent spawn fallback:** If the `Agent(...)` call itself fails before
@@ -2278,14 +2283,15 @@ goal command, but it must not start or manage `/goal`.
 ## Codex Platform Adaptation
 
 dev-loop targets Claude Code first but runs under OpenAI Codex CLI / Codex App
-without platform branching. The `PLATFORM_DISPATCH` capability (resolved at
-REFRESH) automatically detects the available dispatch mechanism and sets
-`DISPATCH_MODE` for all worker call sites — no manual translation needed.
+without platform branching. `PLATFORM_DISPATCH` is an instruction-level
+dispatch routing contract resolved at REFRESH: the agent probes the visible
+dispatch tools and records `DISPATCH_MODE` so later worker call sites use the
+matching syntax.
 
 1. **Subagent dispatch.** The worker spawns (doctor-, research-, simplify-,
    codex-review-, ci-health-worker; browser-worker) use the Claude `Agent` tool.
-   When `DISPATCH_MODE = codex`, each `Agent(...)` call is automatically
-   translated to `spawn_agent` / `wait_agent` / `close_agent`. Requires
+   When `DISPATCH_MODE = codex`, the agent translates each `Agent(...)` call to
+   `spawn_agent(task_name=..., prompt=...)` / `wait_agent` / `close_agent`. Requires
    `[features] multi_agent = true` in `~/.codex/config.toml`. Without
    multi-agent, each worker degrades to inline `Skill(...)` execution — the
    same path `DEP_DRIFT` already uses.

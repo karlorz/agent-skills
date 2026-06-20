@@ -2,20 +2,21 @@
 
 dev-loop is written with Claude Code tool names. Under OpenAI Codex CLI or the
 Codex App, the `PLATFORM_DISPATCH` capability (SKILL.md § Platform Dispatch
-Capability) auto-detects which dispatch tools are available and sets
-`DISPATCH_MODE` accordingly. This file documents the full tool mapping table,
-worker inventory, and the Codex App sandbox-finishing contract.
+Capability) is an instruction-level dispatch routing contract. At REFRESH, the
+agent probes which dispatch tools are visible and records `DISPATCH_MODE`.
+This file documents the full tool mapping table, worker inventory, and the
+Codex App sandbox-finishing contract.
 
-**If `DISPATCH_MODE = codex`**, every `Agent(...)` call in SKILL.md is
-automatically translated to `spawn_agent` + `wait_agent` + `close_agent`.
-No manual tool-name translation is required.
+**If `DISPATCH_MODE = codex`**, every `Agent(...)` call in `SKILL.md` is an
+instruction to use `spawn_agent(task_name=..., prompt=...)`, then
+`wait_agent`, then `close_agent` when the result is needed.
 
 ## Tool Mapping
 
 | dev-loop references | Codex equivalent |
 |---|---|
-| `Agent(subagent_type=X, model=…)` (spawn worker) | `spawn_agent` |
-| Parallel `Agent` calls (REVIEW fan-out, IDLE maintenance) | Multiple `spawn_agent` calls |
+| `Agent(subagent_type=X, model=…)` (spawn worker) | `spawn_agent(task_name=X, prompt=...)` after adapting the task name and prompt to the live Codex schema |
+| Parallel `Agent` calls (REVIEW fan-out, IDLE maintenance) | Multiple `spawn_agent(task_name=..., prompt=...)` calls |
 | Agent returns its report | `wait_agent` |
 | Agent finishes — free the slot | `close_agent` |
 | `Skill("name")` (invoke a skill) | skills load natively — follow the instructions |
@@ -26,7 +27,8 @@ No manual tool-name translation is required.
 ### Worker subagents dev-loop dispatches
 
 Spawned via the `Agent` tool with `subagent_type:` + `model: "sonnet"`. On
-Codex each is a `spawn_agent` + `wait_agent` pair:
+Codex each is a `spawn_agent(task_name=..., prompt=...)` + `wait_agent` +
+`close_agent` sequence:
 
 | Worker | Spawned at | Lane |
 |---|---|---|
@@ -37,6 +39,12 @@ Codex each is a `spawn_agent` + `wait_agent` pair:
 | `dev-loop:codex-review-worker` | REVIEW step 6 (if enabled) | correctness/security (delegates to Codex) |
 | `dev-loop:ci-health-worker` | MERGE 6b / IDLE step 3b | CI health gate |
 | `playwright-cli:browser-worker` | BROWSER-VERIFY 6a | browser smoke check |
+
+Codex custom named agents are TOML files under `~/.codex/agents/` or
+`.codex/agents/`. The Claude-style markdown files under `skills/dev-loop/agents/`
+are source contracts for prompts unless a verified Codex custom-agent bridge is
+added. Do not assume Codex auto-discovers those markdown wrappers as named
+custom agents.
 
 ## Subagent dispatch requires multi-agent support
 
@@ -58,10 +66,9 @@ execution (`Skill("dev-loop:<worker>")` or the documented inline fallback).
 dev-loop's existing `DEP_DRIFT` / inline-fallback machinery already handles a
 missing worker; treat "no multi_agent" the same way.
 
-Legacy note: Codex builds before `rust-v0.115.0` exposed spawned-agent waiting
-as `wait`. Current Codex uses `wait_agent`; `wait` now belongs to code-mode
-`exec/wait` (resumes a yielded exec cell by `cell_id`) and is not the
-spawned-agent result tool.
+Use `codex --version` and `codex features list` to confirm that `multi_agent`
+is available and enabled in the installed Codex build. Do not rely on an
+uncited historical version threshold for `wait_agent`.
 
 ## Environment Detection (Codex App sandbox / detached HEAD)
 
@@ -122,7 +129,7 @@ If dev-loop cycles complete but workers always fall back to inline execution:
 2. **Check Codex version:**
    ```bash
    codex --version
-   # v0.141.0+ recommended; v0.115.0+ required for wait_agent
+   codex features list
    ```
 
 3. **Confirm `DISPATCH_MODE` detection:** At REFRESH, dev-loop should log

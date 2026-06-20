@@ -329,11 +329,29 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop inline simplify is fallback" "$prompt" 'inline `Skill("simplify:simplify")` only when'
   assert_contains "setup documents simplify worker preference" "$setup" 'prefer `dev-loop:simplify-worker` for subagent isolation'
   assert_contains "codex reference documents multi-agent gate" "$codex_ref" 'multi_agent = true'
-  assert_contains "codex reference maps spawn_agent" "$codex_ref" '`Agent(subagent_type=X, model=…)` (spawn worker) | `spawn_agent`'
+  assert_contains "codex reference maps spawn_agent task name" "$codex_ref" '`Agent(subagent_type=X, model=…)` (spawn worker) | `spawn_agent(task_name=X, prompt=...)`'
   assert_contains "codex reference documents simplify-worker adapter" "$codex_ref" '`dev-loop:simplify-worker` | REVIEW step 6 | preferred isolated adapter for `simplify:simplify`'
   assert_not_contains "dev-loop no stale simplify-worker base backend" "$prompt" 'Always include `dev-loop:simplify-worker` (base backend)'
   assert_not_contains "setup no stale simplify-worker base backend" "$setup" 'Always includes `dev-loop:simplify-worker`'
   assert_not_contains "template no stale simplify-worker base backend" "$template" 'backend (`dev-loop:simplify-worker`) always runs'
+}
+
+run_codex_dispatch_contract_checks() {
+  local skill canonical_ref
+  skill="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
+  canonical_ref="$(cat "$ROOT/skills/dev-loop/references/codex-tools.md")"
+
+  cmp -s "$ROOT/skills/dev-loop/SKILL.md" "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md" ||
+    fail "dev-loop mirrored SKILL.md differs from canonical"
+  cmp -s "$ROOT/skills/dev-loop/references/codex-tools.md" "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ||
+    fail "dev-loop mirrored codex-tools.md differs from canonical"
+
+  assert_not_contains "dev-loop SKILL Codex spawn argument" "$skill" 'spawn_agent(agent_name='
+  assert_not_contains "dev-loop codex-tools Codex spawn argument" "$canonical_ref" 'spawn_agent(agent_name='
+  assert_contains "dev-loop SKILL Codex task_name example" "$skill" 'spawn_agent(task_name="doctor-worker"'
+  assert_contains "dev-loop codex-tools task_name mapping" "$canonical_ref" 'task_name'
+  assert_contains "dev-loop SKILL instruction-level dispatch wording" "$skill" 'instruction-level dispatch'
+  assert_contains "dev-loop codex-tools custom agent TOML location" "$canonical_ref" '.codex/agents/'
 }
 
 assert_json_array_contains() {
@@ -550,6 +568,7 @@ run_sync_script_contract_checks
 run_simplify_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks
 run_dev_loop_prep_prompt_contract_checks
+run_codex_dispatch_contract_checks
 run_dev_loop_metadata_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
 run_deep_research_freshness_contract_checks
