@@ -148,6 +148,15 @@ Apply the First-Run Anchoring rules here.
 - Re-read the selected source immediately before asking requirement questions.
 - If the source changed since inventory, state it is stale and ask whether to
   continue read-only or rerun inventory.
+- If the selected source is a raw `task` or `bug` capture, re-run the helper
+  read-only over the current project candidates and check whether that capture
+  now appears in `hygiene` with `possibly_implemented_without_closure`. When it
+  does, present the helper's evidence (`implemented_evidence` terms,
+  `git_matches`, and relevant files) before normal intake. Ask the user to
+  choose the handling path: `discard`, `merge-existing`, `hygiene-cleanup`,
+  `research-more`, or continue normal requirements intake. Do not archive,
+  edit raw transcripts, add `closes:`, or mark the capture complete from this
+  heuristic alone.
 
 Use a structured question for candidate choice when available (it is a decision
 point). Put the recommended candidate first only with an evidence-based
@@ -223,6 +232,9 @@ automatically — office-hours stops after the report.
   dev-loop cycle, without readiness approval.
 - `research-more` — evidence insufficient; use investigate or deep research.
 - `merge-existing` — link to an existing work item instead of creating another.
+- `hygiene-cleanup` — likely implemented but unclosed; create or update only a
+  managed follow-up/report so a human can add an explicit closure or archive
+  later.
 - `defer` — keep the report as context, no immediate work.
 - `discard` — no action.
 
@@ -257,7 +269,8 @@ Decision`, `## Recommended Next Action`, `## Links`.
 The body records: selected candidate and lane (if any); source path and hash
 (if available); inferred mode and confidence; asked questions; recommended
 defaults; user answers; remaining uncertainty; decision; recommended next
-action; links to related work items, raw transcripts, query pages, or concepts.
+action; stale-actionability recheck evidence when applicable; links to related
+work items, raw transcripts, query pages, or concepts.
 
 **Fresh-vs-resumed labelling:** in `## Context`, explicitly state whether this
 is a fresh follow-up topic or a resumed work item. If a completed/abandoned item

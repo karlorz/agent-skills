@@ -10,6 +10,43 @@ const ACTIVE_STATUSES = new Set(["planned", "in-progress", "in_progress"]);
 const DONE_STATUSES = new Set(["completed", "complete", "abandoned"]);
 const CAPTURE_KINDS = new Set(["task", "bug"]);
 const SKIPPED_CAPTURE_KINDS = new Set(["idea", "note"]);
+const IMPLEMENTED_WITHOUT_CLOSURE_FINDING = "possibly_implemented_without_closure";
+const REPO_INDEX_IGNORED_DIRS = new Set([
+  ".git",
+  "coverage",
+  "dist",
+  "node_modules",
+  "tmp",
+  "vendor",
+]);
+const REPO_INDEX_MAX_FILE_BYTES = 512 * 1024;
+const GENERIC_IMPLEMENTATION_TERMS = new Set([
+  "agent",
+  "bug",
+  "capture",
+  "captures",
+  "change",
+  "code",
+  "cli/app",
+  "docs",
+  "dev-loop",
+  "feature",
+  "file",
+  "fix",
+  "issue",
+  "local",
+  "project",
+  "repo",
+  "review",
+  "skill",
+  "task",
+  "test",
+  "tests",
+  "update",
+  "work",
+  "agent-skills",
+]);
+const repoIndexCache = new Map();
 
 function usage() {
   return [
@@ -162,6 +199,10 @@ function parseFrontmatter(text) {
   return { data, bodyStart: end + 1 };
 }
 
+function bodyText(text, parsed) {
+  return text.split(/\r?\n/).slice(parsed.bodyStart).join("\n");
+}
+
 function sha256(filePath) {
   return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
@@ -226,12 +267,158 @@ function gitMatches(repo, terms) {
   return [...new Set(matches)];
 }
 
+function normalizeImplementationTerm(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^[`"'\s]+/, "")
+    .replace(/[`"',;:!?().\]\[\s]+$/, "")
+    .replace(/\s+/g, " ");
+}
+
+function isUsefulImplementationTerm(term) {
+  const normalized = normalizeImplementationTerm(term);
+  const lower = normalized.toLowerCase();
+  if (normalized.length < 4 || normalized.length > 80) return false;
+  if (/^[0-9._:/-]+$/.test(normalized)) return false;
+  if (GENERIC_IMPLEMENTATION_TERMS.has(lower)) return false;
+  return /[:/._-]/.test(normalized);
+}
+
+function extractImplementationTerms(body) {
+  const terms = [];
+  const seen = new Set();
+  const addTerm = (value) => {
+    const normalized = normalizeImplementationTerm(value);
+    const key = normalized.toLowerCase();
+    if (!isUsefulImplementationTerm(normalized) || seen.has(key)) return;
+    seen.add(key);
+    terms.push(normalized);
+  };
+
+  for (const match of body.matchAll(/`([^`]+)`/g)) {
+    addTerm(match[1]);
+  }
+
+  for (const match of body.matchAll(/[A-Za-z0-9][A-Za-z0-9:_./-]{3,}/g)) {
+    addTerm(match[0]);
+  }
+
+  return terms.slice(0, 20);
+}
+
+function listRepoFiles(repo, dir = repo) {
+  const files = [];
+  for (const entry of listDirSafe(dir)) {
+    const filePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (!REPO_INDEX_IGNORED_DIRS.has(entry.name)) {
+        files.push(...listRepoFiles(repo, filePath));
+      }
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+
+    try {
+      const stats = fs.statSync(filePath);
+      if (stats.size > REPO_INDEX_MAX_FILE_BYTES) continue;
+      const text = fs.readFileSync(filePath, "utf8");
+      if (text.includes("\0")) continue;
+      files.push({
+        path: path.relative(repo, filePath).split(path.sep).join("/"),
+        text,
+        lowerText: text.toLowerCase(),
+      });
+    } catch {
+      // Ignore unreadable or binary files; inventory must stay best-effort.
+    }
+  }
+  return files;
+}
+
+function repoIndex(repo) {
+  const resolved = path.resolve(repo);
+  if (!repoIndexCache.has(resolved)) {
+    repoIndexCache.set(resolved, listRepoFiles(resolved));
+  }
+  return repoIndexCache.get(resolved);
+}
+
+function matchingLines(file, term, limit = 2) {
+  const lines = [];
+  const needle = term.toLowerCase();
+  for (const [index, line] of file.text.split(/\r?\n/).entries()) {
+    if (!line.toLowerCase().includes(needle)) continue;
+    lines.push(`${file.path}:${index + 1}:${line.trim()}`);
+    if (lines.length >= limit) break;
+  }
+  return lines;
+}
+
+function repoEvidence(repo, terms) {
+  const evidence = [];
+  for (const term of terms) {
+    const needle = term.toLowerCase();
+    let matchesForTerm = 0;
+    for (const file of repoIndex(repo)) {
+      if (!file.lowerText.includes(needle)) continue;
+      evidence.push({
+        term,
+        path: file.path,
+        lines: matchingLines(file, term),
+      });
+      matchesForTerm += 1;
+      if (matchesForTerm >= 3) break;
+    }
+  }
+  return evidence;
+}
+
+function isAuditTrailFile(relativePath) {
+  const normalized = relativePath.toLowerCase();
+  return (
+    normalized === ".claude-plugin/marketplace.json" ||
+    normalized.endsWith("/plugin.json") ||
+    normalized.endsWith("/dependencies.yaml") ||
+    normalized.includes("/test") ||
+    normalized.startsWith("scripts/test") ||
+    normalized.includes("release") ||
+    normalized.includes("manifest") ||
+    normalized.includes("marketplace")
+  );
+}
+
+function implementedCaptureEvidence(opts, body) {
+  const terms = extractImplementationTerms(body);
+  if (terms.length < 2) return null;
+
+  const matches = repoEvidence(opts.repo, terms);
+  const matchedTerms = [...new Set(matches.map((match) => match.term))];
+  if (matchedTerms.length < 2) return null;
+
+  const git = gitMatches(opts.repo, matchedTerms);
+  const relevantFiles = [...new Set(matches.map((match) => match.path))];
+  const auditFiles = relevantFiles.filter(isAuditTrailFile);
+  if (git.length === 0 && auditFiles.length === 0) return null;
+
+  return {
+    confidence: "strong",
+    finding: IMPLEMENTED_WITHOUT_CLOSURE_FINDING,
+    terms: matchedTerms,
+    git_matches: git.slice(0, 10),
+    repo_matches: matches.slice(0, 10),
+    relevant_files: relevantFiles.slice(0, 10),
+    audit_files: auditFiles.slice(0, 10),
+    rationale: "Multiple body-derived implementation terms matched the repo with commit or audit-file evidence; route to hygiene for human closure review.",
+  };
+}
+
 function candidateBase(opts, fields) {
   const absolutePath = fields.absolute_path ?? "";
   const frontmatter = fields.frontmatter ?? {};
   const title = frontmatter.title || fields.id;
 
-  return {
+  const base = {
     id: fields.id,
     lane: fields.lane,
     path: absolutePath ? relPath(opts.vault, absolutePath) : fields.path,
@@ -249,6 +436,12 @@ function candidateBase(opts, fields) {
     findings: fields.findings ?? [],
     git_matches: [],
   };
+
+  if (fields.implemented_evidence) {
+    base.implemented_evidence = fields.implemented_evidence;
+  }
+
+  return base;
 }
 
 function workTerms(candidate) {
@@ -359,7 +552,8 @@ function readCaptures(opts, activeCloses) {
 
   for (const entry of listDirSafe(transcriptRoot).filter((item) => item.isFile() && item.name.endsWith(".md"))) {
     const filePath = path.join(transcriptRoot, entry.name);
-    const parsed = parseFrontmatter(readText(filePath));
+    const text = readText(filePath);
+    const parsed = parseFrontmatter(text);
     const frontmatter = parsed.data;
     const kind = frontmatter.kind || "";
     const project = frontmatter.project || "";
@@ -390,6 +584,22 @@ function readCaptures(opts, activeCloses) {
         project,
         reason: project ? "project_mismatch" : "missing_project",
       });
+      continue;
+    }
+
+    const implementedEvidence = implementedCaptureEvidence(opts, bodyText(text, parsed));
+    if (implementedEvidence) {
+      candidates.push(candidateBase(opts, {
+        absolute_path: filePath,
+        frontmatter,
+        id: entry.name.replace(/\.md$/, ""),
+        lane: "hygiene",
+        kind,
+        repairable: true,
+        valid: true,
+        findings: [IMPLEMENTED_WITHOUT_CLOSURE_FINDING],
+        implemented_evidence: implementedEvidence,
+      }));
       continue;
     }
 

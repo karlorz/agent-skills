@@ -369,6 +369,8 @@ run_dev_loop_office_hours_contract_checks() {
   assert_contains "office-hours conversational fallback" "$body" 'conversational fallback'
   assert_contains "office-hours prompts in main session only" "$body" 'main session only'
   assert_contains "office-hours forbids subagent prompts" "$body" 'Do NOT call structured question tools from subagents'
+  assert_contains "office-hours stale implemented recheck" "$body" 'possibly_implemented_without_closure'
+  assert_contains "office-hours stale handling remains human-controlled" "$body" 'hygiene-cleanup'
   assert_contains "office-hours optional grill hook" "$body" 'grill-me'
   assert_contains "sync-plugin-cache syncs office-hours companion" "$sync_script" 'office-hours/SKILL.md'
 }
