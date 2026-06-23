@@ -242,23 +242,28 @@ For each triaged finding, create a schema-valid queued artifact. The queue
 format is schema-adaptive because skillwiki installations differ on whether a
 non-executing work-item status exists.
 
-**Schema probe (before first output):**
+**Schema probe (before first durable output):**
 
-1. Draft a single candidate non-executing work item in the target project
-   work directory using `status: proposed`.
+1. Before creating durable output, create one disposable schema-probe candidate
+   that uses `status: proposed`. Use the smallest valid candidate needed for
+   validation; it is evidence, not a queued finding.
 2. Run `skillwiki validate <candidate-spec.md>`.
-3. If validation passes, use **Mode A: proposed work item queue** for this
+3. Always delete the probe candidate after validation.
+4. If validation passes, use **Mode A: proposed work item queue** for this
    invocation.
-4. If validation rejects `status: proposed`, `kind`, or lifecycle fields,
-   delete the candidate and use **Mode B: raw transcript capture queue**.
+5. If validation rejects `status: proposed`, `kind`, or lifecycle fields, use
+   **Mode B: raw transcript capture queue** for the whole invocation.
+   Current SkillWiki schemas such as 0.9.16 reject `status: proposed`, so this
+   fallback is the expected path for those vaults.
 
 Do not continue after a validation failure with the same invalid shape.
 
 #### Mode A: proposed work item queue
 
 Use this mode only when the local schema validates non-executing proposed work
-items. For each triaged finding, create a work item via `proj-work` and
-validate the resulting `spec.md`.
+items. This mode is unavailable for current SkillWiki schemas such as 0.9.16,
+which reject `status: proposed`. For each triaged finding, create a work item
+via `proj-work` and validate the resulting `spec.md`.
 
 **Common frontmatter:**
 ```yaml
@@ -325,7 +330,8 @@ source_investigate: true        # marker for investigate-created items
 
 #### Mode B: raw transcript capture queue
 
-Use this mode when `skillwiki validate` rejects proposed work items. Create a
+Use this mode when `skillwiki validate` rejects proposed work items. This is
+the expected path for current SkillWiki schemas such as 0.9.16. Create a
 schema-valid ad-hoc capture under:
 
 ```text

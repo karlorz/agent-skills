@@ -375,6 +375,29 @@ run_dev_loop_office_hours_contract_checks() {
   assert_contains "sync-plugin-cache syncs office-hours companion" "$sync_script" 'office-hours/SKILL.md'
 }
 
+run_dev_loop_investigate_queue_contract_checks() {
+  local canonical mirror prompt prompt_mirror
+
+  canonical="$(cat "$ROOT/skills/dev-loop/investigate/SKILL.md")"
+  mirror="$(cat "$ROOT/skills/dev-loop/skills/investigate/SKILL.md")"
+  prompt="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
+  prompt_mirror="$(cat "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md")"
+
+  cmp -s "$ROOT/skills/dev-loop/investigate/SKILL.md" "$ROOT/skills/dev-loop/skills/investigate/SKILL.md" ||
+    fail "dev-loop mirrored investigate SKILL.md differs from canonical"
+  cmp -s "$ROOT/skills/dev-loop/SKILL.md" "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md" ||
+    fail "dev-loop mirrored SKILL.md differs from canonical"
+
+  assert_contains "investigate uses disposable schema probe" "$canonical" 'disposable schema-probe candidate'
+  assert_contains "investigate mirror uses disposable schema probe" "$mirror" 'disposable schema-probe candidate'
+  assert_contains "investigate documents current-schema raw fallback" "$canonical" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
+  assert_contains "investigate mirror documents current-schema raw fallback" "$mirror" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
+  assert_contains "dev-loop summary documents current-schema raw fallback" "$prompt" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
+  assert_contains "dev-loop mirror summary documents current-schema raw fallback" "$prompt_mirror" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
+  assert_not_contains "investigate no durable proposed workdir probe" "$canonical" 'Draft a single candidate non-executing work item in the target project'
+  assert_not_contains "investigate mirror no durable proposed workdir probe" "$mirror" 'Draft a single candidate non-executing work item in the target project'
+}
+
 run_codex_dispatch_contract_checks() {
   local skill canonical_ref
   skill="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
@@ -608,6 +631,7 @@ run_simplify_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks
 run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_office_hours_contract_checks
+run_dev_loop_investigate_queue_contract_checks
 run_codex_dispatch_contract_checks
 run_dev_loop_metadata_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks

@@ -6,8 +6,10 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep, investigate mode,
   peer-aware vault sync, multi-backend review, auto-archive, and portable
-  SkillWiki vault resolution. v1.26.2: stable release for stale implemented
-  capture hygiene and office-hours recheck. v1.26.1: office-hours Codex
+  SkillWiki vault resolution. v1.26.3: clarify investigate queue schema probes
+  as disposable and make raw-capture fallback explicit for current SkillWiki
+  schemas. v1.26.2: stable release for stale implemented capture hygiene and
+  office-hours recheck. v1.26.1: office-hours Codex
   question flow uses request_user_input only in Plan mode and numbered fallback in Default mode.
   Pass `high` for aggressive mode.
 ---
@@ -99,8 +101,10 @@ After REFRESH (step 0), branch on MODE:
 
 See `investigate/SKILL.md` for full step details. Key properties:
 - Output: queued findings; use `status: proposed` only when the local
-  schema validates it, otherwise use raw transcript captures. Humans promote
-  findings to `planned` before CORE executes them.
+  schema validates it, otherwise use raw transcript captures.
+  Current SkillWiki schemas such as 0.9.16 reject `status: proposed`, so those
+  vaults use raw captures. Humans promote findings to `planned` before CORE
+  executes them.
 - Tiered: concrete findings → full spec, exploratory → stub
 - Dedup: slug-based + status-aware + archive check
 - Cap: `max_items` (normal) or `max_items * 2` (high). Default 5/10.
@@ -2319,5 +2323,6 @@ REFRESH, and reuses the same session state (`BACKEND_CAPS`, `VAULT_TYPES`,
 `DEP_DRIFT`, `CRITICAL_PATHS`, `INVESTIGATE_MAX_ITEMS`,
 `INVESTIGATE_TOPIC_SEEDS`). It queues schema-valid findings and does not
 execute code. Proposed work items are allowed only when `skillwiki validate`
-accepts that non-executing status; otherwise findings are queued as
-`raw/transcripts/` ad-hoc captures.
+accepts that non-executing status.
+Current SkillWiki schemas such as 0.9.16 reject `status: proposed`, so findings
+are queued as `raw/transcripts/` ad-hoc captures in those vaults.

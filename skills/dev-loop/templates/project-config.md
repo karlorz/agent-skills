@@ -304,7 +304,9 @@ Proactive finding queue mode. When invoked via `/dev-loop investigate`, scans
 project health and queues schema-valid findings in the vault. Proposed work
 items are used only when the active skillwiki schema validates a non-executing
 `status: proposed`; otherwise findings are captured under `raw/transcripts/`
-for human promotion.
+for human promotion. Current SkillWiki schemas such as 0.9.16 reject
+`status: proposed`, so raw captures are the expected queue shape for those
+vaults.
 
 ```yaml
 investigate:
