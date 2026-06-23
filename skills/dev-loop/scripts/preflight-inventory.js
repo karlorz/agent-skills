@@ -454,7 +454,7 @@ function readWorkItems(opts) {
   const skipped = [];
   const activeCloses = new Set();
 
-  for (const entry of listDirSafe(workRoot).filter((item) => item.isDirectory())) {
+  for (const entry of listDirSafe(workRoot).filter((item) => item.isDirectory() && !item.name.startsWith("_"))) {
     const id = entry.name;
     const dirPath = path.join(workRoot, id);
     const specPath = path.join(dirPath, "spec.md");

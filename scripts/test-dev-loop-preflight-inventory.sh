@@ -138,6 +138,7 @@ write_plan "$WORK/2026-06-05-proposed-legacy"
 write_work_spec "$WORK/2026-06-05-completed" completed medium "Completed"
 write_plan "$WORK/2026-06-05-completed"
 write_work_spec "$WORK/2026-06-05-spec-only" planned medium "Spec Only"
+mkdir -p "$WORK/_archive/2026-06-05-archived-container"
 write_work_spec "$VAULT/projects/agent-skills/history/2026-06-05-history-item" planned high "History Item"
 
 write_capture "$VAULT/raw/transcripts/2026-06-05-task-agent-skills.md" task "[[agent-skills]]"
@@ -159,6 +160,7 @@ assert_json "$all_json" '
   assert(ids.includes("2026-06-05-proposed-legacy"), "legacy proposed work missing");
   assert(data.candidates.find((candidate) => candidate.id === "2026-06-05-proposed-legacy").repairable === true, "legacy proposed should be repairable");
   assert(!ids.includes("2026-06-05-completed"), "completed work should be skipped");
+  assert(!ids.includes("_archive"), "archive container should be skipped");
   assert(!ids.includes("2026-06-05-history-item"), "history work should be ignored");
   assert(ids.includes("2026-06-05-task-agent-skills"), "project task capture missing");
   assert(ids.includes("2026-06-05-bug-agent-skills"), "project bug capture missing");
@@ -205,6 +207,7 @@ assert_json "$captures_json" '
 hygiene_json="$(run_inventory --all --lane hygiene)"
 assert_json "$hygiene_json" '
   const specOnly = data.candidates.find((candidate) => candidate.id === "2026-06-05-spec-only");
+  assert(!data.candidates.some((candidate) => candidate.id === "_archive"), "hygiene lane should skip archive containers");
   assert(specOnly, "hygiene lane should include active work missing plan");
   assert(specOnly.lane === "hygiene", "hygiene projection should report hygiene lane");
   assert(specOnly.lanes.includes("work") && specOnly.lanes.includes("hygiene"), "hygiene candidate should retain source lanes");
