@@ -11,6 +11,7 @@ fail() {
 
 write_work_spec() {
   local dir="$1" status="$2" priority="$3" title="$4"
+  local project="${5:-agent-skills}"
   mkdir -p "$dir"
   cat > "$dir/spec.md" <<EOF
 ---
@@ -20,7 +21,7 @@ description: "$title"
 kind: feature
 status: $status
 priority: $priority
-project: "[[agent-skills]]"
+project: "[[$project]]"
 created: 2026-06-05
 updated: 2026-06-05
 started: 2026-06-05
@@ -105,7 +106,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 VAULT="$TMP_DIR/wiki"
 REPO="$TMP_DIR/repo"
 WORK="$VAULT/projects/agent-skills/work"
-mkdir -p "$WORK" "$VAULT/raw/transcripts" "$VAULT/projects/agent-skills/history" "$REPO"
+OTHER_WORK="$VAULT/projects/other-project/work"
+mkdir -p "$WORK" "$OTHER_WORK" "$VAULT/raw/transcripts" "$VAULT/projects/agent-skills/history" "$REPO"
 
 git -C "$REPO" init -q
 git -C "$REPO" config user.email "dev-loop-test@example.invalid"
@@ -138,6 +140,8 @@ write_plan "$WORK/2026-06-05-proposed-legacy"
 write_work_spec "$WORK/2026-06-05-completed" completed medium "Completed"
 write_plan "$WORK/2026-06-05-completed"
 write_work_spec "$WORK/2026-06-05-spec-only" planned medium "Spec Only"
+write_work_spec "$OTHER_WORK/2026-06-05-other-planned-high" planned high "Other Planned High" other-project
+write_plan "$OTHER_WORK/2026-06-05-other-planned-high"
 mkdir -p "$WORK/_archive/2026-06-05-archived-container"
 write_work_spec "$VAULT/projects/agent-skills/history/2026-06-05-history-item" planned high "History Item"
 
@@ -177,6 +181,21 @@ assert_json "$all_json" '
   assert(implemented.implemented_evidence.audit_files.some((file) => file === "scripts/test-widget-review.sh"), "implemented evidence should include test audit file");
   assert(ids.includes("2026-06-05-bug-filename-only-widget-reviewer"), "filename-only weak capture should remain visible");
   assert(ids.includes("2026-06-05-bug-single-token-widget"), "single-token weak capture should remain visible");
+'
+
+all_projects_json="$(node "$HELPER" --all-projects --vault "$VAULT" --repo "$REPO" --all)"
+assert_json "$all_projects_json" '
+  assert(data.scope.all_projects === true, "all-projects scope flag missing");
+  assert(data.project === null, "all-projects output should not claim one active project");
+  const projects = data.projects.map((project) => project.slug);
+  assert(projects.includes("agent-skills"), "agent-skills summary missing");
+  assert(projects.includes("other-project"), "other-project summary missing");
+  const idsByProject = new Map(data.candidates.map((candidate) => [`${candidate.project_slug}:${candidate.id}`, candidate]));
+  assert(idsByProject.has("agent-skills:2026-06-05-planned-high"), "agent-skills work missing from all-projects inventory");
+  assert(idsByProject.has("other-project:2026-06-05-other-planned-high"), "other-project work missing from all-projects inventory");
+  assert(idsByProject.has("other-project:2026-06-05-task-other"), "other-project capture missing from all-projects inventory");
+  assert(idsByProject.get("other-project:2026-06-05-other-planned-high").path === "projects/other-project/work/2026-06-05-other-planned-high/spec.md", "other-project work path should remain project-local");
+  assert(data.totals.projects >= 2, "all-projects totals should include project count");
 '
 
 limited_json="$(run_inventory --limit 2)"

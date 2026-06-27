@@ -2,16 +2,17 @@
 name: office-hours
 description: >
   Use when running an attended dev-loop office-hours checkpoint before prep,
-  promotion, or /goal to choose one current-project topic and capture requirements.
+  promotion, or /goal to choose one current-project or cross-project topic and
+  capture requirements.
 ---
 
 # Dev-Loop Office Hours
 
-Attended requirements intake for **one** current-project topic. Runs before
-`/dev-loop prep`, promotion to planned work, or `/goal`: refreshes project brain
-context unattended, lists current-project candidates, asks concrete requirement
-questions one at a time, writes a vault-native report, and stops with a
-recommended next action.
+Attended requirements intake for **one** selected project topic. Runs before
+`/dev-loop prep`, promotion to planned work, or `/goal`: refreshes selected
+project brain context unattended, lists current-project or requested
+cross-project candidates, asks concrete requirement questions one at a time,
+writes a vault-native report, and stops with a recommended next action.
 
 Office-hours is not `/dev-loop prep`. Prep approves automation readiness for
 known work; office-hours helps decide what one thing needs clearer requirements
@@ -24,8 +25,9 @@ before prep or execution.
 2. Handle exactly one topic, capture, or work item per invocation.
 3. Brain and memory refresh is fully unattended — never ask the user to choose
    memory pages, wiki layers, or project-index refresh strategy.
-4. Do NOT auto-select a no-topic candidate. List current-project candidates
-   first, then ask the user which one to focus on.
+4. Do NOT auto-select a no-topic candidate. List current-project candidates, or
+   requested cross-project candidates, first; then ask the user which project,
+   candidate, or free-text topic to focus on.
 5. `Do NOT modify raw transcripts` (immutable in v1).
 6. `Do NOT auto-create planned work`.
 7. `Do NOT set preflight readiness` fields (`automation_ready`,
@@ -69,6 +71,7 @@ print candidate context, but stop before any prompt or write.
 ```text
 /dev-loop:office-hours
 /dev-loop:office-hours --all
+/dev-loop:office-hours --all-projects
 /dev-loop:office-hours <topic>
 /dev-loop:office-hours <work-item-slug>
 /dev-loop:office-hours raw/transcripts/<file>.md
@@ -78,17 +81,29 @@ print candidate context, but stop before any prompt or write.
 bounded batch to full current-project scope. Keep the workflow one-topic after
 the user selects a candidate.
 
+`--all-projects`, "all projects", "choose project", or "list current project
+slugs" starts in cross-project discovery mode. It lists candidates from every
+`projects/<slug>/work/` directory and lets the user choose a project or exact
+candidate. Keep the workflow one-topic after selection. The report and any
+managed backreference still belong to the selected project's `<slug>`, not to a
+global location.
+
 ## Refresh
 
 Resolve the same project context dev-loop uses:
 
 1. Read `.claude/dev-loop.config.md` if present.
-2. Resolve `<slug>` from config; fall back to the repo basename.
+2. Resolve default `<slug>` from config; fall back to the repo basename.
 3. Resolve `<vault>` from the configured SkillWiki backend. If `auto` or absent,
    run `skillwiki path`; if that fails, use a validated `~/wiki` only when
    `~/wiki/SCHEMA.md` and `~/wiki/projects/` exist.
 4. Resolve `<repo>` as the current working repository.
 5. Resolve the skill directory so helper calls run relative to this skill root.
+
+The default `<slug>` is only the starting scope. If the invocation asks for all
+projects, project choice, or the resolved default slug is not a valid
+`projects/<slug>/` directory, enter cross-project discovery mode instead of
+failing on the default slug.
 
 If no SkillWiki vault resolves, refuse v1 office-hours:
 
@@ -96,6 +111,36 @@ If no SkillWiki vault resolves, refuse v1 office-hours:
 Office-hours v1 requires a SkillWiki vault so it can list project work and
 write a requirements report.
 ```
+
+### Discovery Scope
+
+Use current-project discovery unless the invocation explicitly asks for
+cross-project/project selection or the default slug is invalid.
+
+**Current-project discovery.** Run the normal brain refresh for `<slug>`, then
+run the inventory helper for that one project.
+
+**Cross-project discovery.** Do not run memory refresh or project-index for
+every project upfront. First run the inventory helper across projects:
+
+```bash
+node scripts/preflight-inventory.js \
+  --all-projects --vault <vault> --repo <cwd> --limit <n>
+```
+
+With `--all` or a "show all projects/work" request, add `--all`.
+
+Present a compact project chooser from the helper's `projects[]` summaries and
+the candidate list grouped by `project_slug`, then lane. Include enough detail
+for each candidate to distinguish project, lane, status, priority, path, and
+findings. Ask the user to choose one project slug, one exact candidate, or a
+fresh free-text topic. If the user chooses only a project slug, rerun
+current-project discovery for that slug and ask for one candidate or free-text
+topic inside that project.
+
+Once a project or candidate is selected, set `<slug>` to the selected
+`project_slug` and run the normal brain refresh for that one project before
+requirement questions. Do not write a cross-project report.
 
 ### Brain Refresh
 
@@ -128,10 +173,11 @@ With `--all` or a "show all" request, rerun with `--all`.
 
 Present candidates grouped by helper lane: `work` (planned, in-progress, or
 repairable work items), `captures` (unclaimed project raw transcript tasks or
-bugs), `hygiene` (structural issues needing human attention). Keep the list
-project-scoped — do not list global wiki items unless linked to the current
-project. If there are no candidates, present the brain refresh topics and ask
-for one free-text focus topic.
+bugs), `hygiene` (structural issues needing human attention). In cross-project
+discovery, group first by `project_slug`, then by lane. Keep selected-topic
+intake project-scoped — do not list global wiki items unless linked to the
+selected project. If there are no candidates, present the brain refresh topics
+for the selected project and ask for one free-text focus topic.
 
 ## Select One Topic
 
@@ -143,13 +189,15 @@ Apply the First-Run Anchoring rules here.
   else. Otherwise treat it as the selected topic after refresh and surface
   related candidates for context.
 - If no topic is supplied, ask the user to pick one candidate or provide a
-  free-text topic.
+  free-text topic. In cross-project discovery, allow the first decision to be a
+  project slug; then rerun the selected project's normal inventory and ask for
+  one candidate or topic.
 - Never choose the top candidate automatically.
 - Re-read the selected source immediately before asking requirement questions.
 - If the source changed since inventory, state it is stale and ask whether to
   continue read-only or rerun inventory.
 - If the selected source is a raw `task` or `bug` capture, re-run the helper
-  read-only over the current project candidates and check whether that capture
+  read-only over the selected project candidates and check whether that capture
   now appears in `hygiene` with `possibly_implemented_without_closure`. When it
   does, present the helper's evidence (`implemented_evidence` terms,
   `git_matches`, and relevant files) before normal intake. Ask the user to
@@ -178,9 +226,10 @@ In Codex App/CLI, use `request_user_input` only in Plan mode when the tool is ex
 In Codex Default mode, do not call it; use conversational fallback with numbered
 choices and wait for a normal user reply.
 
-Decision points: choose one focus candidate; continue read-only after stale
-inventory or rerun; choose the final decision; confirm a managed `## Office
-Hours` section update on a work-item spec.
+Decision points: choose one project in cross-project discovery; choose one
+focus candidate; continue read-only after stale inventory or rerun; choose the
+final decision; confirm a managed `## Office Hours` section update on a
+work-item spec.
 
 Use conversational free text for nuanced requirements. Ask one question at a
 time, then decide the next. Stop once the next action is clear — prefer 2-5
@@ -271,6 +320,10 @@ The body records: selected candidate and lane (if any); source path and hash
 defaults; user answers; remaining uncertainty; decision; recommended next
 action; stale-actionability recheck evidence when applicable; links to related
 work items, raw transcripts, query pages, or concepts.
+
+If cross-project discovery was used, record the selected `project_slug`, whether
+the user chose a project first or an exact candidate, and any nearby
+cross-project alternatives that were intentionally left out of scope.
 
 **Fresh-vs-resumed labelling:** in `## Context`, explicitly state whether this
 is a fresh follow-up topic or a resumed work item. If a completed/abandoned item

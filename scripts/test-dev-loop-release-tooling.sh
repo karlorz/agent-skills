@@ -351,6 +351,10 @@ run_dev_loop_office_hours_contract_checks() {
   sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
 
   assert_contains "office-hours uses inventory helper" "$body" 'preflight-inventory.js'
+  assert_contains "office-hours documents all-projects input" "$body" '/dev-loop:office-hours --all-projects'
+  assert_contains "office-hours documents all-projects helper flag" "$body" '  --all-projects --vault <vault> --repo <cwd>'
+  assert_contains "office-hours groups cross-project candidates by slug" "$body" 'grouped by `project_slug`'
+  assert_contains "office-hours reports selected project slug" "$body" 'record the selected `project_slug`'
   assert_contains "office-hours refreshes memory index" "$body" 'skillwiki memory index'
   assert_contains "office-hours lists memory topics" "$body" 'skillwiki memory topics'
   assert_contains "office-hours reads project index" "$body" 'skillwiki project-index'

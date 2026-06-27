@@ -55,6 +55,7 @@ function usage() {
     "Options:",
     "  --limit <n>              Candidate limit when --all is not set (default: 5)",
     "  --all                    Return all matching candidates",
+    "  --all-projects           Scan every projects/<slug>/work directory; --project becomes optional",
     "  --lane <lane>            Restrict to work, captures, or hygiene; repeatable or comma-separated",
     "  --work <slug>            Restrict to one work folder/slug",
     "  --help                   Show this help",
@@ -64,6 +65,7 @@ function usage() {
 function parseArgs(argv) {
   const opts = {
     all: false,
+    allProjects: false,
     errors: [],
     lanes: new Set(["work", "captures", "hygiene"]),
     limit: 5,
@@ -83,6 +85,10 @@ function parseArgs(argv) {
     }
     if (arg === "--all") {
       opts.all = true;
+      continue;
+    }
+    if (arg === "--all-projects") {
+      opts.allProjects = true;
       continue;
     }
     if (arg === "--project" || arg === "--vault" || arg === "--repo" || arg === "--limit" || arg === "--work") {
@@ -128,10 +134,13 @@ function parseArgs(argv) {
     opts.errors.push(`unknown argument: ${arg}`);
   }
 
-  for (const required of ["project", "vault", "repo"]) {
+  for (const required of ["vault", "repo"]) {
     if (!opts[required]) {
       opts.errors.push(`--${required} is required`);
     }
+  }
+  if (!opts.allProjects && !opts.project) {
+    opts.errors.push("--project is required");
   }
 
   opts.vault = opts.vault ? path.resolve(opts.vault) : "";
@@ -209,6 +218,33 @@ function sha256(filePath) {
 
 function relPath(vault, filePath) {
   return path.relative(vault, filePath).split(path.sep).join("/");
+}
+
+function listProjectSlugs(vault) {
+  const projectsRoot = path.join(vault, "projects");
+  return listDirSafe(projectsRoot)
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !entry.name.startsWith("_"))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function dedupeSkipped(skipped) {
+  const seen = new Set();
+  const deduped = [];
+  for (const item of skipped) {
+    const key = [
+      item.path ?? "",
+      item.reason ?? "",
+      item.project ?? "",
+      item.kind ?? "",
+      item.id ?? "",
+      item.status ?? "",
+    ].join("\0");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+  return deduped;
 }
 
 function runSkillwikiValidate(filePath) {
@@ -427,6 +463,7 @@ function candidateBase(opts, fields) {
     lanes: fields.lanes ?? [fields.lane],
     priority: frontmatter.priority || fields.priority || "",
     project: frontmatter.project || `[[${opts.project}]]`,
+    project_slug: fields.project_slug || opts.project,
     repairable: fields.repairable === true,
     sha256: absolutePath && fs.existsSync(absolutePath) ? sha256(absolutePath) : "",
     status: frontmatter.status || fields.status || "",
@@ -527,6 +564,7 @@ function readWorkItems(opts) {
         id,
         lane: "work",
         path: relPath(opts.vault, primaryPath),
+        project_slug: opts.project,
         reason: status === "abandoned" ? "abandoned" : "completed",
         status,
       });
@@ -570,6 +608,7 @@ function readCaptures(opts, activeCloses) {
         kind,
         lane: "captures",
         path: relativePath,
+        project_slug: opts.project,
         reason: SKIPPED_CAPTURE_KINDS.has(kind) ? "non_executable_capture_kind" : "unsupported_capture_kind",
       });
       continue;
@@ -582,6 +621,7 @@ function readCaptures(opts, activeCloses) {
         lane: "captures",
         path: relativePath,
         project,
+        project_slug: opts.project,
         reason: project ? "project_mismatch" : "missing_project",
       });
       continue;
@@ -656,6 +696,25 @@ function filterAndSelect(opts, candidates) {
   return { selected, total: filtered.length };
 }
 
+function readProjectInventory(opts, project) {
+  const projectOpts = { ...opts, project };
+  const work = readWorkItems(projectOpts);
+  const captures = readCaptures(projectOpts, work.activeCloses);
+  const candidates = [...work.candidates, ...captures.candidates];
+  const skipped = [...work.skipped, ...captures.skipped];
+  return {
+    candidates,
+    project,
+    skipped,
+    summary: {
+      slug: project,
+      candidates: candidates.length,
+      selected: 0,
+      skipped: skipped.length,
+    },
+  };
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
@@ -666,10 +725,12 @@ function main() {
   const output = {
     candidates: [],
     errors: [...opts.errors],
-    project: opts.project,
+    project: opts.allProjects ? null : opts.project,
+    projects: [],
     repo: opts.repo,
     scope: {
       all: opts.all,
+      all_projects: opts.allProjects,
       lanes: [...opts.lanes],
       limit: opts.limit,
       work: opts.work || null,
@@ -679,6 +740,7 @@ function main() {
       selected: 0,
       unfiltered_candidates: 0,
       filtered_candidates: 0,
+      projects: 0,
       skipped: 0,
     },
     vault: opts.vault,
@@ -689,17 +751,24 @@ function main() {
     return 2;
   }
 
-  const work = readWorkItems(opts);
-  const captures = readCaptures(opts, work.activeCloses);
-  const allCandidates = [...work.candidates, ...captures.candidates];
+  const projectSlugs = opts.allProjects ? listProjectSlugs(opts.vault) : [opts.project];
+  const projectInventories = projectSlugs.map((project) => readProjectInventory(opts, project));
+  const allCandidates = projectInventories.flatMap((inventory) => inventory.candidates);
+  const allSkipped = projectInventories.flatMap((inventory) => inventory.skipped);
   const { selected, total } = filterAndSelect(opts, allCandidates);
 
+  for (const inventory of projectInventories) {
+    inventory.summary.selected = selected.filter((candidate) => candidate.project_slug === inventory.project).length;
+  }
+
   output.candidates = selected;
-  output.skipped = [...work.skipped, ...captures.skipped];
+  output.projects = opts.allProjects ? projectInventories.map((inventory) => inventory.summary) : [];
+  output.skipped = opts.allProjects ? dedupeSkipped(allSkipped) : allSkipped;
   output.totals = {
     selected: selected.length,
     unfiltered_candidates: allCandidates.length,
     filtered_candidates: total,
+    projects: projectSlugs.length,
     skipped: output.skipped.length,
   };
 
