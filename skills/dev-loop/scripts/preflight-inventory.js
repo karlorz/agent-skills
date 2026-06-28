@@ -56,6 +56,15 @@ const GENERIC_IMPLEMENTATION_TERMS = new Set([
   "working-tree",
   "work",
   "agent-skills",
+  "all-projects",
+  "body-derived",
+  "dirty-critical-path",
+  "follow-up",
+  "implemented-capture",
+  "implemented-evidence",
+  "possibly_implemented_without_closure",
+  "task/bug",
+  "vault-only",
 ]);
 const repoIndexCache = new Map();
 
@@ -835,6 +844,7 @@ function normalizeImplementationTerm(value) {
 }
 
 function looksLikeImplementationPath(term) {
+  if ((term.match(/\//g) || []).length >= 2) return true;
   return /^[./~A-Za-z0-9_-]*\/[A-Za-z0-9_.\/-]+\.[A-Za-z0-9]+$/.test(term);
 }
 

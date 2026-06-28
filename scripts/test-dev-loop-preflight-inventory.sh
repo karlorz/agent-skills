@@ -152,6 +152,19 @@ printf '%s\n' 'git status --short'
 printf '%s\n' 'git diff --name-only'
 printf '%s\n' 'critical-path dirty-tree audit'
 EOF
+cat > "$REPO/scripts/test-implemented-evidence-audit.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Classifier vocabulary should not prove that a classifier bug is already fixed.
+printf '%s\n' 'possibly_implemented_without_closure'
+printf '%s\n' 'body-derived implementation terms'
+printf '%s\n' 'implemented-evidence heuristic'
+printf '%s\n' 'implemented-capture detection'
+printf '%s\n' 'dirty-critical-path'
+printf '%s\n' 'all-projects vault-only inventory'
+printf '%s\n' 'simplify-worker remains a positive control'
+EOF
 mkdir -p "$REPO/archive" "$REPO/logs"
 cat > "$REPO/archive/dev-loop-research.md" <<'EOF'
 This archived note references a work-item queue and says the helper must not
@@ -186,6 +199,7 @@ write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-other-widget-reviewer.
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-filename-only-widget-reviewer.md" bug "[[agent-skills]]" $'# bug: generic stale report\n\nThis capture body intentionally has no implementation identifiers. A matching filename alone must not downgrade it to hygiene.'
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-single-token-widget.md" bug "[[agent-skills]]" $'# bug: widget\n\nFix widget.'
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-task-dirty-critical-path-detector.md" task "[[agent-skills]]" $'# task: dirty critical-path detector\n\nPreflight should intersect `critical_paths.*.code`, `git status --short`, `git diff --name-only`, and `critical-path` dirty-tree evidence without treating broad `critical_paths`, `work-item`, or `auto-create` vocabulary as proof that the detector already exists.'
+write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-implemented-evidence-false-positive.md" bug "[[agent-skills]]" $'# bug: implemented-evidence false positive\n\nThe `possibly_implemented_without_closure` helper should not treat classifier vocabulary like `body-derived`, `implemented-capture`, `task/bug`, `dirty-critical-path`, `all-projects`, `vault-only`, or `/Users/karlchow/Desktop/code/agent-skills` as proof that this bug is fixed. Keep the existing simplify-worker fixture in hygiene, but this bug should stay in captures until focused classifier behavior lands.'
 
 implemented_capture="$VAULT/raw/transcripts/2026-06-05-bug-widget-reviewer-implemented.md"
 implemented_capture_hash_before="$(shasum -a 256 "$implemented_capture" | awk '{print $1}')"
@@ -219,6 +233,10 @@ assert_json "$all_json" '
   assert(dirtyCriticalPath, "dirty critical-path detector task should remain visible");
   assert(dirtyCriticalPath.lane === "captures", "broad critical-path vocabulary alone must not reclassify the detector task to hygiene");
   assert(!dirtyCriticalPath.implemented_evidence, "broad critical-path vocabulary alone must not attach implemented evidence");
+  const implementedEvidenceFalsePositive = data.candidates.find((candidate) => candidate.id === "2026-06-05-bug-implemented-evidence-false-positive");
+  assert(implementedEvidenceFalsePositive, "implemented-evidence false-positive bug should remain visible");
+  assert(implementedEvidenceFalsePositive.lane === "captures", "classifier/meta vocabulary alone must not reclassify the false-positive bug to hygiene");
+  assert(!implementedEvidenceFalsePositive.implemented_evidence, "classifier/meta vocabulary alone must not attach implemented evidence");
 '
 
 all_projects_json="$(node "$HELPER" --all-projects --vault "$VAULT" --repo "$REPO" --all)"
@@ -371,6 +389,7 @@ assert_json "$captures_json" '
   assert(ids.includes("2026-06-05-bug-filename-only-widget-reviewer"), "filename-only weak capture should remain in captures lane");
   assert(ids.includes("2026-06-05-bug-single-token-widget"), "single-token weak capture should remain in captures lane");
   assert(ids.includes("2026-06-05-task-dirty-critical-path-detector"), "broad critical-path vocabulary should keep the detector task in captures");
+  assert(ids.includes("2026-06-05-bug-implemented-evidence-false-positive"), "implemented-evidence false-positive bug should remain in captures lane");
 '
 
 hygiene_json="$(run_inventory --all --lane hygiene)"
