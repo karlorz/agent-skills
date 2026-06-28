@@ -81,6 +81,20 @@ $body
 EOF
 }
 
+init_git_repo() {
+  local repo="$1" remote="${2:-}"
+  mkdir -p "$repo"
+  git -C "$repo" init -q
+  git -C "$repo" config user.email "dev-loop-test@example.invalid"
+  git -C "$repo" config user.name "Dev Loop Test"
+  printf '# fixture\n' > "$repo/README.md"
+  git -C "$repo" add README.md
+  git -C "$repo" commit -q -m "chore: initialize fixture repo"
+  if [ -n "$remote" ]; then
+    git -C "$repo" remote add origin "$remote"
+  fi
+}
+
 run_inventory() {
   node "$HELPER" --project agent-skills --vault "$VAULT" --repo "$REPO" "$@"
 }
@@ -150,6 +164,7 @@ write_capture "$VAULT/raw/transcripts/2026-06-05-bug-agent-skills.md" bug "[[age
 write_capture "$VAULT/raw/transcripts/2026-06-05-idea-agent-skills.md" idea "[[agent-skills]]"
 write_capture "$VAULT/raw/transcripts/2026-06-05-task-other.md" task "[[other-project]]"
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-widget-reviewer-implemented.md" bug "[[agent-skills]]" $'# bug: widget reviewer gate still surfaces\n\nThe dev-loop review path should require `widget-reviewer` and `widget:review` before merge. The repo implementation already added the contract test, so this raw capture should become closure hygiene instead of normal capture work.'
+write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-other-widget-reviewer.md" bug "[[other-project]]" $'# bug: other project widget reviewer\n\nThe other project mentions `widget-reviewer` and `widget:review`, but all-project discovery must not use the current repo to decide this capture was implemented.'
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-filename-only-widget-reviewer.md" bug "[[agent-skills]]" $'# bug: generic stale report\n\nThis capture body intentionally has no implementation identifiers. A matching filename alone must not downgrade it to hygiene.'
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-single-token-widget.md" bug "[[agent-skills]]" $'# bug: widget\n\nFix widget.'
 
@@ -186,6 +201,9 @@ assert_json "$all_json" '
 all_projects_json="$(node "$HELPER" --all-projects --vault "$VAULT" --repo "$REPO" --all)"
 assert_json "$all_projects_json" '
   assert(data.scope.all_projects === true, "all-projects scope flag missing");
+  assert(data.scope.repo_evidence === false, "all-projects discovery should be vault-only");
+  assert(data.repo === null, "all-projects discovery should not claim one repo");
+  assert(data.repo_resolution.status === "skipped_all_projects_vault_only", "all-projects discovery should record vault-only repo resolution");
   assert(data.project === null, "all-projects output should not claim one active project");
   const projects = data.projects.map((project) => project.slug);
   assert(projects.includes("agent-skills"), "agent-skills summary missing");
@@ -194,8 +212,116 @@ assert_json "$all_projects_json" '
   assert(idsByProject.has("agent-skills:2026-06-05-planned-high"), "agent-skills work missing from all-projects inventory");
   assert(idsByProject.has("other-project:2026-06-05-other-planned-high"), "other-project work missing from all-projects inventory");
   assert(idsByProject.has("other-project:2026-06-05-task-other"), "other-project capture missing from all-projects inventory");
+  assert(idsByProject.has("other-project:2026-06-05-bug-other-widget-reviewer"), "other-project widget capture missing from all-projects inventory");
+  assert(idsByProject.get("other-project:2026-06-05-bug-other-widget-reviewer").lane === "captures", "all-projects should not convert other-project capture to hygiene using the current repo");
+  assert(!idsByProject.get("other-project:2026-06-05-bug-other-widget-reviewer").implemented_evidence, "all-projects should not attach implemented evidence from the current repo");
+  assert(data.candidates.every((candidate) => candidate.git_matches.length === 0), "all-projects selected candidates should not receive current-repo git matches");
   assert(idsByProject.get("other-project:2026-06-05-other-planned-high").path === "projects/other-project/work/2026-06-05-other-planned-high/spec.md", "other-project work path should remain project-local");
   assert(data.totals.projects >= 2, "all-projects totals should include project count");
+'
+
+PROJECT_REPOS="$VAULT/projects/llm-wiki/architecture/project-repos.yaml"
+mkdir -p "$(dirname "$PROJECT_REPOS")"
+cat > "$PROJECT_REPOS" <<EOF
+schema_version: 1
+coordinator_project: llm-wiki
+hosts:
+  macos-dev:
+    users:
+      karlchow:
+        workspace_roots:
+          - ~/Desktop/code
+  sg01:
+    users:
+      root:
+        workspace_roots:
+          - ~/projects
+  sg02:
+    users:
+      agent-memory:
+        workspace_roots:
+          - ~/projects
+projects:
+  agent-skills:
+    remote_urls:
+      - git@github.com:karlorz/agent-skills.git
+      - https://github.com/karlorz/agent-skills.git
+  llm-wiki:
+    remote_urls:
+      - git@github.com:karlorz/llm-wiki.git
+      - https://github.com/karlorz/llm-wiki.git
+    host_overrides:
+      sg02:
+        users:
+          agent-memory:
+            repo_path: $TMP_DIR/agent-memory/llm-wiki
+  missing-project:
+  dupe-project:
+  wrong-remote:
+    remote_urls:
+      - https://github.com/karlorz/wrong-remote.git
+EOF
+
+mkdir -p "$VAULT/projects/llm-wiki/work" "$VAULT/projects/missing-project/work" \
+  "$VAULT/projects/dupe-project/work" "$VAULT/projects/wrong-remote/work"
+
+MAC_HOME="$TMP_DIR/home-macos"
+LINUX_HOME="$TMP_DIR/home-linux"
+init_git_repo "$MAC_HOME/Desktop/code/agent-skills" "git@github.com:karlorz/agent-skills.git"
+init_git_repo "$LINUX_HOME/projects/agent-skills" "https://github.com/karlorz/agent-skills.git"
+init_git_repo "$TMP_DIR/agent-memory/llm-wiki" "git@github.com:karlorz/llm-wiki.git"
+init_git_repo "$MAC_HOME/Desktop/code/dupe-project"
+init_git_repo "$TMP_DIR/alternate-code/dupe-project"
+init_git_repo "$MAC_HOME/Desktop/code/wrong-remote" "https://example.invalid/not-the-configured-repo.git"
+
+mac_resolved_json="$(HOME="$MAC_HOME" node "$HELPER" --project agent-skills --vault "$VAULT" --project-repos "$PROJECT_REPOS" --host-id macos-dev --repo-user karlchow --all)"
+assert_json "$mac_resolved_json" '
+  assert(data.repo_resolution.status === "resolved", "macos-dev repo should resolve");
+  assert(data.repo_resolution.path.endsWith("/home-macos/Desktop/code/agent-skills"), "macos-dev should resolve ~/Desktop/code/agent-skills");
+  assert(data.scope.repo_evidence === true, "resolved project inventory should enable repo evidence");
+  assert(typeof data.repo_resolution.git_context.branch === "string" && data.repo_resolution.git_context.branch.length > 0, "resolved repo should record branch context");
+  assert(data.repo_resolution.git_context.dirty === false, "resolved repo should record dirty context");
+  assert(data.repo_resolution.git_context.ahead === null, "resolved repo should record ahead context without requiring upstream");
+  assert(data.repo_resolution.git_context.behind === null, "resolved repo should record behind context without requiring upstream");
+'
+
+linux_resolved_json="$(HOME="$LINUX_HOME" node "$HELPER" --project agent-skills --vault "$VAULT" --project-repos "$PROJECT_REPOS" --host-id sg01 --repo-user root --all)"
+assert_json "$linux_resolved_json" '
+  assert(data.repo_resolution.status === "resolved", "sg01 repo should resolve");
+  assert(data.repo_resolution.path.endsWith("/home-linux/projects/agent-skills"), "sg01 should resolve ~/projects/agent-skills");
+'
+
+override_resolved_json="$(HOME="$LINUX_HOME" node "$HELPER" --project llm-wiki --vault "$VAULT" --project-repos "$PROJECT_REPOS" --host-id sg02 --repo-user agent-memory --all)"
+assert_json "$override_resolved_json" '
+  assert(data.repo_resolution.status === "resolved", "explicit host override should resolve");
+  assert(data.repo_resolution.path.endsWith("/agent-memory/llm-wiki"), "sg02 should use explicit llm-wiki override");
+'
+
+missing_json="$(HOME="$MAC_HOME" node "$HELPER" --project missing-project --vault "$VAULT" --project-repos "$PROJECT_REPOS" --host-id macos-dev --repo-user karlchow --all)"
+assert_json "$missing_json" '
+  assert(data.repo_resolution.status === "unresolved", "missing checkout should be explicit unresolved status");
+  assert(data.scope.repo_evidence === false, "missing checkout should disable repo evidence");
+'
+
+host_unknown_json="$(HOME="$MAC_HOME" node "$HELPER" --project agent-skills --vault "$VAULT" --project-repos "$PROJECT_REPOS" --host-id unknown-host --repo-user karlchow --all)"
+assert_json "$host_unknown_json" '
+  assert(data.repo_resolution.status === "host_unknown", "unknown host should be explicit host_unknown status");
+  assert(data.scope.repo_evidence === false, "unknown host should disable repo evidence");
+'
+
+ambiguous_json="$(HOME="$MAC_HOME" node "$HELPER" --project dupe-project --vault "$VAULT" --project-repos "$PROJECT_REPOS" --host-id macos-dev --repo-user karlchow --workspace-root "$MAC_HOME/Desktop/code" --workspace-root "$TMP_DIR/alternate-code" --all)"
+assert_json "$ambiguous_json" '
+  assert(data.repo_resolution.status === "ambiguous", "duplicate local matches should be ambiguous");
+  assert(data.repo_resolution.candidates.length === 2, "ambiguous result should list both candidate paths");
+  assert(data.scope.repo_evidence === false, "ambiguous checkout should disable repo evidence");
+'
+
+wrong_remote_json="$(HOME="$MAC_HOME" node "$HELPER" --project wrong-remote --vault "$VAULT" --project-repos "$PROJECT_REPOS" --host-id macos-dev --repo-user karlchow --all)"
+assert_json "$wrong_remote_json" '
+  assert(data.repo_resolution.status === "wrong_remote", "remote mismatch should be explicit wrong_remote status");
+  assert(data.repo_resolution.path.endsWith("/home-macos/Desktop/code/wrong-remote"), "wrong_remote should report the matching local path");
+  assert(typeof data.repo_resolution.git_context.branch === "string" && data.repo_resolution.git_context.branch.length > 0, "wrong_remote should still record branch context");
+  assert(data.scope.repo_evidence === false, "wrong remote should disable repo evidence");
 '
 
 limited_json="$(run_inventory --limit 2)"

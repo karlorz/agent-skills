@@ -97,7 +97,9 @@ Resolve the same project context dev-loop uses:
 3. Resolve `<vault>` from the configured SkillWiki backend. If `auto` or absent,
    run `skillwiki path`; if that fails, use a validated `~/wiki` only when
    `~/wiki/SCHEMA.md` and `~/wiki/projects/` exist.
-4. Resolve `<repo>` as the current working repository.
+4. Resolve `<repo>` as the current working repository for current-project
+   discovery only. Cross-project discovery must not borrow `<cwd>` repo evidence
+   for other projects.
 5. Resolve the skill directory so helper calls run relative to this skill root.
 
 The default `<slug>` is only the starting scope. If the invocation asks for all
@@ -112,6 +114,65 @@ Office-hours v1 requires a SkillWiki vault so it can list project work and
 write a requirements report.
 ```
 
+### Project Repository Metadata
+
+Cross-project repo evidence is local-only and host-aware. The durable metadata
+home is:
+
+```text
+projects/llm-wiki/architecture/project-repos.yaml
+```
+
+If that coordinator file is absent, fall back to
+`projects/<slug>/architecture/project-repos.yaml` for the selected project.
+The minimal schema is host plus user scoped:
+
+```yaml
+schema_version: 1
+coordinator_project: llm-wiki
+hosts:
+  macos-dev:
+    users:
+      karlchow:
+        workspace_roots:
+          - ~/Desktop/code
+  sg01:
+    users:
+      root:
+        workspace_roots:
+          - ~/projects
+projects:
+  agent-skills:
+    repo_names:
+      - agent-skills
+    remote_urls:
+      - git@github.com:karlorz/agent-skills.git
+      - https://github.com/karlorz/agent-skills.git
+  llm-wiki:
+    host_overrides:
+      sg02:
+        users:
+          agent-memory:
+            repo_path: /home/agent-memory/llm-wiki
+```
+
+If `repo_names` is absent, use the project slug as the repo directory fallback.
+Expand `~` for the runtime user. Accept only paths that are git repositories.
+When `remote_urls` is configured, require a matching local git remote before
+trusting repo-derived evidence.
+
+Office-hours v1 does not SSH to remote hosts to inspect repositories. Missing
+local checkouts degrade explicitly. Treat resolver statuses as follows:
+
+- `resolved` — include repo-derived evidence for the selected project.
+- `unresolved` — continue intake, but label repo evidence unavailable.
+- `ambiguous` — continue intake only after saying multiple local matches exist;
+  recommend a per-host/user `repo_path` override.
+- `wrong_remote` — continue intake, but do not trust the checkout because the
+  configured remote does not match.
+- `host_unknown` — continue intake, but say the current host/user is not
+  configured in `project-repos.yaml`.
+
 ### Discovery Scope
 
 Use current-project discovery unless the invocation explicitly asks for
@@ -125,10 +186,14 @@ every project upfront. First run the inventory helper across projects:
 
 ```bash
 node scripts/preflight-inventory.js \
-  --all-projects --vault <vault> --repo <cwd> --limit <n>
+  --all-projects --vault <vault> --limit <n>
 ```
 
 With `--all` or a "show all projects/work" request, add `--all`.
+
+Cross-project discovery is vault-only. Do not pass the current repository as
+evidence for every project; if a legacy caller passes `--repo`, the helper must
+ignore repo evidence while `--all-projects` is active.
 
 Present a compact project chooser from the helper's `projects[]` summaries and
 the candidate list grouped by `project_slug`, then lane. Include enough detail
@@ -139,8 +204,13 @@ current-project discovery for that slug and ask for one candidate or free-text
 topic inside that project.
 
 Once a project or candidate is selected, set `<slug>` to the selected
-`project_slug` and run the normal brain refresh for that one project before
-requirement questions. Do not write a cross-project report.
+`project_slug`, resolve the selected project repository using
+`project-repos.yaml`, and run the normal brain refresh for that one project
+before requirement questions. If the repository resolves, rerun project-scoped
+inventory with the resolved repo path or the project-repos resolver enabled. If
+it does not resolve, rerun or continue project-scoped inventory with repo
+evidence disabled and show the degraded resolver status. Do not write a
+cross-project report.
 
 ### Brain Refresh
 
@@ -166,6 +236,14 @@ directory:
 ```bash
 node scripts/preflight-inventory.js \
   --project <slug> --vault <vault> --repo <cwd> --limit <n>
+```
+
+For a cross-project selection, rerun the selected project inventory with the
+coordinator metadata so the helper can resolve the selected project repository:
+
+```bash
+node scripts/preflight-inventory.js \
+  --project <slug> --vault <vault> --project-repos <project-repos.yaml> --limit <n>
 ```
 
 Default `<n>` from `preflight.default_limit` when configured, otherwise `5`.
@@ -323,7 +401,9 @@ work items, raw transcripts, query pages, or concepts.
 
 If cross-project discovery was used, record the selected `project_slug`, whether
 the user chose a project first or an exact candidate, and any nearby
-cross-project alternatives that were intentionally left out of scope.
+cross-project alternatives that were intentionally left out of scope. Also
+record the selected project's repo resolution status, resolved repo path when
+available, and whether repo-derived evidence was included.
 
 **Fresh-vs-resumed labelling:** in `## Context`, explicitly state whether this
 is a fresh follow-up topic or a resumed work item. If a completed/abandoned item
