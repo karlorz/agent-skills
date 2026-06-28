@@ -142,7 +142,25 @@ required:
   - ref: widget-reviewer
     fallback: inline widget:review
 EOF
-git -C "$REPO" add scripts skills
+cat > "$REPO/scripts/test-critical-path-audit.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Generic workflow vocabulary should not count as a focused implementation.
+printf '%s\n' 'critical_paths.*.code'
+printf '%s\n' 'git status --short'
+printf '%s\n' 'git diff --name-only'
+printf '%s\n' 'critical-path dirty-tree audit'
+EOF
+mkdir -p "$REPO/archive" "$REPO/logs"
+cat > "$REPO/archive/dev-loop-research.md" <<'EOF'
+This archived note references a work-item queue and says the helper must not
+auto-create planned work from generic critical_paths vocabulary.
+EOF
+cat > "$REPO/logs/dev-loop-stale.txt" <<'EOF'
+critical_paths work-item auto-create
+EOF
+git -C "$REPO" add scripts skills archive logs
 git -C "$REPO" commit -q -m "fix(dev-loop): implement widget-reviewer widget:review gate"
 
 write_work_spec "$WORK/2026-06-05-planned-high" planned high "Planned High"
@@ -167,6 +185,7 @@ write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-widget-reviewer-implem
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-other-widget-reviewer.md" bug "[[other-project]]" $'# bug: other project widget reviewer\n\nThe other project mentions `widget-reviewer` and `widget:review`, but all-project discovery must not use the current repo to decide this capture was implemented.'
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-filename-only-widget-reviewer.md" bug "[[agent-skills]]" $'# bug: generic stale report\n\nThis capture body intentionally has no implementation identifiers. A matching filename alone must not downgrade it to hygiene.'
 write_capture_body "$VAULT/raw/transcripts/2026-06-05-bug-single-token-widget.md" bug "[[agent-skills]]" $'# bug: widget\n\nFix widget.'
+write_capture_body "$VAULT/raw/transcripts/2026-06-05-task-dirty-critical-path-detector.md" task "[[agent-skills]]" $'# task: dirty critical-path detector\n\nPreflight should intersect `critical_paths.*.code`, `git status --short`, `git diff --name-only`, and `critical-path` dirty-tree evidence without treating broad `critical_paths`, `work-item`, or `auto-create` vocabulary as proof that the detector already exists.'
 
 implemented_capture="$VAULT/raw/transcripts/2026-06-05-bug-widget-reviewer-implemented.md"
 implemented_capture_hash_before="$(shasum -a 256 "$implemented_capture" | awk '{print $1}')"
@@ -196,6 +215,10 @@ assert_json "$all_json" '
   assert(implemented.implemented_evidence.audit_files.some((file) => file === "scripts/test-widget-review.sh"), "implemented evidence should include test audit file");
   assert(ids.includes("2026-06-05-bug-filename-only-widget-reviewer"), "filename-only weak capture should remain visible");
   assert(ids.includes("2026-06-05-bug-single-token-widget"), "single-token weak capture should remain visible");
+  const dirtyCriticalPath = data.candidates.find((candidate) => candidate.id === "2026-06-05-task-dirty-critical-path-detector");
+  assert(dirtyCriticalPath, "dirty critical-path detector task should remain visible");
+  assert(dirtyCriticalPath.lane === "captures", "broad critical-path vocabulary alone must not reclassify the detector task to hygiene");
+  assert(!dirtyCriticalPath.implemented_evidence, "broad critical-path vocabulary alone must not attach implemented evidence");
 '
 
 all_projects_json="$(node "$HELPER" --all-projects --vault "$VAULT" --repo "$REPO" --all)"
@@ -347,6 +370,7 @@ assert_json "$captures_json" '
   assert(!ids.includes("2026-06-05-bug-widget-reviewer-implemented"), "captures lane should exclude implemented hygiene finding");
   assert(ids.includes("2026-06-05-bug-filename-only-widget-reviewer"), "filename-only weak capture should remain in captures lane");
   assert(ids.includes("2026-06-05-bug-single-token-widget"), "single-token weak capture should remain in captures lane");
+  assert(ids.includes("2026-06-05-task-dirty-critical-path-detector"), "broad critical-path vocabulary should keep the detector task in captures");
 '
 
 hygiene_json="$(run_inventory --all --lane hygiene)"
@@ -380,5 +404,107 @@ assert_json "$missing_skillwiki_json" '
 implemented_capture_hash_after="$(shasum -a 256 "$implemented_capture" | awk '{print $1}')"
 [ "$implemented_capture_hash_before" = "$implemented_capture_hash_after" ] ||
   fail "implemented-capture detection must not modify raw transcripts"
+
+DETECTOR_VAULT="$TMP_DIR/detector-wiki"
+DETECTOR_REPO="$TMP_DIR/detector-repo"
+DETECTOR_WORK="$DETECTOR_VAULT/projects/agent-skills/work"
+mkdir -p "$DETECTOR_WORK" "$DETECTOR_VAULT/raw/transcripts"
+init_git_repo "$DETECTOR_REPO"
+
+mkdir -p "$DETECTOR_REPO/.claude" "$DETECTOR_REPO/skills/dev-loop/scripts"
+cat > "$DETECTOR_REPO/.claude/dev-loop.config.md" <<'EOF'
+# Detector Fixture
+
+## Critical Paths
+
+```yaml
+critical_paths:
+  preflight_inventory:
+    code:
+      - skills/dev-loop/scripts/preflight-inventory.js
+```
+EOF
+cat > "$DETECTOR_REPO/skills/dev-loop/scripts/preflight-inventory.js" <<'EOF'
+module.exports = {
+  detector: false,
+};
+EOF
+git -C "$DETECTOR_REPO" add .claude skills
+git -C "$DETECTOR_REPO" commit -q -m "test: seed critical path fixture"
+
+write_work_spec "$DETECTOR_WORK/2026-06-05-preflight-inventory-follow-up" completed medium "Preflight Inventory Follow Up"
+write_plan "$DETECTOR_WORK/2026-06-05-preflight-inventory-follow-up"
+cat >> "$DETECTOR_WORK/2026-06-05-preflight-inventory-follow-up/spec.md" <<'EOF'
+
+Touches `skills/dev-loop/scripts/preflight-inventory.js`.
+EOF
+
+cat > "$DETECTOR_REPO/skills/dev-loop/scripts/preflight-inventory.js" <<'EOF'
+module.exports = {
+  detector: true,
+};
+EOF
+
+detector_json="$(node "$HELPER" --project agent-skills --vault "$DETECTOR_VAULT" --repo "$DETECTOR_REPO" --all --lane hygiene)"
+assert_json "$detector_json" '
+  const finding = data.candidates.find((candidate) => candidate.id === "dirty-critical-path-preflight_inventory");
+  assert(finding, "dirty critical-path finding should be emitted when a matching critical path file is dirty");
+  assert(finding.findings.includes("dirty_critical_path_without_active_work"), "dirty critical-path finding should include explicit hygiene code");
+  assert(finding.dirty_critical_path, "dirty critical-path finding should include detail payload");
+  assert(finding.dirty_critical_path.name === "preflight_inventory", "dirty critical-path finding should report the matching critical path name");
+  assert(finding.dirty_critical_path.changed_files.includes("skills/dev-loop/scripts/preflight-inventory.js"), "dirty critical-path finding should report the changed file");
+  assert(finding.dirty_critical_path.reopen_work_item_slugs.includes("2026-06-05-preflight-inventory-follow-up"), "dirty critical-path finding should suggest reopening related completed work");
+  assert(typeof finding.dirty_critical_path.create_work_item_slug === "string" && finding.dirty_critical_path.create_work_item_slug.length > 0, "dirty critical-path finding should suggest a create slug");
+'
+
+UNRELATED_VAULT="$TMP_DIR/unrelated-wiki"
+UNRELATED_REPO="$TMP_DIR/unrelated-repo"
+mkdir -p "$UNRELATED_VAULT/projects/agent-skills/work" "$UNRELATED_VAULT/raw/transcripts"
+init_git_repo "$UNRELATED_REPO"
+mkdir -p "$UNRELATED_REPO/.claude" "$UNRELATED_REPO/skills/dev-loop/scripts"
+cat > "$UNRELATED_REPO/.claude/dev-loop.config.md" <<'EOF'
+# Detector Fixture
+
+## Critical Paths
+
+```yaml
+critical_paths:
+  preflight_inventory:
+    code:
+      - skills/dev-loop/scripts/preflight-inventory.js
+```
+EOF
+cat > "$UNRELATED_REPO/skills/dev-loop/scripts/preflight-inventory.js" <<'EOF'
+module.exports = {
+  detector: false,
+};
+EOF
+git -C "$UNRELATED_REPO" add .claude skills
+git -C "$UNRELATED_REPO" commit -q -m "test: seed unrelated critical path fixture"
+printf 'dirty unrelated file\n' >> "$UNRELATED_REPO/README.md"
+
+unrelated_json="$(node "$HELPER" --project agent-skills --vault "$UNRELATED_VAULT" --repo "$UNRELATED_REPO" --all --lane hygiene)"
+assert_json "$unrelated_json" '
+  assert(!data.candidates.some((candidate) => candidate.findings.includes("dirty_critical_path_without_active_work")), "dirty unrelated files must not emit critical-path noise");
+'
+
+NO_CRITICAL_VAULT="$TMP_DIR/no-critical-wiki"
+NO_CRITICAL_REPO="$TMP_DIR/no-critical-repo"
+mkdir -p "$NO_CRITICAL_VAULT/projects/agent-skills/work" "$NO_CRITICAL_VAULT/raw/transcripts"
+init_git_repo "$NO_CRITICAL_REPO"
+mkdir -p "$NO_CRITICAL_REPO/skills/dev-loop/scripts"
+cat > "$NO_CRITICAL_REPO/skills/dev-loop/scripts/preflight-inventory.js" <<'EOF'
+module.exports = {
+  detector: false,
+};
+EOF
+git -C "$NO_CRITICAL_REPO" add skills
+git -C "$NO_CRITICAL_REPO" commit -q -m "test: seed no critical path fixture"
+printf 'dirty critical path without config\n' >> "$NO_CRITICAL_REPO/skills/dev-loop/scripts/preflight-inventory.js"
+
+no_critical_json="$(node "$HELPER" --project agent-skills --vault "$NO_CRITICAL_VAULT" --repo "$NO_CRITICAL_REPO" --all --lane hygiene)"
+assert_json "$no_critical_json" '
+  assert(!data.candidates.some((candidate) => candidate.findings.includes("dirty_critical_path_without_active_work")), "repos without critical_paths should keep existing inventory output");
+'
 
 printf 'test-dev-loop-preflight-inventory: ok\n'

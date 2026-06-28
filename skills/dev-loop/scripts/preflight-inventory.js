@@ -12,10 +12,13 @@ const DONE_STATUSES = new Set(["completed", "complete", "abandoned"]);
 const CAPTURE_KINDS = new Set(["task", "bug"]);
 const SKIPPED_CAPTURE_KINDS = new Set(["idea", "note"]);
 const IMPLEMENTED_WITHOUT_CLOSURE_FINDING = "possibly_implemented_without_closure";
+const DIRTY_CRITICAL_PATH_FINDING = "dirty_critical_path_without_active_work";
 const REPO_INDEX_IGNORED_DIRS = new Set([
+  "archive",
   ".git",
   "coverage",
   "dist",
+  "logs",
   "node_modules",
   "tmp",
   "vendor",
@@ -28,14 +31,19 @@ const GENERIC_IMPLEMENTATION_TERMS = new Set([
   "captures",
   "change",
   "code",
+  "critical-path",
+  "critical_paths",
   "cli/app",
   "docs",
   "dev-loop",
+  "dirty-tree",
   "feature",
   "file",
   "fix",
   "issue",
   "local",
+  "name-only",
+  "auto-create",
   "project",
   "repo",
   "review",
@@ -44,6 +52,8 @@ const GENERIC_IMPLEMENTATION_TERMS = new Set([
   "test",
   "tests",
   "update",
+  "work-item",
+  "working-tree",
   "work",
   "agent-skills",
 ]);
@@ -824,11 +834,18 @@ function normalizeImplementationTerm(value) {
     .replace(/\s+/g, " ");
 }
 
+function looksLikeImplementationPath(term) {
+  return /^[./~A-Za-z0-9_-]*\/[A-Za-z0-9_.\/-]+\.[A-Za-z0-9]+$/.test(term);
+}
+
 function isUsefulImplementationTerm(term) {
   const normalized = normalizeImplementationTerm(term);
   const lower = normalized.toLowerCase();
   if (normalized.length < 4 || normalized.length > 80) return false;
   if (/^[0-9._:/-]+$/.test(normalized)) return false;
+  if (normalized.includes(" ")) return false;
+  if (normalized.includes("*")) return false;
+  if (looksLikeImplementationPath(normalized)) return false;
   if (GENERIC_IMPLEMENTATION_TERMS.has(lower)) return false;
   return /[:/._-]/.test(normalized);
 }
@@ -967,11 +984,12 @@ function candidateBase(opts, fields) {
   const absolutePath = fields.absolute_path ?? "";
   const frontmatter = fields.frontmatter ?? {};
   const title = frontmatter.title || fields.id;
+  const candidatePath = fields.path || (absolutePath ? relPath(opts.vault, absolutePath) : "");
 
   const base = {
     id: fields.id,
     lane: fields.lane,
-    path: absolutePath ? relPath(opts.vault, absolutePath) : fields.path,
+    path: candidatePath,
     absolute_path: absolutePath,
     kind: frontmatter.kind || fields.kind || "",
     lanes: fields.lanes ?? [fields.lane],
@@ -1171,6 +1189,214 @@ function readCaptures(opts, activeCloses) {
   return { candidates, skipped };
 }
 
+function yamlFenceBlocks(text) {
+  return [...text.matchAll(/```yaml\s*\n([\s\S]*?)```/g)].map((match) => match[1]);
+}
+
+function readCriticalPathsConfig(repo) {
+  const configPath = path.join(repo, ".claude", "dev-loop.config.md");
+  if (!fs.existsSync(configPath)) {
+    return { path: "", criticalPaths: {} };
+  }
+
+  try {
+    const text = readText(configPath);
+    for (const block of yamlFenceBlocks(text)) {
+      const parsed = parseSimpleYaml(block);
+      const criticalPaths = objectValue(parsed.critical_paths);
+      if (Array.isArray(parsed.critical_paths) || typeof parsed.critical_paths === "string") {
+        return { path: configPath, criticalPaths: {} };
+      }
+      if ("critical_paths" in parsed) {
+        return { path: configPath, criticalPaths };
+      }
+    }
+  } catch {
+    return { path: configPath, criticalPaths: {} };
+  }
+
+  return { path: configPath, criticalPaths: {} };
+}
+
+function gitStdout(repo, args) {
+  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+  if (result.status !== 0 || !result.stdout.trim()) return [];
+  return result.stdout.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function parseStatusPaths(lines) {
+  const paths = [];
+  for (const line of lines) {
+    if (line.length < 4) continue;
+    const rawPath = line.slice(3).trim();
+    if (!rawPath) continue;
+    const normalized = rawPath.includes(" -> ") ? rawPath.split(" -> ").pop() : rawPath;
+    if (normalized) paths.push(normalized);
+  }
+  return paths;
+}
+
+function dirtyRepoPaths(repo) {
+  return unique([
+    ...parseStatusPaths(gitStdout(repo, ["status", "--porcelain"])),
+    ...gitStdout(repo, ["diff", "--name-only"]),
+    ...gitStdout(repo, ["diff", "--cached", "--name-only"]),
+    ...gitStdout(repo, ["ls-files", "--others", "--exclude-standard"]),
+  ]);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+
+function globToRegExp(pattern) {
+  let output = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === "*") {
+      if (pattern[index + 1] === "*") {
+        output += ".*";
+        index += 1;
+      } else {
+        output += "[^/]*";
+      }
+      continue;
+    }
+    if (char === "?") {
+      output += "[^/]";
+      continue;
+    }
+    output += escapeRegExp(char);
+  }
+  return new RegExp(`^${output}$`);
+}
+
+function matchesAnyGlob(filePath, patterns) {
+  return patterns.some((pattern) => {
+    try {
+      return globToRegExp(pattern).test(filePath);
+    } catch {
+      return false;
+    }
+  });
+}
+
+function readWorkItemRecords(opts) {
+  const workRoot = path.join(opts.vault, "projects", opts.project, "work");
+  const records = [];
+
+  for (const entry of listDirSafe(workRoot).filter((item) => item.isDirectory() && !item.name.startsWith("_"))) {
+    const id = entry.name;
+    const dirPath = path.join(workRoot, id);
+    const specPath = path.join(dirPath, "spec.md");
+    const planPath = path.join(dirPath, "plan.md");
+    const specText = fs.existsSync(specPath) ? readText(specPath) : "";
+    const planText = fs.existsSync(planPath) ? readText(planPath) : "";
+    if (!specText && !planText) continue;
+
+    const parsed = parseFrontmatter(specText || planText);
+    const frontmatter = parsed.data;
+    records.push({
+      id,
+      name: frontmatter.name || "",
+      status: frontmatter.status || "",
+      title: frontmatter.title || id,
+      text: [specText, planText].filter(Boolean).join("\n"),
+    });
+  }
+
+  return records;
+}
+
+function criticalPathNeedles(match) {
+  return unique([
+    match.name.toLowerCase(),
+    match.name.toLowerCase().replace(/[_-]+/g, " "),
+    ...match.changed_files.map((file) => file.toLowerCase()),
+    ...match.code_paths.filter((pattern) => !pattern.includes("*")).map((pattern) => pattern.toLowerCase()),
+  ]).filter(Boolean);
+}
+
+function relatedWorkItems(records, match) {
+  const needles = criticalPathNeedles(match);
+  return records.filter((record) => {
+    const haystack = [record.id, record.name, record.title, record.text].join("\n").toLowerCase();
+    return needles.some((needle) => haystack.includes(needle));
+  });
+}
+
+function dirtyCriticalPathMatches(repo) {
+  const config = readCriticalPathsConfig(repo);
+  const criticalPathEntries = Object.entries(objectValue(config.criticalPaths));
+  if (criticalPathEntries.length === 0) {
+    return { configPath: config.path, matches: [] };
+  }
+
+  const dirtyFiles = dirtyRepoPaths(repo);
+  if (dirtyFiles.length === 0) {
+    return { configPath: config.path, matches: [] };
+  }
+
+  const matches = [];
+  for (const [name, definition] of criticalPathEntries) {
+    const codePaths = unique(arrayValue(objectValue(definition).code).map(String).map((value) => value.trim()).filter(Boolean));
+    if (codePaths.length === 0) continue;
+    const changedFiles = dirtyFiles.filter((filePath) => matchesAnyGlob(filePath, codePaths));
+    if (changedFiles.length === 0) continue;
+    matches.push({
+      name,
+      code_paths: codePaths,
+      changed_files: changedFiles,
+    });
+  }
+
+  return { configPath: config.path, matches };
+}
+
+function dirtyCriticalPathCandidates(opts) {
+  if (!opts.repoEvidence || !opts.repo) return [];
+
+  const detection = dirtyCriticalPathMatches(opts.repo);
+  if (detection.matches.length === 0) return [];
+
+  const workRecords = readWorkItemRecords(opts);
+  const candidates = [];
+  for (const match of detection.matches) {
+    const related = relatedWorkItems(workRecords, match);
+    const active = related.filter((record) => ACTIVE_STATUSES.has(record.status));
+    if (active.length > 0) continue;
+
+    const reopen = related.filter((record) => DONE_STATUSES.has(record.status)).map((record) => record.id);
+    const createSlug = `dirty-${match.name.replace(/_/g, "-")}-follow-up`;
+    const details = {
+      ...match,
+      active_work_item_slugs: active.map((record) => record.id),
+      create_work_item_slug: createSlug,
+      reopen_work_item_slugs: reopen,
+      related_work_item_slugs: related.map((record) => record.id),
+    };
+
+    const candidate = candidateBase(opts, {
+      absolute_path: detection.configPath,
+      frontmatter: {
+        project: `[[${opts.project}]]`,
+        title: `Dirty critical path: ${match.name}`,
+      },
+      id: `dirty-critical-path-${match.name}`,
+      kind: "repo_state",
+      lane: "hygiene",
+      path: ".claude/dev-loop.config.md",
+      repairable: true,
+      valid: true,
+      findings: [DIRTY_CRITICAL_PATH_FINDING],
+    });
+    candidate.dirty_critical_path = details;
+    candidates.push(candidate);
+  }
+
+  return candidates;
+}
+
 function score(candidate) {
   const status = candidate.status;
   const priority = candidate.priority;
@@ -1214,7 +1440,8 @@ function readProjectInventory(opts, project) {
   const projectOpts = { ...opts, project };
   const work = readWorkItems(projectOpts);
   const captures = readCaptures(projectOpts, work.activeCloses);
-  const candidates = [...work.candidates, ...captures.candidates];
+  const dirtyCriticalPaths = dirtyCriticalPathCandidates(projectOpts);
+  const candidates = [...work.candidates, ...captures.candidates, ...dirtyCriticalPaths];
   const skipped = [...work.skipped, ...captures.skipped];
   return {
     candidates,
