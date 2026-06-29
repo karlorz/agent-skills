@@ -6,14 +6,11 @@ description: >
   planning, execution, code review, and knowledge capture. Supports /goal
   compatibility, Codex CLI/App, preflight prep, investigate mode,
   peer-aware vault sync, multi-backend review, auto-archive, and portable
-  SkillWiki vault resolution. v1.26.5: stable release for host-aware
-  office-hours repo resolution, vault-only --all-projects discovery, and
-  explicit degraded repo evidence states. v1.26.4: stable release for
-  office-hours cross-project discovery and --all-projects inventory. v1.26.3: clarify
-  investigate queue schema probes as disposable and make raw-capture fallback
-  explicit for current SkillWiki schemas. v1.26.2: stable release for stale
-  implemented capture hygiene and office-hours recheck. v1.26.1: office-hours Codex
-  question flow uses request_user_input only in Plan mode and numbered fallback in Default mode.
+  SkillWiki vault resolution. v1.26.6: stable release for hardened preflight
+  inventory signals and implemented-evidence false-positive filtering. v1.26.5:
+  host-aware office-hours repo resolution, vault-only --all-projects discovery,
+  and explicit degraded repo evidence states. v1.26.4: office-hours
+  cross-project discovery and --all-projects inventory.
   Pass `high` for aggressive mode.
 ---
 
