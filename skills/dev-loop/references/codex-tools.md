@@ -33,6 +33,7 @@ Codex each is a `spawn_agent(task_name=..., prompt=...)` + `wait_agent` +
 | Worker | Spawned at | Lane |
 |---|---|---|
 | `dev-loop:doctor-worker` | REFRESH step 7 | dependency + compact probe |
+| `dev-loop:status-worker` | STATUS pipeline S1 (optional) | read-only `dev-loop-status.js` probe; inline `node` fallback |
 | `dev-loop:research-worker` | IDLE step 4 / investigate SCAN | code + vault health scan |
 | `dev-loop:simplify-worker` | REVIEW step 6 | preferred isolated adapter for `simplify:simplify` |
 | `simplify:simplify` | REVIEW step 6 | required code-quality review skill; inline fallback |

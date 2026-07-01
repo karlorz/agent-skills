@@ -171,6 +171,9 @@ node skills/dev-loop/scripts/dev-loop-status.js \
 `--vault <path>` override. Map user `--json` to `--format json --no-write` when
 appropriate.
 
+Optional Codex/Agent isolation: `Agent(subagent_type: "dev-loop:status-worker", model: "sonnet", ...)`
+per `agents/status-worker.md` (inline `node` fallback when dispatch unavailable).
+
 **S2. REPORT:** Helper writes `dev-loop-status.v1` JSON and human Markdown per
 `templates/status-report.md` (sections in PRD). Treat missing vault as **degraded**
 for skillwiki projects, not fatal, unless `preview-mode` is `prep` or `investigate`.

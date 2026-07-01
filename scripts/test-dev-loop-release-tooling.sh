@@ -661,4 +661,6 @@ run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 
+bash "$ROOT/scripts/test-dev-loop-status.sh"
+
 printf 'test-dev-loop-release-tooling: ok\n'
