@@ -427,40 +427,69 @@ function readLastDoctor() {
   }
 }
 
+function readPluginVersion(repo) {
+  const manifest = path.join(repo, "skills", "dev-loop", ".claude-plugin", "plugin.json");
+  if (!fileExists(manifest)) return "";
+  try {
+    const j = JSON.parse(readText(manifest));
+    return typeof j.version === "string" ? j.version : "";
+  } catch {
+    return "";
+  }
+}
+
+function hashFileShort(filePath) {
+  return createHash("sha256").update(readText(filePath)).digest("hex").slice(0, 16);
+}
+
+function resolveCachedDevLoopSkill(repo) {
+  const version = readPluginVersion(repo);
+  const home = os.homedir();
+  const candidates = [];
+  if (version) {
+    candidates.push(
+      path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "SKILL.md"),
+      path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "SKILL.md"),
+    );
+  }
+  const versionRoots = [
+    path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop"),
+    path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop"),
+  ];
+  for (const root of versionRoots) {
+    if (!fileExists(root)) continue;
+    for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      candidates.push(path.join(root, ent.name, "SKILL.md"));
+    }
+  }
+  let best = null;
+  for (const p of candidates) {
+    if (!fileExists(p)) continue;
+    const mtime = fs.statSync(p).mtimeMs;
+    if (!best || mtime > best.mtime) best = { path: p, mtime };
+  }
+  return best ? best.path : null;
+}
+
 function skillCacheDrift(repo) {
   const source = path.join(repo, "skills", "dev-loop", "SKILL.md");
   if (!fileExists(source)) return { state: "unknown", detail: "source SKILL.md not in repo" };
-  const sourceHash = createHash("sha256").update(readText(source)).digest("hex").slice(0, 16);
-  const cacheRoots = [
-    path.join(os.homedir(), ".claude", "plugins", "cache"),
-    path.join(os.homedir(), ".codex", "plugins", "cache"),
-  ];
-  let cacheHash = null;
-  const findSkill = (dir) => {
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, ent.name);
-      if (ent.isDirectory()) {
-        if (ent.name === "dev-loop" && fileExists(path.join(full, "SKILL.md"))) {
-          return createHash("sha256").update(readText(path.join(full, "SKILL.md"))).digest("hex").slice(0, 16);
-        }
-        const inner = findSkill(full);
-        if (inner) return inner;
-      }
-    }
-    return null;
-  };
-  for (const root of cacheRoots) {
-    if (!fileExists(root)) continue;
-    cacheHash = findSkill(root);
-    if (cacheHash) break;
+  const sourceHash = hashFileShort(source);
+  const cachePath = resolveCachedDevLoopSkill(repo);
+  if (!cachePath) {
+    return { state: "unknown", detail: "no cached dev-loop SKILL.md found", source_hash: sourceHash };
   }
-  if (!cacheHash) return { state: "unknown", detail: "no cached dev-loop SKILL.md found", source_hash: sourceHash };
-  if (cacheHash === sourceHash) return { state: "in_sync", source_hash: sourceHash, cache_hash: cacheHash };
+  const cacheHash = hashFileShort(cachePath);
+  if (cacheHash === sourceHash) {
+    return { state: "in_sync", source_hash: sourceHash, cache_hash: cacheHash, cache_path: cachePath };
+  }
   return {
     state: "drifted_stale",
-    detail: "source SKILL.md differs from plugin cache — run /reload-plugins before a write cycle",
+    detail: "source SKILL.md differs from plugin cache — run sync-plugin-cache.sh and /reload-plugins",
     source_hash: sourceHash,
     cache_hash: cacheHash,
+    cache_path: cachePath,
   };
 }
 
