@@ -307,6 +307,11 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop status mode documented" "$prompt" 'MODE = status'
   assert_contains "dev-loop status pipeline" "$prompt" 'Status pipeline'
   assert_contains "dev-loop status helper script" "$prompt" 'dev-loop-status.js'
+  assert_contains "dev-loop status-worker agent doc" "$prompt" 'dev-loop:status-worker'
+  [ -f "$ROOT/skills/dev-loop/agents/status-worker.md" ] ||
+    fail "skills/dev-loop/agents/status-worker.md missing"
+  assert_contains "status-worker read-only contract" "$(cat "$ROOT/skills/dev-loop/agents/status-worker.md")" 'writes_executed === false'
+  assert_contains "codex reference documents status-worker" "$codex_ref" 'dev-loop:status-worker'
   assert_contains "dev-loop config-lint mode" "$prompt" 'MODE = config-lint'
   assert_contains "dev-loop config-lint script" "$prompt" 'dev-loop-config-lint.js'
   assert_contains "dev-loop why-skipped script" "$prompt" 'dev-loop-why-skipped.js'
