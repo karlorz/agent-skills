@@ -2,17 +2,9 @@
 name: dev-loop
 description: >
   Use for "run a dev cycle", "implement a feature", "make a code change",
-  "start a loop", "investigate", "find work", "prep", or "status" to drive automated
-  planning, execution, code review, and knowledge capture. Supports read-only
-  `/dev-loop status` (doctor alias), /goal compatibility, Codex CLI/App, preflight prep, investigate mode,
-  peer-aware vault sync, multi-backend review, auto-archive, and portable
-  SkillWiki vault resolution. v1.26.8: read-only `/dev-loop config-lint` mode with
-  dev-loop-config-lint.v1 reports. v1.26.7: read-only `/dev-loop status` mode with
-  dev-loop-status.v1 JSON and markdown reports. v1.26.6: stable release for hardened preflight
-  inventory signals and implemented-evidence false-positive filtering. v1.26.5:
-  host-aware office-hours repo resolution, vault-only --all-projects discovery,
-  and explicit degraded repo evidence states. v1.26.4: office-hours
-  cross-project discovery and --all-projects inventory.
+  "start a loop", "investigate", "find work", "prep", "status", or "config-lint".
+  Read-only status, config-lint, and why-skipped helpers. /goal compatible.
+  Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
   Pass `high` for aggressive mode.
 ---
 
@@ -220,6 +212,8 @@ valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 `ci_discovery` + `required_checks`, `preflight` lanes/limit,
 `release_policy.auto_bump` + `trigger_globs` + `bump_script` existence,
 `e2e_scripts` paths on disk, legacy `vault:` alias advisory.
+
+**Why-skipped (read-only):** `node skills/dev-loop/scripts/dev-loop-why-skipped.js --project <slug> --work <work-folder>` — missing automation gates + inventory findings for one item.
 
 **Read-only deny-list:** same as status mode — no implementation or vault mutations.
 

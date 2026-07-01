@@ -75,6 +75,7 @@ e2e_scripts:
   - "bash scripts/test-dev-loop-preflight-inventory.sh"
   - "bash scripts/test-dev-loop-status.sh"
   - "bash scripts/test-dev-loop-config-lint.sh"
+  - "bash scripts/test-dev-loop-why-skipped.sh"
 ```
 
 ## CI
