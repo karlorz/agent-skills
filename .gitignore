@@ -8,5 +8,6 @@ __pycache__/
 .claude/dev-loop.config.md
 .claude/dev-loop-debug/
 .claude/dev-loop/status/
+.claude/dev-loop/lint/
 skills/playwright-cli/.playwright-cli/
 logs/

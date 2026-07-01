@@ -6,7 +6,8 @@ description: >
   planning, execution, code review, and knowledge capture. Supports read-only
   `/dev-loop status` (doctor alias), /goal compatibility, Codex CLI/App, preflight prep, investigate mode,
   peer-aware vault sync, multi-backend review, auto-archive, and portable
-  SkillWiki vault resolution. v1.26.7: read-only `/dev-loop status` mode with
+  SkillWiki vault resolution. v1.26.8: read-only `/dev-loop config-lint` mode with
+  dev-loop-config-lint.v1 reports. v1.26.7: read-only `/dev-loop status` mode with
   dev-loop-status.v1 JSON and markdown reports. v1.26.6: stable release for hardened preflight
   inventory signals and implemented-evidence false-positive filtering. v1.26.5:
   host-aware office-hours repo resolution, vault-only --all-projects discovery,
@@ -49,8 +50,8 @@ preview). It is not the REFRESH **doctor-worker** dependency probe — status mo
 may *read* `~/.claude/dev-loop/last-doctor.json` but does not spawn doctor-worker
 unless you explicitly run a full REFRESH core cycle.
 
-If `status` or `doctor` is present, set **MODE = status**. Else if `prep` is
-present, set **MODE = prep**. Else if `investigate` is present, set
+If `status` or `doctor` is present, set **MODE = status**. Else if `config-lint` is
+present, set **MODE = config-lint**. Else if `prep` is present, set **MODE = prep**. Else if `investigate` is present, set
 **MODE = investigate**. Otherwise set **MODE = core** (default).
 
 ### Argument Parsing Order
@@ -58,12 +59,13 @@ present, set **MODE = prep**. Else if `investigate` is present, set
 1. Check for `status` or `doctor` keyword. If found, set `MODE = status`, remove
    from args. Remaining flags become `STATUS_ARGS` (e.g. `--json`,
    `--preview-mode investigate`, `--orchestration goal`).
-2. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
+2. Check for `config-lint` keyword. If found, set `MODE = config-lint`, remove from args.
+3. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
    Remaining non-`high` args are preserved as `PREP_ARGS`.
-3. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
-4. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
-5. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
-   investigate; `STATUS_ARGS` when MODE = status.
+4. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
+5. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
+6. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
+   investigate; `STATUS_ARGS` when MODE = status; `CONFIG_LINT_ARGS` when MODE = config-lint.
 
 Examples:
 ```
@@ -81,12 +83,17 @@ Examples:
 /dev-loop doctor                         → MODE=status (alias)
 /dev-loop status --json                  → MODE=status, STATUS_ARGS includes --json (JSON to stdout)
 /dev-loop status --preview-mode investigate → MODE=status, preview investigate gates/blockers
+/dev-loop config-lint                  → MODE=config-lint, INTENSITY=normal
+/dev-loop config-lint --json           → MODE=config-lint, lint JSON to stdout
 ```
 
 ### Mode Dispatch
 
 After REFRESH (step 0), branch on MODE:
 
+- **`config-lint`** → run **Config lint pipeline** (read-only) below. Exit before WORK
+  or any write cycle steps. Validates `.claude/dev-loop.config.md` against documented
+  template rules via `scripts/dev-loop-config-lint.js`.
 - **`status`** → run the **Status pipeline** (read-only) below. **Exit before WORK,
   SPEC, PLAN, EXECUTE, REVIEW, MERGE, SAVE, RETRO, PUSH, DEPLOY, or any vault/work-item
   writes.** Do not spawn doctor-worker for status unless REFRESH subset explicitly
@@ -183,6 +190,38 @@ status probes are read-only subprocesses.
 
 **S3. EXIT:** Emit `Status: <healthy|degraded|blocked> — next <action> — reports at
 <paths>`. Exit code 1 when `overall.state === blocked` (optional for automation).
+
+### Config lint pipeline (read-only, when MODE = config-lint)
+
+Validates the project config file against template-documented rules before a write
+cycle or `/goal` batch.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ CONFIG-LINT (when MODE = config-lint)                    │
+│  L0. REFRESH (read-only subset)  Load config path only   │
+│  L1. LINT    node scripts/dev-loop-config-lint.js        │
+│  L2. REPORT  .claude/dev-loop/lint/*.{md,json}           │
+│  L3. EXIT    No WORK, vault, git, PR, or release writes  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**L1. LINT:**
+
+```
+node skills/dev-loop/scripts/dev-loop-config-lint.js \
+  --repo <cwd> \
+  --format both
+```
+
+Map user `--json` to `--format json --no-write`. Output schema:
+`dev-loop-config-lint.v1`. Checks include: required `slug` / `release_branch`,
+valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
+`ci_discovery` + `required_checks`, `preflight` lanes/limit,
+`release_policy.auto_bump` + `trigger_globs` + `bump_script` existence,
+`e2e_scripts` paths on disk, legacy `vault:` alias advisory.
+
+**Read-only deny-list:** same as status mode — no implementation or vault mutations.
 
 ### Preflight Prep Pipeline
 
