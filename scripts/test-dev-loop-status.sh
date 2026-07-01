@@ -101,4 +101,15 @@ if [[ "$BEFORE" != "$AFTER" ]]; then
   fail "status run mutated tracked git state"
 fi
 
+HUD_JS="$ROOT/skills/dev-loop/scripts/dev-loop-status-hud.js"
+[[ -f "$HUD_JS" ]] || fail "missing dev-loop-status-hud.js"
+
+OUT_HUD="$(node "$HUD_JS" --repo "$TMP" --project test-none --probe --format json 2>/dev/null)" || fail "hud probe failed"
+echo "$OUT_HUD" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0,"utf8"));
+if (j.schema_version !== "dev-loop-status-hud.v1") throw new Error("hud schema");
+if (j.read_only !== true) throw new Error("hud read_only");
+process.stdout.write("ok-hud\n");
+'
+
 printf 'test-dev-loop-status: all checks passed\n'

@@ -49,6 +49,19 @@ Optional isolation: `dev-loop:status-worker` per `agents/status-worker.md`.
 | `--vault <path>` | Vault override |
 | `--project <slug>` | Slug override |
 
+## HUD / statusline
+
+Read-only one-liner for ccstatusline, tmux, or shell polls (newest `*-status.json` under
+`.claude/dev-loop/status/`, or `--probe` to refresh without writing files):
+
+```bash
+node skills/dev-loop/scripts/dev-loop-status-hud.js --repo .
+node skills/dev-loop/scripts/dev-loop-status-hud.js --repo . --format json
+node skills/dev-loop/scripts/dev-loop-status-hud.js --repo . --probe --project <slug>
+```
+
+Doctor compact HUD (separate): `~/.claude/dev-loop/last-doctor.json` from REFRESH doctor-worker.
+
 ## Related read-only helpers
 
 - **Config lint:** `/dev-loop config-lint` → `dev-loop-config-lint.js`

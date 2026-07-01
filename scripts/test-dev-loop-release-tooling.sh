@@ -307,6 +307,7 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop status mode documented" "$prompt" 'MODE = status'
   assert_contains "dev-loop status pipeline" "$prompt" 'Status pipeline'
   assert_contains "dev-loop status helper script" "$prompt" 'dev-loop-status.js'
+  assert_contains "dev-loop status HUD helper" "$prompt" 'dev-loop-status-hud.js'
   assert_contains "dev-loop status-worker agent doc" "$prompt" 'dev-loop:status-worker'
   [ -f "$ROOT/skills/dev-loop/agents/status-worker.md" ] ||
     fail "skills/dev-loop/agents/status-worker.md missing"
@@ -360,6 +361,7 @@ run_dev_loop_status_companion_contract_checks() {
   assert_contains "sync-plugin-cache syncs status companion" "$sync_script" 'status/SKILL.md'
   assert_contains "dev-loop status companion deny-list" "$(cat "$canonical")" 'Hard deny-list'
   assert_contains "dev-loop references status companion" "$(cat "$skill_root/SKILL.md")" 'status/SKILL.md'
+  assert_contains "status companion HUD section" "$(cat "$canonical")" 'dev-loop-status-hud.js'
 }
 
 run_dev_loop_office_hours_contract_checks() {
