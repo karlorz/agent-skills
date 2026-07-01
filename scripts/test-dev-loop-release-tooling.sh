@@ -315,6 +315,7 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "codex reference documents status-worker" "$codex_ref" 'dev-loop:status-worker'
   assert_contains "dev-loop config-lint mode" "$prompt" 'MODE = config-lint'
   assert_contains "dev-loop config-lint script" "$prompt" 'dev-loop-config-lint.js'
+  assert_contains "dev-loop config migrate script" "$prompt" 'dev-loop-config-migrate.js'
   assert_contains "dev-loop why-skipped script" "$prompt" 'dev-loop-why-skipped.js'
   assert_contains "dev-loop status read-only deny" "$prompt" 'Read-only deny-list'
   assert_contains "dev-loop resolves preflight policy" "$prompt" 'PREFLIGHT_POLICY'
@@ -684,5 +685,6 @@ run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 
 bash "$ROOT/scripts/test-dev-loop-status.sh"
+bash "$ROOT/scripts/test-dev-loop-config-migrate.sh"
 
 printf 'test-dev-loop-release-tooling: ok\n'

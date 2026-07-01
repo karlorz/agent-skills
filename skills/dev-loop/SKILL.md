@@ -5,7 +5,7 @@ description: >
   "start a loop", "investigate", "find work", "prep", "status", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.11: status HUD helper for statuslines.
+  Pass `high` for aggressive mode. v1.26.12: config migration advisor CLI.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -220,6 +220,8 @@ valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 `e2e_scripts` paths on disk, legacy `vault:` alias advisory.
 
 **Why-skipped (read-only):** `node skills/dev-loop/scripts/dev-loop-why-skipped.js --project <slug> --work <work-folder>` — missing automation gates + inventory findings for one item.
+
+**Config migrate (read-only):** `node skills/dev-loop/scripts/dev-loop-config-migrate.js --repo <cwd>` — compares legacy top-level `vault:` to `knowledge_backends.skillwiki.vault`; suggests YAML fragments (`dev-loop-config-migrate.v1`). Reports under `.claude/dev-loop/migrate/` unless `--no-write`.
 
 **Read-only deny-list:** same as status mode — no implementation or vault mutations.
 

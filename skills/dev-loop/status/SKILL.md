@@ -65,6 +65,7 @@ Doctor compact HUD (separate): `~/.claude/dev-loop/last-doctor.json` from REFRES
 ## Related read-only helpers
 
 - **Config lint:** `/dev-loop config-lint` → `dev-loop-config-lint.js`
+- **Config migrate:** `dev-loop-config-migrate.js --repo .` (vault alias advisor)
 - **One work item:** `dev-loop-why-skipped.js --project <slug> --work <folder>`
 
 ## Hard deny-list
