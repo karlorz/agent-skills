@@ -2,10 +2,10 @@
 name: dev-loop
 description: >
   Use for "run a dev cycle", "implement a feature", "make a code change",
-  "start a loop", "investigate", "find work", "prep", "status", or "config-lint".
+  "start a loop", "investigate", "find work", "prep", "status", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.13: read-only operator dashboard CLI.
+  Pass `high` for aggressive mode. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -43,7 +43,8 @@ may *read* `~/.claude/dev-loop/last-doctor.json` but does not spawn doctor-worke
 unless you explicitly run a full REFRESH core cycle.
 
 If `status` or `doctor` is present, set **MODE = status**. Else if `config-lint` is
-present, set **MODE = config-lint**. Else if `prep` is present, set **MODE = prep**. Else if `investigate` is present, set
+present, set **MODE = config-lint**. Else if `dashboard` is present, set **MODE = dashboard**.
+Else if `prep` is present, set **MODE = prep**. Else if `investigate` is present, set
 **MODE = investigate**. Otherwise set **MODE = core** (default).
 
 ### Argument Parsing Order
@@ -52,12 +53,15 @@ present, set **MODE = config-lint**. Else if `prep` is present, set **MODE = pre
    from args. Remaining flags become `STATUS_ARGS` (e.g. `--json`,
    `--preview-mode investigate`, `--orchestration goal`).
 2. Check for `config-lint` keyword. If found, set `MODE = config-lint`, remove from args.
-3. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
+3. Check for `dashboard` keyword. If found, set `MODE = dashboard`, remove from args.
+   Remaining flags become `DASHBOARD_ARGS` (e.g. `--refresh`, `--json`).
+4. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
    Remaining non-`high` args are preserved as `PREP_ARGS`.
-4. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
-5. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
-6. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
-   investigate; `STATUS_ARGS` when MODE = status; `CONFIG_LINT_ARGS` when MODE = config-lint.
+5. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
+6. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
+7. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
+   investigate; `STATUS_ARGS` when MODE = status; `CONFIG_LINT_ARGS` when MODE = config-lint;
+   `DASHBOARD_ARGS` when MODE = dashboard.
 
 Examples:
 ```
@@ -77,12 +81,15 @@ Examples:
 /dev-loop status --preview-mode investigate → MODE=status, preview investigate gates/blockers
 /dev-loop config-lint                  → MODE=config-lint, INTENSITY=normal
 /dev-loop config-lint --json           → MODE=config-lint, lint JSON to stdout
+/dev-loop dashboard                    → MODE=dashboard, aggregate observability slices
+/dev-loop dashboard --refresh          → MODE=dashboard, probe missing artifacts (read-only)
 ```
 
 ### Mode Dispatch
 
 After REFRESH (step 0), branch on MODE:
 
+- **`dashboard`** → run **Dashboard pipeline** (read-only) below. Exit before WORK or writes.
 - **`config-lint`** → run **Config lint pipeline** (read-only) below. Exit before WORK
   or any write cycle steps. Validates `.claude/dev-loop.config.md` against documented
   template rules via `scripts/dev-loop-config-lint.js`.
@@ -226,6 +233,30 @@ valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 **Operator dashboard (read-only):** `node skills/dev-loop/scripts/dev-loop-dashboard.js --repo <cwd>` — aggregates newest status, config-lint, migrate artifacts plus `~/.claude/dev-loop/last-doctor.json` (`dev-loop-dashboard.v1`). Optional `--refresh` runs missing probes with `--no-write`. Reports under `.claude/dev-loop/dashboard/` unless `--no-write`.
 
 **Read-only deny-list:** same as status mode — no implementation or vault mutations.
+
+### Dashboard pipeline (read-only, when MODE = dashboard)
+
+Aggregates newest local observability artifacts (status, lint, migrate, doctor HUD).
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ DASHBOARD (when MODE = dashboard)                        │
+│  D0. REFRESH (read-only subset)  Config path only        │
+│  D1. AGG     node scripts/dev-loop-dashboard.js          │
+│  D2. REPORT  .claude/dev-loop/dashboard/*.{md,json}      │
+│  D3. EXIT    No WORK, vault, git, PR, or release writes  │
+└─────────────────────────────────────────────────────────┘
+```
+
+```
+node skills/dev-loop/scripts/dev-loop-dashboard.js \
+  --repo <cwd> \
+  --format both \
+  --project <slug>
+```
+
+Map `--json` to `--format json --no-write`. Pass `--refresh` when `DASHBOARD_ARGS` includes it.
+Optional `--project` for refresh probes.
 
 ### Preflight Prep Pipeline
 
