@@ -5,7 +5,7 @@ description: >
   "start a loop", "investigate", "find work", "prep", "status", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode.
+  Pass `high` for aggressive mode. v1.26.9: why-skipped CLI helper.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
