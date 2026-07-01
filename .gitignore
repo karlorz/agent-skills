@@ -7,5 +7,6 @@ __pycache__/
 .claude/scheduled_tasks.json
 .claude/dev-loop.config.md
 .claude/dev-loop-debug/
+.claude/dev-loop/status/
 skills/playwright-cli/.playwright-cli/
 logs/

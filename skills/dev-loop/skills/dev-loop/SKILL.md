@@ -2,11 +2,12 @@
 name: dev-loop
 description: >
   Use for "run a dev cycle", "implement a feature", "make a code change",
-  "start a loop", "investigate", "find work", or "prep" to drive automated
-  planning, execution, code review, and knowledge capture. Supports /goal
-  compatibility, Codex CLI/App, preflight prep, investigate mode,
+  "start a loop", "investigate", "find work", "prep", or "status" to drive automated
+  planning, execution, code review, and knowledge capture. Supports read-only
+  `/dev-loop status` (doctor alias), /goal compatibility, Codex CLI/App, preflight prep, investigate mode,
   peer-aware vault sync, multi-backend review, auto-archive, and portable
-  SkillWiki vault resolution. v1.26.6: stable release for hardened preflight
+  SkillWiki vault resolution. v1.26.7: read-only `/dev-loop status` mode with
+  dev-loop-status.v1 JSON and markdown reports. v1.26.6: stable release for hardened preflight
   inventory signals and implemented-evidence false-positive filtering. v1.26.5:
   host-aware office-hours repo resolution, vault-only --all-projects discovery,
   and explicit degraded repo evidence states. v1.26.4: office-hours
@@ -42,18 +43,27 @@ autodiscovers conventions or asks the user to bootstrap one.
 
 ## Mode
 
-Parse arguments for the keywords `prep` and `investigate` (case-insensitive).
-If `prep` is present, set **MODE = prep**. Else if `investigate` is present,
-set **MODE = investigate**. Otherwise set **MODE = core** (default).
+Parse arguments for the keywords `status`, `doctor`, `prep`, and `investigate`
+(case-insensitive). **`doctor` is an alias for `status`** (operator-facing cycle
+preview). It is not the REFRESH **doctor-worker** dependency probe — status mode
+may *read* `~/.claude/dev-loop/last-doctor.json` but does not spawn doctor-worker
+unless you explicitly run a full REFRESH core cycle.
+
+If `status` or `doctor` is present, set **MODE = status**. Else if `prep` is
+present, set **MODE = prep**. Else if `investigate` is present, set
+**MODE = investigate**. Otherwise set **MODE = core** (default).
 
 ### Argument Parsing Order
 
-1. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
+1. Check for `status` or `doctor` keyword. If found, set `MODE = status`, remove
+   from args. Remaining flags become `STATUS_ARGS` (e.g. `--json`,
+   `--preview-mode investigate`, `--orchestration goal`).
+2. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
    Remaining non-`high` args are preserved as `PREP_ARGS`.
-2. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
-3. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
-4. Remaining args → `PREP_ARGS` when MODE = prep; otherwise
-   `INVESTIGATE_TOPIC` (only meaningful when MODE = investigate).
+3. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
+4. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
+5. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
+   investigate; `STATUS_ARGS` when MODE = status.
 
 Examples:
 ```
@@ -66,12 +76,22 @@ Examples:
 /dev-loop investigate high               → MODE=investigate, INTENSITY=high
 /dev-loop investigate "plugin SDK"       → MODE=investigate, INTENSITY=normal, TOPIC="plugin SDK"
 /dev-loop investigate high "plugin SDK"  → MODE=investigate, INTENSITY=high, TOPIC="plugin SDK"
+/dev-loop status                         → MODE=status, INTENSITY=normal
+/dev-loop status high                    → MODE=status, INTENSITY=high
+/dev-loop doctor                         → MODE=status (alias)
+/dev-loop status --json                  → MODE=status, STATUS_ARGS includes --json (JSON to stdout)
+/dev-loop status --preview-mode investigate → MODE=status, preview investigate gates/blockers
 ```
 
 ### Mode Dispatch
 
 After REFRESH (step 0), branch on MODE:
 
+- **`status`** → run the **Status pipeline** (read-only) below. **Exit before WORK,
+  SPEC, PLAN, EXECUTE, REVIEW, MERGE, SAVE, RETRO, PUSH, DEPLOY, or any vault/work-item
+  writes.** Do not spawn doctor-worker for status unless REFRESH subset explicitly
+  includes it; prefer reading `last-doctor.json` and inline dependency probes via
+  `scripts/dev-loop-status.js`.
 - **`core`** → run The Loop (steps 1–14) or IDLE DISCOVERY as documented below.
 - **`prep`** → gate on `query_vault` in BACKEND_CAPS. If absent, refuse:
   "Prep mode requires a vault — run `/setup-dev-loop` to configure one."
@@ -109,6 +129,60 @@ See `investigate/SKILL.md` for full step details. Key properties:
 - Dedup: slug-based + status-aware + archive check
 - Cap: `max_items` (normal) or `max_items * 2` (high). Default 5/10.
 - Vault required (ADR: `investigate-mode-vault-required`)
+
+### Status pipeline (read-only, when MODE = status)
+
+Operator observability: what the **next write cycle** would do, without executing it.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ STATUS (when MODE = status or doctor alias)              │
+│  S0. REFRESH (read-only subset)  Config, caps, vault     │
+│       resolution; optional skill-cache drift check.      │
+│       Do NOT reload-plugins, commit, push, or write      │
+│       vault/work items.                                  │
+│  S1. PROBE   node scripts/dev-loop-status.js             │
+│  S2. REPORT  Markdown + JSON under                       │
+│       .claude/dev-loop/status/ (gitignored session out)  │
+│  S3. EXIT    One-line summary; never enter WORK/EXECUTE   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**S0. REFRESH subset:** Load `./.claude/dev-loop.config.md`, derive `BACKEND_CAPS`,
+`PRD_CAPS`, `ORCHESTRATION_CAPS` (heuristic only — do not require active /goal),
+`PREFLIGHT_POLICY`, `CI_DISCOVERY`, `RELEASE_POLICY` preview fields, and vault path
+(`knowledge_backends.skillwiki.vault` or legacy `vault`). Re-read CLAUDE.md only if
+needed for fallback slug detection. **Skip:** plugin reload, ad-hoc capture mutation,
+doctor-worker spawn (read `~/.claude/dev-loop/last-doctor.json` instead), vault
+auto-commit, `skillwiki doctor` network writes.
+
+**S1. PROBE:** From the skill directory (or repo root), run:
+
+```
+node skills/dev-loop/scripts/dev-loop-status.js \
+  --repo <cwd> \
+  --project <slug> \
+  --format both \
+  --intensity <normal|high> \
+  --preview-mode <core|prep|investigate|status> \
+  --orchestration <attended|goal>
+```
+
+`STATUS_ARGS` may pass `--no-write` (stdout only), `--format json|markdown`, or
+`--vault <path>` override. Map user `--json` to `--format json --no-write` when
+appropriate.
+
+**S2. REPORT:** Helper writes `dev-loop-status.v1` JSON and human Markdown per
+`templates/status-report.md` (sections in PRD). Treat missing vault as **degraded**
+for skillwiki projects, not fatal, unless `preview-mode` is `prep` or `investigate`.
+
+**Read-only deny-list (hard rule):** status mode must not create work items, edit
+spec/plan, append retros, `git commit`, `git push`, `gh pr create`, deploy, run
+`bump_script`, tag, `skillwiki archive`, or SAVE/MERGE vault push. Inventory and
+status probes are read-only subprocesses.
+
+**S3. EXIT:** Emit `Status: <healthy|degraded|blocked> — next <action> — reports at
+<paths>`. Exit code 1 when `overall.state === blocked` (optional for automation).
 
 ### Preflight Prep Pipeline
 

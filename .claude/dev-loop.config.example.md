@@ -73,6 +73,7 @@ cli_entry_override:
 e2e_scripts:
   - "bash scripts/test-dev-loop-release-tooling.sh"
   - "bash scripts/test-dev-loop-preflight-inventory.sh"
+  - "bash scripts/test-dev-loop-status.sh"
 ```
 
 ## CI

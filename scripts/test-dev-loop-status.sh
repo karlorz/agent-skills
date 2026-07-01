@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STATUS_JS="$ROOT/skills/dev-loop/scripts/dev-loop-status.js"
+
+fail() {
+  printf 'test-dev-loop-status: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ -f "$STATUS_JS" ]] || fail "missing dev-loop-status.js"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+mkdir -p "$TMP/.claude"
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+# test
+
+```yaml
+slug: test-none
+release_branch: main
+knowledge_layer: none
+prd_layer: manual
+publish_via: none
+```
+EOF
+
+git -C "$TMP" init -q
+git -C "$TMP" config user.email "test@test"
+git -C "$TMP" config user.name "test"
+echo x > "$TMP/README.md"
+git -C "$TMP" add README.md
+git -C "$TMP" commit -q -m "init"
+
+OUT="$(node "$STATUS_JS" --repo "$TMP" --project test-none --format json --no-write 2>/dev/null)" || fail "status script failed on none layer"
+
+echo "$OUT" | node -e '
+const fs = require("fs");
+const j = JSON.parse(fs.readFileSync(0, "utf8"));
+if (j.schema_version !== "dev-loop-status.v1") throw new Error("bad schema");
+if (j.read_only !== true || j.writes_executed !== false) throw new Error("read_only contract");
+if (j.project.slug !== "test-none") throw new Error("slug");
+process.stdout.write("ok-none-layer\n");
+'
+
+VAULT="$TMP/wiki"
+mkdir -p "$VAULT/projects/agent-skills/work/2026-07-01-ready"
+mkdir -p "$VAULT/projects/agent-skills/work/2026-07-01-skip"
+cat > "$VAULT/SCHEMA.md" <<'EOF'
+# schema
+## Layers
+- `concepts/`
+EOF
+
+cat > "$VAULT/projects/agent-skills/work/2026-07-01-ready/spec.md" <<'EOF'
+---
+title: Ready item
+status: planned
+automation_ready: true
+human_questions_resolved: true
+spec_preflight_approved: true
+plan_preflight_approved: true
+preflight_state: ready
+---
+EOF
+
+cat > "$VAULT/projects/agent-skills/work/2026-07-01-skip/spec.md" <<'EOF'
+---
+title: Skip item
+status: planned
+---
+EOF
+
+cat > "$TMP/.claude/dev-loop.config.md" <<EOF
+\`\`\`yaml
+slug: agent-skills
+release_branch: main
+knowledge_layer: skillwiki
+vault: $VAULT
+\`\`\`
+EOF
+
+OUT2="$(node "$STATUS_JS" --repo "$TMP" --vault "$VAULT" --project agent-skills --format json --no-write --orchestration goal 2>/dev/null)" || fail "vault status failed"
+
+echo "$OUT2" | node -e '
+const fs = require("fs");
+const j = JSON.parse(fs.readFileSync(0, "utf8"));
+const skips = j.work_preview.readiness_skips || [];
+if (!skips.some((s) => s.id.includes("skip"))) throw new Error("expected readiness skip");
+const ready = j.work_preview.claimable_unattended || [];
+if (!ready.some((id) => id.includes("ready"))) throw new Error("expected unattended ready");
+process.stdout.write("ok-readiness\n");
+'
+
+BEFORE="$(git -C "$ROOT" status --porcelain 2>/dev/null | grep -v 'dev-loop/status' || true)"
+node "$STATUS_JS" --repo "$ROOT" --project agent-skills --format json --no-write >/dev/null 2>&1 || true
+AFTER="$(git -C "$ROOT" status --porcelain 2>/dev/null | grep -v 'dev-loop/status' || true)"
+if [[ "$BEFORE" != "$AFTER" ]]; then
+  fail "status run mutated tracked git state"
+fi
+
+printf 'test-dev-loop-status: all checks passed\n'
