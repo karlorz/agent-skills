@@ -5,7 +5,7 @@ description: >
   "start a loop", "investigate", "find work", "prep", "status", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.12: config migration advisor CLI.
+  Pass `high` for aggressive mode. v1.26.13: read-only operator dashboard CLI.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -222,6 +222,8 @@ valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 **Why-skipped (read-only):** `node skills/dev-loop/scripts/dev-loop-why-skipped.js --project <slug> --work <work-folder>` — missing automation gates + inventory findings for one item.
 
 **Config migrate (read-only):** `node skills/dev-loop/scripts/dev-loop-config-migrate.js --repo <cwd>` — compares legacy top-level `vault:` to `knowledge_backends.skillwiki.vault`; suggests YAML fragments (`dev-loop-config-migrate.v1`). Reports under `.claude/dev-loop/migrate/` unless `--no-write`.
+
+**Operator dashboard (read-only):** `node skills/dev-loop/scripts/dev-loop-dashboard.js --repo <cwd>` — aggregates newest status, config-lint, migrate artifacts plus `~/.claude/dev-loop/last-doctor.json` (`dev-loop-dashboard.v1`). Optional `--refresh` runs missing probes with `--no-write`. Reports under `.claude/dev-loop/dashboard/` unless `--no-write`.
 
 **Read-only deny-list:** same as status mode — no implementation or vault mutations.
 
