@@ -261,6 +261,66 @@ function parseReleasePolicyFromConfig(raw) {
   return policy;
 }
 
+function parseBrowserVerificationFromConfig(raw) {
+  if (!raw) return null;
+  const m = raw.match(/browser_verification:\s*\n([\s\S]*?)(?=\n```|\n## |\n[a-z_]+:)/i);
+  if (!m) return null;
+  const block = m[1];
+  const enabled = /enabled:\s*true/.test(block);
+  const triggers = [];
+  let inTrigger = false;
+  for (const line of block.split(/\r?\n/)) {
+    if (/^\s*trigger:\s*$/.test(line)) inTrigger = true;
+    else if (/^\s{2}[a-z_]/.test(line) && !/^\s+-/.test(line)) {
+      inTrigger = false;
+    }
+    const item = line.match(/^\s+-\s+"?([^"]+)"?\s*$/);
+    if (item && inTrigger) triggers.push(item[1]);
+  }
+  return { enabled, trigger: triggers };
+}
+
+function collectChangedFiles(repo) {
+  const unstaged = gitLines(repo, ["diff", "--name-only", "HEAD"]);
+  const staged = gitLines(repo, ["diff", "--cached", "--name-only"]);
+  return [...new Set([...unstaged, ...staged])];
+}
+
+function browserVerifyPreview(repo, configRaw, missingOptional) {
+  const cfg = parseBrowserVerificationFromConfig(configRaw);
+  if (!cfg) {
+    return { would_run: false, reason: "browser_verification absent or disabled in config" };
+  }
+  if (!cfg.enabled) {
+    return { would_run: false, reason: "browser_verification.enabled is false" };
+  }
+  const triggers = cfg.trigger || [];
+  if (triggers.length === 0) {
+    return { would_run: false, reason: "browser_verification.trigger empty — gate skipped" };
+  }
+  const changed = collectChangedFiles(repo);
+  const matched = changed.filter((f) => triggers.some((p) => globMatch(f, p)));
+  if (matched.length === 0) {
+    return {
+      would_run: false,
+      reason: "no changed files match browser_verification.trigger globs",
+    };
+  }
+  const needsPlaywright = missingOptional.some((d) => /playwright/i.test(d));
+  if (needsPlaywright) {
+    return {
+      would_run: false,
+      reason: "trigger matched but playwright-cli driver dep missing (degraded)",
+      matched_files: matched.slice(0, 10),
+    };
+  }
+  return {
+    would_run: true,
+    reason: `would run BROWSER-VERIFY for ${matched.length} matching file(s)`,
+    matched_files: matched.slice(0, 10),
+  };
+}
+
 function releasePreview(repo, flat, configRaw) {
   const publishVia = flat.publish_via || "";
   const policy = parseReleasePolicyFromConfig(configRaw) || null;
@@ -615,6 +675,7 @@ function buildReport(opts) {
   const onRelease = branch === releaseBranch;
   const ciConfigured = flat.ci_configured === true;
   const release = releasePreview(repo, flat, cfg.raw);
+  const browserVerify = browserVerifyPreview(repo, cfg.raw, depsInline.missing_optional);
 
   let overallState = "healthy";
   if (blockers.length > 0) overallState = "blocked";
@@ -688,10 +749,7 @@ function buildReport(opts) {
     pipeline_preview: {
       would_pick: wouldPick,
       steps: pipelineSteps(flat),
-      browser_verify: {
-        would_run: false,
-        reason: "browser_verification block not parsed in status helper (configure in dev-loop.config.md)",
-      },
+      browser_verify: browserVerify,
       ci_gate: {
         would_run: ciConfigured,
         reason: ciConfigured ? `ci_configured: true` : "ci_configured false or absent",
@@ -707,7 +765,13 @@ function buildReport(opts) {
     idle_preview: {
       would_run: nextAction === "idle",
       research_worker: nextAction === "idle",
-      deep_research: false,
+      deep_research: opts.intensity === "high",
+      reason:
+        nextAction === "idle"
+          ? opts.intensity === "high"
+            ? "IDLE DISCOVERY with research-worker; deep-research eligible at high intensity"
+            : "IDLE DISCOVERY with research-worker; deep-research off at normal intensity"
+          : "not idle — core/prep/investigate path",
     },
     blockers,
     recommendations: recommendations.slice(0, 5),
@@ -765,9 +829,20 @@ function renderMarkdown(json) {
   lines.push("## What `/dev-loop` Would Do Next");
   lines.push(`- Would pick: ${json.pipeline_preview.would_pick || "none"}`);
   lines.push(`- Steps: ${json.pipeline_preview.steps.join(" → ") || "(manual)"}`);
-  lines.push(`- CI gate: ${json.pipeline_preview.ci_gate.would_run}`);
-  lines.push(`- Merge: ${json.pipeline_preview.merge.reason}`);
-  lines.push(`- Release: ${json.pipeline_preview.release.would_publish} — ${json.pipeline_preview.release.reason}`);
+  lines.push(
+    `- Browser verification: ${json.pipeline_preview.browser_verify.would_run ? "yes" : "no"} — ${json.pipeline_preview.browser_verify.reason}`,
+  );
+  lines.push(`- CI gate: ${json.pipeline_preview.ci_gate.would_run} — ${json.pipeline_preview.ci_gate.reason}`);
+  lines.push(
+    `- PR vs direct push: ${json.pipeline_preview.merge.would_create_pr ? "would open PR" : "would push direct"} — ${json.pipeline_preview.merge.reason}`,
+  );
+  lines.push(`- Release/publish: ${json.pipeline_preview.release.would_publish} — ${json.pipeline_preview.release.reason}`);
+  lines.push("");
+  lines.push("## Idle Discovery Preview");
+  lines.push(`- Would idle maintenance run: ${json.idle_preview.would_run ? "yes" : "no"}`);
+  lines.push(`- Research-worker scope: ${json.idle_preview.research_worker ? "likely" : "no"}`);
+  lines.push(`- Deep-research: ${json.idle_preview.deep_research ? "eligible (high)" : "off"}`);
+  if (json.idle_preview.reason) lines.push(`- Note: ${json.idle_preview.reason}`);
   lines.push("");
   lines.push("## Blockers");
   if (!json.blockers.length) lines.push("- (none)");
