@@ -348,6 +348,20 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_not_contains "template no stale simplify-worker base backend" "$template" 'backend (`dev-loop:simplify-worker`) always runs'
 }
 
+run_dev_loop_status_companion_contract_checks() {
+  local skill_root canonical mirror sync_script
+  skill_root="$ROOT/skills/dev-loop"
+  canonical="$skill_root/status/SKILL.md"
+  mirror="$skill_root/skills/status/SKILL.md"
+  [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
+  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
+  cmp -s "$canonical" "$mirror" || fail "dev-loop status companion mirror differs from canonical"
+  sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
+  assert_contains "sync-plugin-cache syncs status companion" "$sync_script" 'status/SKILL.md'
+  assert_contains "dev-loop status companion deny-list" "$(cat "$canonical")" 'Hard deny-list'
+  assert_contains "dev-loop references status companion" "$(cat "$skill_root/SKILL.md")" 'status/SKILL.md'
+}
+
 run_dev_loop_office_hours_contract_checks() {
   local skill_root canonical mirror body sync_script
 
@@ -654,6 +668,7 @@ run_sync_script_contract_checks
 run_simplify_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks
 run_dev_loop_prep_prompt_contract_checks
+run_dev_loop_status_companion_contract_checks
 run_dev_loop_office_hours_contract_checks
 run_dev_loop_investigate_queue_contract_checks
 run_codex_dispatch_contract_checks

@@ -5,7 +5,7 @@ description: >
   "start a loop", "investigate", "find work", "prep", "status", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.9: why-skipped CLI helper.
+  Pass `high` for aggressive mode. v1.26.10: status companion skill. v1.26.9: why-skipped CLI.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -185,6 +185,8 @@ status probes are read-only subprocesses.
 
 **S3. EXIT:** Emit `Status: <healthy|degraded|blocked> — next <action> — reports at
 <paths>`. Exit code 1 when `overall.state === blocked` (optional for automation).
+
+Companion detail: `status/SKILL.md` (operator-focused; same read-only contract).
 
 ### Config lint pipeline (read-only, when MODE = config-lint)
 
