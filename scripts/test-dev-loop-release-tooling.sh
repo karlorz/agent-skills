@@ -224,6 +224,23 @@ run_simplify_worker_adapter_contract_checks() {
   assert_contains "simplify-worker file line output" "$worker" 'file:line references'
 }
 
+run_sdd_execute_worker_adapter_contract_checks() {
+  local worker
+  worker="$(cat "$ROOT/skills/dev-loop/agents/sdd-execute-worker.md")"
+
+  assert_contains "sdd-execute-worker reads source skill" "$worker" 'read and follow'
+  assert_contains "sdd-execute-worker source of truth" "$worker" '`superpowers:subagent-driven-development` as the source of truth'
+  assert_contains "sdd-execute-worker optional path override" "$worker" '`execute_skill_path` (optional)'
+  assert_contains "sdd-execute-worker Claude skill path" "$worker" '~/.claude/skills/superpowers/subagent-driven-development/SKILL.md'
+  assert_contains "sdd-execute-worker Codex skill path" "$worker" '~/.agents/skills/superpowers/subagent-driven-development/SKILL.md'
+  assert_contains "sdd-execute-worker Codex plugin cache path" "$worker" '~/.codex/plugins/cache/*/superpowers/*/skills/subagent-driven-development/SKILL.md'
+  assert_contains "sdd-execute-worker fallback trigger" "$worker" 'If no `superpowers:subagent-driven-development` `SKILL.md` can be resolved'
+  assert_contains "sdd-execute-worker sonnet rule" "$worker" '`model: "sonnet"` to every implementer, task-reviewer, and fix-subagent'
+  assert_contains "sdd-execute-worker preserves caller scope" "$worker" 'Preserve caller scope'
+  assert_contains "sdd-execute-worker source unavailable signal" "$worker" 'SOURCE_SKILL_UNAVAILABLE'
+  assert_contains "sdd-execute-worker blocked signal" "$worker" 'BLOCKED: <reason>'
+}
+
 run_dev_loop_dependency_contract_checks() {
   python3 - "$ROOT/skills/dev-loop/dependencies.yaml" <<'PY'
 import sys
@@ -291,6 +308,17 @@ expect_entry(
     },
     ["REVIEW step 6 preferred subagent adapter for simplify:simplify"],
 )
+
+expect_entry(
+    "dev-loop:sdd-execute-worker",
+    {
+        "kind": "agent",
+        "capability": "execute_with_subagent_dispatch_adapter",
+        "fallback": "inline Skill('superpowers:subagent-driven-development')",
+        "self": True,
+    },
+    ["EXECUTE step 5 preferred subagent adapter for superpowers:subagent-driven-development"],
+)
 PY
 }
 
@@ -347,6 +375,8 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "codex reference documents multi-agent gate" "$codex_ref" 'multi_agent = true'
   assert_contains "codex reference maps spawn_agent task name" "$codex_ref" '`Agent(subagent_type=X, model=…)` (spawn worker) | `spawn_agent(task_name=X, prompt=...)`'
   assert_contains "codex reference documents simplify-worker adapter" "$codex_ref" '`dev-loop:simplify-worker` | REVIEW step 6 | preferred isolated adapter for `simplify:simplify`'
+  assert_contains "codex reference documents sdd-execute-worker adapter" "$codex_ref" '`dev-loop:sdd-execute-worker` | EXECUTE step 5 | preferred isolated adapter for `superpowers:subagent-driven-development`'
+  assert_contains "dev-loop prompt documents sdd-execute-worker adapter" "$prompt" 'superpowers:subagent-driven-development (prefer `dev-loop:sdd-execute-worker` when worker dispatch is available)'
   assert_not_contains "dev-loop no stale simplify-worker base backend" "$prompt" 'Always include `dev-loop:simplify-worker` (base backend)'
   assert_not_contains "setup no stale simplify-worker base backend" "$setup" 'Always includes `dev-loop:simplify-worker`'
   assert_not_contains "template no stale simplify-worker base backend" "$template" 'backend (`dev-loop:simplify-worker`) always runs'
@@ -671,6 +701,7 @@ run_bump_version_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_simplify_worker_adapter_contract_checks
+run_sdd_execute_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks
 run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_status_companion_contract_checks

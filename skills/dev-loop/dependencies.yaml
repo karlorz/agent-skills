@@ -36,6 +36,13 @@ optional:
     used_by: ["EXECUTE step 5"]
     fallback: "inline execute, no subagent dispatch"
 
+  - kind: agent
+    ref: dev-loop:sdd-execute-worker
+    capability: execute_with_subagent_dispatch_adapter
+    used_by: ["EXECUTE step 5 preferred subagent adapter for superpowers:subagent-driven-development"]
+    fallback: "inline Skill('superpowers:subagent-driven-development')"
+    self: true
+
   - kind: skill
     ref: superpowers:test-driven-development
     capability: tdd_discipline

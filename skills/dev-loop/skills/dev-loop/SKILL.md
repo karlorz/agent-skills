@@ -5,7 +5,7 @@ description: >
   "start a loop", "investigate", "find work", "prep", "status", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -532,7 +532,7 @@ See config template for `knowledge_backends` registry details.
 | `brainstorm` | superpowers:brainstorming | — | — | — | — |
 | `spec` | (from brainstorm) | codestable:generate | inline | — | — |
 | `plan` | superpowers:writing-plans | — | superpowers:writing-plans | — | — |
-| `execute` | superpowers:subagent-driven-development | codestable:generate | superpowers:test-driven-development | inline | — |
+| `execute` | superpowers:subagent-driven-development (prefer `dev-loop:sdd-execute-worker` when worker dispatch is available) | codestable:generate | superpowers:test-driven-development | inline | — |
 | `review` | simplify:simplify (prefer dev-loop:simplify-worker) | codestable:validate | superpowers:requesting-code-review + simplify:simplify | manual | — |
 | `subagent_dispatch` | yes | no | no | no | no |
 
@@ -703,7 +703,8 @@ prd_disciplines:
 │  2b. GRILL    <Interview backend> → sharpen requirements    │
 │  3. SPEC      <PRD skill> → spec.md at vault path           │
 │  4. PLAN      <PRD skill> → plan.md at vault path           │
-│  5. EXECUTE   <PRD execution skill> → implement             │
+│  5. EXECUTE   sdd-execute-worker or <PRD execution skill>   │
+│               → implement                                   │
 │  6. REVIEW    simplify-worker or Skill(simplify:simplify)  │
 │               → fix findings                              │
 │  6b. MERGE    PR from feature branch → main (if branch ≠   │
@@ -1334,14 +1335,19 @@ fact-checked. Output specs must include a `## Sources Used` section if
 **If `execute` step IS in the active pipeline template:**
 
 - **`execute` in PRD_CAPS:** Invoke the registered execute skill with
-  `plan.md` (or `spec.md` if no plan). If `subagent_dispatch` in
-  PRD_CAPS, you MUST dispatch every subagent with `model: "sonnet"`.
-  The superpowers:subagent-driven-development skill templates show
-  Agent calls without a `model` field — ADD `model: "sonnet"` to
-  every Agent invocation (implementer, spec reviewer, code quality
-  reviewer). None of these roles require the parent model's capability:
-  implementation is mechanical coding from a plan, spec review is
-  checklist verification, and code quality review is pattern matching.
+  `plan.md` (or `spec.md` if no plan). When the backend is
+  `superpowers:subagent-driven-development`, prefer
+  `dev-loop:sdd-execute-worker` for subagent isolation when worker
+  dispatch is available; otherwise fall back to inline
+  `Skill("superpowers:subagent-driven-development")`. If
+  `subagent_dispatch` in PRD_CAPS, you MUST dispatch every execution
+  subagent with `model: "sonnet"`. The
+  superpowers:subagent-driven-development skill templates show Agent
+  calls without a `model` field — ADD `model: "sonnet"` to every Agent
+  invocation (implementer, task reviewer, fix subagent).
+  None of these roles require the parent model's capability:
+  implementation is mechanical coding from a plan, task review is
+  checklist verification and pattern matching, and fixing is isolated correction.
   Sonnet handles all three at ~5x lower cost with no quality loss.
   This is a hard rule: zero execution subagents go out without
   `model: "sonnet"`. If `subagent_dispatch` is not in PRD_CAPS,
@@ -2203,11 +2209,14 @@ stale local state:
     plugins, block the cycle. Running stale skill logic silently is
     worse than stopping and asking the user to `/reload-plugins`.
 20. **Execution subagents always run on sonnet.** When `subagent_dispatch`
-    in PRD_CAPS, every subagent spawned during EXECUTE (implementer,
-    spec reviewer, code quality reviewer) must include
-    `model: "sonnet"`. The superpowers:subagent-driven-development
-    templates omit `model` — the controller MUST add it. None of these
-    roles benefit from the parent model. If `CLAUDE_CODE_SUBAGENT_MODEL`
+    in PRD_CAPS, every subagent spawned during EXECUTE must include
+    `model: "sonnet"`. For
+    `superpowers:subagent-driven-development`, prefer
+    `dev-loop:sdd-execute-worker` when available. This applies to the
+    implementer, task reviewer, and fix subagent. The
+    superpowers:subagent-driven-development templates omit `model` —
+    the controller MUST add it. None of these roles benefit from the
+    parent model. If `CLAUDE_CODE_SUBAGENT_MODEL`
     is set to a non-empty value, it globally overrides per-agent model
     parameters — it must remain empty (`""`) for this rule to work.
 21. **MERGE commits code, then creates PRs or pushes directly.** The
@@ -2438,8 +2447,9 @@ dispatch routing contract resolved at REFRESH: the agent probes the visible
 dispatch tools and records `DISPATCH_MODE` so later worker call sites use the
 matching syntax.
 
-1. **Subagent dispatch.** The worker spawns (doctor-, research-, simplify-,
-   codex-review-, ci-health-worker; browser-worker) use the Claude `Agent` tool.
+1. **Subagent dispatch.** The worker spawns (status-, doctor-, research-,
+   sdd-execute-, simplify-, codex-review-, ci-health-worker; browser-worker)
+   use the Claude `Agent` tool.
    When `DISPATCH_MODE = codex`, the agent translates each `Agent(...)` call to
    `spawn_agent(task_name=..., prompt=...)` / `wait_agent` / `close_agent`. Requires
    `[features] multi_agent = true` in `~/.codex/config.toml`. Without
