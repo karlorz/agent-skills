@@ -859,7 +859,7 @@ Controls whether the dev-loop MERGE step enforces CI checks before
 auto-merging feature-branch PRs, and how CI health is monitored during
 IDLE DISCOVERY.
 
-Set `ci_configured: true` after running `/setup-dev-loop` Section F,
+Set `ci_configured: true` after running `/dev-loop setup` Section F,
 which generates GitHub Actions workflows and optionally configures
 branch protection.
 
@@ -868,14 +868,14 @@ branch protection.
 **Default: `runtime`** — dev-loop queries the GitHub API at merge time
 to discover required status checks from branch protection. No config
 duplication; GitHub is the source of truth. This is the recommended
-mode for repos where `/setup-dev-loop` has configured branch protection.
+mode for repos where `/dev-loop setup` has configured branch protection.
 
 **Optional override: `explicit`** — list required check names in config.
 Use this when branch protection is not configured (or managed outside
 dev-loop) and you need dev-loop to know which checks matter.
 
 ```yaml
-ci_configured: false              # set to true after /setup-dev-loop Section F
+ci_configured: false              # set to true after /dev-loop setup Section F
 ci_discovery: runtime             # runtime | explicit (default: runtime)
 
 # Only used when ci_discovery: explicit

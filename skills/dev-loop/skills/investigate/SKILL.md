@@ -1,5 +1,6 @@
 ---
 name: investigate
+user-invocable: false
 description: >
   Companion prompt for dev-loop investigate mode. Proactively scans project
   health (code, vault, transcripts, deep-research) and queues structured,
@@ -17,7 +18,7 @@ the vault. Findings stay non-executable until a human promotes them into
 ## Prerequisites
 
 **Vault required.** If `query_vault` not in BACKEND_CAPS, refuse:
-"Investigate mode requires a vault — run `/setup-dev-loop` to configure one."
+"Investigate mode requires a vault — run `/dev-loop setup` to configure one."
 
 This gate is an architectural decision (ADR: `projects/{slug}/architecture/
 investigate-mode-vault-required.md`). See the ADR for trade-off rationale

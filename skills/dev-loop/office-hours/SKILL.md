@@ -1,5 +1,6 @@
 ---
 name: office-hours
+user-invocable: false
 description: >
   Use when running an attended dev-loop office-hours checkpoint before prep,
   promotion, or /goal to choose one current-project or cross-project topic and
@@ -69,12 +70,12 @@ print candidate context, but stop before any prompt or write.
 ## Inputs
 
 ```text
-/dev-loop:office-hours
-/dev-loop:office-hours --all
-/dev-loop:office-hours --all-projects
-/dev-loop:office-hours <topic>
-/dev-loop:office-hours <work-item-slug>
-/dev-loop:office-hours raw/transcripts/<file>.md
+/dev-loop office-hours
+/dev-loop office-hours --all
+/dev-loop office-hours --all-projects
+/dev-loop office-hours <topic>
+/dev-loop office-hours <work-item-slug>
+/dev-loop office-hours raw/transcripts/<file>.md
 ```
 
 `--all` (or a "show all" request) expands the candidate list from the default

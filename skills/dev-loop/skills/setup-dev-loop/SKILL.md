@@ -1,5 +1,6 @@
 ---
 name: setup-dev-loop
+user-invocable: false
 description: Scaffold per-repo dev-loop config (PRD layer, knowledge layer, release config, vault path) and build the project glossary with grill-with-docs. Run once per repo before using dev-loop.
 ---
 
@@ -429,7 +430,7 @@ own self-check (not a file-existence guess).
 4. If `ready === false` AND `auth.loggedIn === false`, surface the
    auth-specific hint instead of the generic install hint: "Codex
    installed but not authenticated — run `codex login` then re-run
-   `/setup-dev-loop`."
+   `/dev-loop setup`."
 5. Any other failure (JSON parse error, missing fields, non-zero exit) →
    treat as not-installed and skip Section M.
 

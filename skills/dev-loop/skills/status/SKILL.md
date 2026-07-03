@@ -1,5 +1,6 @@
 ---
 name: status
+user-invocable: false
 description: >
   Companion prompt for dev-loop read-only status mode. Explains what the next
   cycle would do without vault/git/PR/release writes. Invoked via /dev-loop

@@ -63,6 +63,38 @@ read_frontmatter_name() {
   ' "$1"
 }
 
+read_frontmatter_field() {
+  local file="$1" field="$2"
+  python3 - "$file" "$field" <<'PY'
+import sys
+
+try:
+    import yaml
+except Exception as exc:
+    raise SystemExit(f"{sys.argv[1]}: could not import yaml parser: {exc}")
+
+path, field = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    lines = fh.read().splitlines()
+
+if not lines or lines[0].strip() != "---":
+    raise SystemExit(f"{path}: missing YAML frontmatter")
+
+end_idx = next((idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == "---"), None)
+if end_idx is None:
+    raise SystemExit(f"{path}: missing YAML frontmatter terminator")
+
+data = yaml.safe_load("\n".join(lines[1:end_idx])) or {}
+value = data.get(field)
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif value is None:
+    print("")
+else:
+    print(str(value))
+PY
+}
+
 validate_skill_frontmatter() {
   local file="$1"
   python3 - "$file" <<'PY'
@@ -91,7 +123,16 @@ try:
 except Exception as exc:
     raise SystemExit(f"{path}: invalid YAML: {exc}")
 
-allowed = {"allowed-tools", "compatibility", "description", "license", "metadata", "name"}
+allowed = {
+    "allowed-tools",
+    "argument-hint",
+    "compatibility",
+    "description",
+    "license",
+    "metadata",
+    "name",
+    "user-invocable",
+}
 unexpected = sorted(set(data) - allowed)
 if unexpected:
     raise SystemExit(f"{path}: unsupported frontmatter fields: {', '.join(unexpected)}")
@@ -397,6 +438,62 @@ run_dev_loop_status_companion_contract_checks() {
   assert_contains "status companion HUD section" "$(cat "$canonical")" 'dev-loop-status-hud.js'
 }
 
+run_dev_loop_command_surface_contract_checks() {
+  local skill_root umbrella umbrella_mirror hint helper helper_mirror body helper_body
+  local helper_name helper_field helper_hint
+
+  skill_root="$ROOT/skills/dev-loop"
+  umbrella="$skill_root/SKILL.md"
+  umbrella_mirror="$skill_root/skills/dev-loop/SKILL.md"
+
+  cmp -s "$umbrella" "$umbrella_mirror" ||
+    fail "dev-loop mirrored SKILL.md differs from canonical"
+
+  hint="$(read_frontmatter_field "$umbrella" "argument-hint")"
+  [ -n "$hint" ] || fail "dev-loop umbrella SKILL.md missing argument-hint"
+  assert_contains "dev-loop argument hint includes status" "$hint" "status"
+  assert_contains "dev-loop argument hint includes doctor" "$hint" "doctor"
+  assert_contains "dev-loop argument hint includes investigate" "$hint" "investigate"
+  assert_contains "dev-loop argument hint includes office-hours" "$hint" "office-hours"
+  assert_contains "dev-loop argument hint includes setup" "$hint" "setup"
+  assert_contains "dev-loop argument hint includes setup-dev-loop" "$hint" "setup-dev-loop"
+  assert_contains "dev-loop argument hint includes config-lint" "$hint" "config-lint"
+  assert_contains "dev-loop argument hint includes dashboard" "$hint" "dashboard"
+
+  body="$(cat "$umbrella")"
+  assert_contains "dev-loop parses office-hours mode" "$body" "MODE = office-hours"
+  assert_contains "dev-loop parses setup mode" "$body" "MODE = setup"
+  assert_contains "dev-loop setup-dev-loop alias" "$body" "setup-dev-loop"
+  assert_contains "dev-loop standard office-hours example" "$body" "/dev-loop office-hours"
+  assert_contains "dev-loop standard setup example" "$body" "/dev-loop setup"
+  assert_contains "dev-loop standard Codex entrypoint" "$body" '$dev-loop'
+  assert_not_contains "dev-loop does not expose research mode" "$body" "/dev-loop research"
+  assert_not_contains "dev-loop parent no status colon command" "$body" "/dev-loop:status"
+  assert_not_contains "dev-loop parent no investigate colon command" "$body" "/dev-loop:investigate"
+  assert_not_contains "dev-loop parent no office-hours colon command" "$body" "/dev-loop:office-hours"
+  assert_not_contains "dev-loop parent no research colon command" "$body" "/dev-loop:research"
+  assert_not_contains "dev-loop parent no setup colon command" "$body" "/dev-loop:setup-dev-loop"
+
+  for helper_name in status investigate office-hours research setup-dev-loop; do
+    helper="$skill_root/$helper_name/SKILL.md"
+    helper_mirror="$skill_root/skills/$helper_name/SKILL.md"
+    [ -f "$helper" ] || fail "${helper#$ROOT/} missing"
+    [ -f "$helper_mirror" ] || fail "${helper_mirror#$ROOT/} missing"
+    cmp -s "$helper" "$helper_mirror" ||
+      fail "${helper_mirror#$ROOT/} differs from ${helper#$ROOT/}"
+
+    helper_field="$(read_frontmatter_field "$helper" "user-invocable")"
+    assert_eq "$helper_name user-invocable" "$helper_field" "false"
+
+    helper_hint="$(read_frontmatter_field "$helper" "argument-hint")"
+    assert_eq "$helper_name argument-hint" "$helper_hint" ""
+
+    helper_body="$(cat "$helper")"
+    assert_not_contains "$helper_name no Claude colon command docs" "$helper_body" "/dev-loop:$helper_name"
+    assert_not_contains "$helper_name no Codex colon command docs" "$helper_body" '$dev-loop:'"$helper_name"
+  done
+}
+
 run_dev_loop_office_hours_contract_checks() {
   local skill_root canonical mirror body sync_script
 
@@ -412,7 +509,8 @@ run_dev_loop_office_hours_contract_checks() {
   sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
 
   assert_contains "office-hours uses inventory helper" "$body" 'preflight-inventory.js'
-  assert_contains "office-hours documents all-projects input" "$body" '/dev-loop:office-hours --all-projects'
+  assert_contains "office-hours documents all-projects input" "$body" '/dev-loop office-hours --all-projects'
+  assert_not_contains "office-hours no colon command example" "$body" '/dev-loop:office-hours'
   assert_contains "office-hours documents all-projects helper flag" "$body" '  --all-projects --vault <vault> --limit <n>'
   assert_contains "office-hours documents project repo metadata" "$body" 'project-repos.yaml'
   assert_contains "office-hours documents vault-only cross-project discovery" "$body" 'Cross-project discovery is vault-only'
@@ -705,6 +803,7 @@ run_sdd_execute_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks
 run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_status_companion_contract_checks
+run_dev_loop_command_surface_contract_checks
 run_dev_loop_office_hours_contract_checks
 run_dev_loop_investigate_queue_contract_checks
 run_codex_dispatch_contract_checks

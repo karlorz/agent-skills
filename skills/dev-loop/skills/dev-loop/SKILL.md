@@ -1,11 +1,13 @@
 ---
 name: dev-loop
+argument-hint: "[status|doctor|prep|investigate|office-hours|setup|setup-dev-loop|config-lint|dashboard] [high] [flags/topic]"
 description: >
   Use for "run a dev cycle", "implement a feature", "make a code change",
-  "start a loop", "investigate", "find work", "prep", "status", "dashboard", or "config-lint".
+  "start a loop", "investigate", "find work", "prep", "status", "office-hours",
+  "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -16,7 +18,7 @@ through the loop, exit. The PRD skill drives the work; skillwiki
 captures the knowledge in two tiers — project journal and global
 playbook. A pluggable interview phase (native 3-question default,
 optional grill-with-docs upgrade) sharpens requirements before SPEC.
-`/setup-dev-loop` provides interactive project bootstrap.
+`/dev-loop setup` and `/dev-loop setup-dev-loop` provide interactive project bootstrap.
 
 This skill is **project-agnostic**. All project specifics come from a
 config file in the active repo. If no config exists, the skill
@@ -36,16 +38,20 @@ autodiscovers conventions or asks the user to bootstrap one.
 
 ## Mode
 
-Parse arguments for the keywords `status`, `doctor`, `prep`, and `investigate`
+Parse arguments for the keywords `status`, `doctor`, `prep`, `investigate`,
+`office-hours`, `setup`, `setup-dev-loop`, `config-lint`, and `dashboard`
 (case-insensitive). **`doctor` is an alias for `status`** (operator-facing cycle
-preview). It is not the REFRESH **doctor-worker** dependency probe — status mode
-may *read* `~/.claude/dev-loop/last-doctor.json` but does not spawn doctor-worker
-unless you explicitly run a full REFRESH core cycle.
+preview). **`setup` is an alias for `setup-dev-loop`** (interactive project
+bootstrap). `doctor` is not the REFRESH **doctor-worker** dependency probe —
+status mode may *read* `~/.claude/dev-loop/last-doctor.json` but does not spawn
+doctor-worker unless you explicitly run a full REFRESH core cycle.
 
-If `status` or `doctor` is present, set **MODE = status**. Else if `config-lint` is
-present, set **MODE = config-lint**. Else if `dashboard` is present, set **MODE = dashboard**.
-Else if `prep` is present, set **MODE = prep**. Else if `investigate` is present, set
-**MODE = investigate**. Otherwise set **MODE = core** (default).
+If `status` or `doctor` is present, set **MODE = status**. Else if `config-lint`
+is present, set **MODE = config-lint**. Else if `dashboard` is present, set
+**MODE = dashboard**. Else if `setup` or `setup-dev-loop` is present, set
+**MODE = setup**. Else if `office-hours` is present, set **MODE = office-hours**.
+Else if `prep` is present, set **MODE = prep**. Else if `investigate` is present,
+set **MODE = investigate**. Otherwise set **MODE = core** (default).
 
 ### Argument Parsing Order
 
@@ -55,13 +61,18 @@ Else if `prep` is present, set **MODE = prep**. Else if `investigate` is present
 2. Check for `config-lint` keyword. If found, set `MODE = config-lint`, remove from args.
 3. Check for `dashboard` keyword. If found, set `MODE = dashboard`, remove from args.
    Remaining flags become `DASHBOARD_ARGS` (e.g. `--refresh`, `--json`).
-4. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
+4. Check for `setup` or `setup-dev-loop` keyword. If found, set `MODE = setup`,
+   remove from args. Remaining args become `SETUP_ARGS`.
+5. Check for `office-hours` keyword. If found, set `MODE = office-hours`,
+   remove from args. Remaining args become `OFFICE_HOURS_ARGS`.
+6. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
    Remaining non-`high` args are preserved as `PREP_ARGS`.
-5. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
-6. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
-7. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
+7. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
+8. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
+9. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
    investigate; `STATUS_ARGS` when MODE = status; `CONFIG_LINT_ARGS` when MODE = config-lint;
-   `DASHBOARD_ARGS` when MODE = dashboard.
+   `DASHBOARD_ARGS` when MODE = dashboard; `SETUP_ARGS` when MODE = setup;
+   `OFFICE_HOURS_ARGS` when MODE = office-hours.
 
 Examples:
 ```
@@ -79,10 +90,18 @@ Examples:
 /dev-loop doctor                         → MODE=status (alias)
 /dev-loop status --json                  → MODE=status, STATUS_ARGS includes --json (JSON to stdout)
 /dev-loop status --preview-mode investigate → MODE=status, preview investigate gates/blockers
+/dev-loop office-hours                    → MODE=office-hours
+/dev-loop office-hours --all-projects     → MODE=office-hours, OFFICE_HOURS_ARGS="--all-projects"
+/dev-loop office-hours "release triage"   → MODE=office-hours, OFFICE_HOURS_ARGS includes topic
+/dev-loop setup                           → MODE=setup
+/dev-loop setup-dev-loop                  → MODE=setup
 /dev-loop config-lint                  → MODE=config-lint, INTENSITY=normal
 /dev-loop config-lint --json           → MODE=config-lint, lint JSON to stdout
 /dev-loop dashboard                    → MODE=dashboard, aggregate observability slices
 /dev-loop dashboard --refresh          → MODE=dashboard, probe missing artifacts (read-only)
+$dev-loop status                          → Codex preferred standard entrypoint
+$dev-loop office-hours                    → Codex preferred standard entrypoint
+$dev-loop setup                           → Codex preferred standard entrypoint
 ```
 
 ### Mode Dispatch
@@ -99,12 +118,17 @@ After REFRESH (step 0), branch on MODE:
   includes it; prefer reading `last-doctor.json` and inline dependency probes via
   `scripts/dev-loop-status.js`.
 - **`core`** → run The Loop (steps 1–14) or IDLE DISCOVERY as documented below.
+- **`setup`** → run the setup pipeline from `setup-dev-loop/SKILL.md`.
+  Use this mode for both `/dev-loop setup` and `/dev-loop setup-dev-loop`.
+- **`office-hours`** → run the attended office-hours pipeline from
+  `office-hours/SKILL.md`. It writes the requirements report described there
+  and does not set preflight readiness.
 - **`prep`** → gate on `query_vault` in BACKEND_CAPS. If absent, refuse:
-  "Prep mode requires a vault — run `/setup-dev-loop` to configure one."
+  "Prep mode requires a vault — run `/dev-loop setup` to configure one."
   If present and `PREFLIGHT_POLICY.enabled != false`, run the Preflight Prep
   Pipeline below. If disabled, refuse with the config path to update.
 - **`investigate`** → gate on `query_vault` in BACKEND_CAPS. If absent,
-  refuse: "Investigate mode requires a vault — run `/setup-dev-loop` to
+  refuse: "Investigate mode requires a vault — run `/dev-loop setup` to
   configure one." If present, run the investigate pipeline from
   `investigate/SKILL.md`. The investigate companion shares REFRESH state
   (BACKEND_CAPS, VAULT_TYPES, DEP_DRIFT, CRITICAL_PATHS, config) — do not
@@ -1506,7 +1530,7 @@ directly on the default branch. Report: "Changes committed and pushed to
          Fix CI issues before merging." Surface as P2 finding.
    - If `ci_configured: false` or absent:
      - Do NOT enable auto-merge — without CI, auto-merge can bypass review.
-     - Warn: "No CI checks configured — PR #N created without auto-merge. Run /setup-dev-loop and set ci_configured: true to enable CI-gated auto-merge."
+     - Warn: "No CI checks configured — PR #N created without auto-merge. Run /dev-loop setup and set ci_configured: true to enable CI-gated auto-merge."
      - The user must manually review and merge the PR.
 4. **Error handling:**
    - If `gh` is not installed or not authenticated, report: "gh CLI not available — push branch manually and create PR via GitHub."

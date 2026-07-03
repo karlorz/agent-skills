@@ -1,5 +1,6 @@
 ---
 name: research
+user-invocable: false
 description: >
   Pluggable research agent for dev-loop. Spawn with model: sonnet.
   Scans code health (CLI, tests, skills, specs) and optional vault health
