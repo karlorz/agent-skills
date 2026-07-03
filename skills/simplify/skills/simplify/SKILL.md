@@ -1,150 +1,122 @@
 ---
 name: simplify
-description: Review and simplify recently changed code for reuse, clarity, and efficiency while preserving behavior. Use when the user asks to simplify, refine, polish, clean up, or make code clearer, or after finishing a logical chunk of implementation that should be tightened before commit.
+description: Use when reviewing recent code changes for simplification before commit, when the user asks to simplify, refine, polish, or clean up code, or when dev-loop requires its simplify review gate.
 ---
 
 # Simplify
 
-Use this skill to improve recently changed code without changing what it does.
+Use this skill to improve changed code without changing intended behavior. It
+matches the Claude Code `/simplify` v2.1.199 shape:
+
+`/simplify -> 4 cleanup agents in parallel -> apply the fixes`
+
+This is not a correctness-bug hunt. Review for reuse, simplification,
+efficiency, and altitude issues; leave bug-finding to code review or debugging
+workflows.
 
 ## Usage
 
 ```
-/simplify                              # Review current uncommitted changes
-/simplify HEAD~3                       # Review changes from 3 commits ago to HEAD
-/simplify main                         # Review changes from main branch to HEAD
-/simplify abc123                       # Review changes from commit abc123 to HEAD
-/simplify focus on error handling      # Focus review on specific concerns
-/simplify focus on memory efficiency   # Focus review on memory efficiency
+/simplify                         # Review the current diff
+/simplify HEAD~3                  # Review changes from HEAD~3 to HEAD
+/simplify main                    # Review changes against main
+/simplify path/to/file.ts         # Review an explicit file target
+/simplify 123                     # Review an explicit PR target when supported
+/simplify focus on error handling # Keep the same flow, with added focus
 ```
 
-## Modes
+## Phase 0 - Gather the diff
 
-```
-/simplify --quick           # Single-pass quick review (commit prep)
-/simplify --staged-only     # Review only staged changes
-/simplify --json            # Output findings as JSON for tooling
-/simplify --report-only     # Report findings without making changes
-```
+Treat the gathered diff as the review scope.
 
-### Mode Descriptions
+1. If the user passed a PR number, branch name, or file path, review that
+   target instead of guessing a default range.
+2. Otherwise, prefer `git diff @{upstream}...HEAD`.
+3. If there is no upstream, fall back to `git diff main...HEAD`, then
+   `git diff HEAD~1`.
+4. If there are uncommitted changes, or the selected range diff is empty, also
+   run `git diff HEAD` and include the working-tree changes. This review often
+   runs before the next commit.
+5. If all diff commands are empty, review only files the user explicitly named
+   or files changed earlier in the current session. If there is still no scope,
+   say that there is no changed code to simplify.
 
-| Mode | Behavior |
-|------|----------|
-| `--quick` | Single-pass review focusing on high-impact issues only. Skips parallel agents. Best for quick commit prep. |
-| `--staged-only` | Only review files in git staging area (`git diff --cached`). Ignores unstaged changes. |
-| `--json` | Output findings as JSON array for CI/tooling integration. Format: `[{file, line, category, issue, suggestion}]` |
-| `--report-only` | Generate report of findings without auto-fixing. Useful for CI comments. |
+Keep the scope narrow. Do not widen into unrelated files unless the user asks
+for a broader cleanup.
 
-### Combined Usage
+## Phase 1 - Review
 
-```
-/simplify --quick --staged-only    # Quick review of staged files only
-/simplify --json --report-only     # CI-friendly JSON report
-```
+Launch 4 independent review agents in one message when the platform supports
+parallel agents. Pass every agent the same diff and exactly one review angle.
+If parallel delegation is unavailable, perform the same four reviews yourself
+while keeping the findings separated by angle.
 
-## Workflow
+Each finding must include `file`, `line`, a one-line `summary`, and the
+concrete cost: what is duplicated, wasted, or harder to maintain.
 
-### Mode Detection
+### Reuse
 
-First, parse the arguments to detect active modes:
+Flag new code that re-implements something the codebase already has. Search
+shared or utility modules and files adjacent to the change, then name the
+existing helper, type, component, constant, or pattern to use instead.
 
-- `--quick`: Set `QUICK_MODE=true`
-- `--staged-only`: Set `STAGED_ONLY=true`
-- `--json`: Set `JSON_OUTPUT=true`
-- `--report-only`: Set `REPORT_ONLY=true`
+### Simplification
 
-Any remaining argument is treated as `<base-ref>`.
+Flag unnecessary complexity added by the diff: redundant or derivable state,
+copy-paste with small variations, deep nesting, dead code left behind, and
+control flow that is harder than the behavior requires. Name the simpler form
+that does the same job.
 
-### 1. Scope the review
+### Efficiency
 
-- If `STAGED_ONLY=true`, use `git diff --cached` to review only staged changes.
-- If a `<base-ref>` argument is provided, use `git diff <base-ref>..HEAD` to get all changes from that reference to HEAD.
-- Otherwise, prefer the current diff first.
-- Use `git diff` for unstaged changes, or `git diff HEAD` when staged changes exist and you want the full working-tree delta.
-- If there are no git changes, review files the user named or files you edited earlier in the session.
-- Keep the scope narrow unless the user asks for a broader refactor.
+Flag wasted work introduced by the diff: redundant computation, repeated I/O,
+independent operations run sequentially, and blocking work added to startup or
+hot paths. Also flag long-lived objects built from closures or captured
+environments because they keep the enclosing scope alive for the object's
+lifetime; prefer a class, struct, or plain data object that copies only the
+fields it needs. Name the cheaper alternative.
 
-### 2. Run review passes
+### Altitude
 
-**Quick Mode (`QUICK_MODE=true`):**
-Do a single-pass review yourself, combining reuse, quality, and efficiency checks. Focus only on high-impact issues. Skip spawning parallel sub-agents.
+Check that each change is implemented at the right depth rather than as a
+fragile bandaid. Special cases layered on shared infrastructure usually mean
+the fix is not deep enough; prefer generalizing the underlying mechanism over
+adding one-off branches.
 
-**Standard Mode:**
-Use parallel sub-agents when available. Give each pass the full diff or exact changed files plus enough surrounding context to make concrete recommendations. If parallel delegation is unavailable, do the same passes yourself sequentially.
+## Phase 2 - Apply the fixes
 
-#### Pass A: Reuse
+Wait for all four reviews to finish. Then dedup findings that point at the same line
+or mechanism, then fix each remaining high-confidence issue directly.
 
-- Search for existing helpers, utilities, shared components, common types, and adjacent patterns before keeping new code.
-- Replace duplicated or near-duplicate logic with an existing abstraction when that reduces complexity.
-- Prefer existing constants, enums, shared helpers, and common validation/parsing code over new ad hoc logic.
+Skip a finding when the fix would change intended behavior, require changes
+well outside the reviewed diff, or appear to be a false positive. Note the skip
+briefly instead of arguing with the finding.
 
-#### Pass B: Quality
+Preserve behavior, public APIs, tests, and user-visible output unless the user
+explicitly requested a behavior change.
 
-- Remove redundant state, cached values that can be derived, unnecessary observers/effects, and dead branches.
-- Reduce parameter sprawl. Prefer reshaping interfaces over threading more booleans, flags, or one-off options.
-- Collapse copy-paste variants into a shared abstraction when it improves readability.
-- Fix leaky abstractions, unclear naming, and control flow that is harder to follow than necessary.
-- Prefer explicit, readable code over clever compression.
-- Avoid style-only churn that does not improve maintainability.
+## Validate
 
-#### Pass C: Efficiency
+Run the smallest relevant validation for the files you changed: targeted tests,
+lint, typecheck, or a focused build. If no useful validation is available or it
+is too expensive for the moment, say exactly what was not run.
 
-- Remove repeated work, duplicate I/O, N+1 patterns, and redundant computation.
-- Parallelize independent operations when the codebase and runtime make that safe.
-- Keep hot paths lean: startup code, request handlers, render paths, tight loops, and frequently called helpers.
-- Flag recurring no-op updates: state/store updates inside polling loops, intervals, or event handlers that fire unconditionally without change-detection guards.
-- Avoid pre-checking file or resource existence when it is cleaner to perform the operation and handle the error directly.
-- Watch for unbounded collections, missing cleanup, leaked listeners, and long-lived resources that never get released.
-- Flag overly broad operations: reading entire files when only a portion is needed, loading all items when filtering for one.
+## Report
 
-### 3. Fix or report issues
+Finish with a short summary:
 
-**Report-Only Mode (`REPORT_ONLY=true`):**
-Do not make any changes. Instead, compile findings into a report. If `JSON_OUTPUT=true`, format as JSON array:
+- What was fixed.
+- What was skipped and why.
+- Any real remaining risk or follow-up.
 
-```json
-[
-  {
-    "file": "src/example.ts",
-    "line": 42,
-    "category": "quality",
-    "issue": "Redundant state variable",
-    "suggestion": "Remove cachedValue and derive from source"
-  }
-]
-```
-
-**Standard Mode:**
-- Aggregate the findings and fix high-confidence issues that materially improve the code.
-- Skip false positives, speculative architecture changes, and low-value nits.
-- Preserve behavior, public APIs, tests, and user-visible output unless the user explicitly asked for behavioral changes.
-
-### 4. Validate the result
-
-- Run focused validation for the touched area when practical: relevant tests, lint, typecheck, or a targeted build step.
-- Prefer the smallest validation that can catch likely regressions.
-- If validation is unavailable or too expensive for the moment, say what you did not run.
-
-### 5. Report clearly
-
-- Summarize what you simplified.
-- Note any findings you intentionally skipped.
-- Call out remaining risks or follow-up work only if they are real and actionable.
+If there were no actionable findings, say the changed code was already clean
+for the four simplify angles.
 
 ## Guardrails
 
-- Follow the repository's own instructions and conventions first.
-- Prefer smaller, reversible edits over sweeping refactors.
-- Do not widen the change into unrelated files unless required.
-- If a simplification would make the code more magical, less debuggable, or less explicit, do not do it.
-- When in doubt, choose clarity over terseness.
-
-## Delegation Template
-
-When spawning sub-agents, each pass should get:
-
-- the full diff or exact changed files
-- one clear objective: `reuse`, `quality`, or `efficiency`
-- instructions to return only actionable findings with file references
-- instructions to avoid speculative redesigns outside the changed scope
+- Follow repository instructions and local patterns first.
+- Prefer small, reversible edits over sweeping refactors.
+- Do not turn explicit code into clever or magical code.
+- Do not make style-only churn.
+- When a simplification would make the code less debuggable, keep the clearer
+  version.

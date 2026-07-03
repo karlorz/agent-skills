@@ -1,11 +1,11 @@
 {
   "name": "simplify",
-  "version": "1.0.1",
-  "description": "Code review with reuse, quality, and efficiency passes",
+  "version": "1.0.2",
+  "description": "Code review for reuse, simplification, efficiency, and altitude",
   "author": {
     "name": "karlorz"
   },
   "license": "MIT",
-  "keywords": ["simplify", "review", "refactor", "quality", "codex", "codex-app"],
+  "keywords": ["simplify", "review", "refactor", "reuse", "simplification", "efficiency", "altitude", "codex", "codex-app"],
   "skills": "./skills/"
 }

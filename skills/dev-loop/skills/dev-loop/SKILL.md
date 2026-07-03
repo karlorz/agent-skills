@@ -436,7 +436,7 @@ Dev-loop spawns agents for implementation, code review, and research. To balance
 | 3. SPEC (brainstorm) | Parent session | inherit | Creative exploration, requirements gathering — benefits from parent model |
 | 4. PLAN | Parent session | inherit | Architecture design, dependency mapping — benefits from parent model |
 | 5. EXECUTE (subagents) | Implementation subagents | `sonnet` | Mechanical coding from plan — following spec, no architectural judgment |
-| 6. REVIEW (simplify) | `simplify:simplify` skill, preferably via `dev-loop:simplify-worker` | `sonnet` subagent when available; inline fallback otherwise | Code review: reuse, quality, efficiency — must run as an explicit skill invocation, not an informal manual scan |
+| 6. REVIEW (simplify) | `simplify:simplify` skill, preferably via `dev-loop:simplify-worker` | `sonnet` subagent when available; inline fallback otherwise | Code review: reuse, simplification, efficiency, altitude - must run as an explicit skill invocation, not an informal manual scan |
 | 6a. BROWSER-VERIFY | playwright-cli:browser-worker | `sonnet` | Browser health check — smoke routes, console errors, a11y violations |
 | 6b. MERGE | gh CLI (inline) + ci-health-worker | inline + `sonnet` | PR creation (inline) + CI health gate (ci-health-worker agent) |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |

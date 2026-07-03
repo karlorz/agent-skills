@@ -22,17 +22,23 @@ sandboxes that cannot read the installed skill file.
 
 ## When to invoke
 
-- **Pre-commit review.** The dev-loop pipeline has code changes that need the required simplify pass before pushing.
-- **Reuse check.** New code has been written and needs to be checked against existing helpers, utilities, and patterns in the codebase.
-- **Quality gate.** The pipeline's REVIEW step triggers mandatory code review before E2E or PUSH steps can proceed.
-- **Efficiency analysis.** Hot-path code or query-heavy logic has been modified and needs N+1/performance review.
+- **Pre-commit review.** The dev-loop pipeline has code changes that need the
+  required simplify pass before pushing.
+- **Reuse check.** New code needs to be checked against existing helpers,
+  utilities, shared types, and adjacent patterns.
+- **Simplification gate.** New code needs cleanup for unnecessary complexity
+  before E2E or PUSH steps can proceed.
+- **Efficiency analysis.** Hot-path code, startup work, I/O, or long-lived
+  object lifetimes changed and need cost review.
+- **Altitude check.** A fix may be layered too shallowly and needs review at
+  the underlying mechanism level.
 
 ## Inputs
 
 - `simplify_skill_path` (optional): exact path to the `simplify:simplify`
   `SKILL.md`. Use this first when provided.
-- Current diff, changed-file list, base ref, or mode flags passed by the
-  caller. Preserve caller scope and mode intent.
+- Current diff, changed-file list, base ref, or explicit target passed by the
+  caller. Preserve caller scope.
 
 ## Source-of-Truth Resolution
 
@@ -47,9 +53,10 @@ sandboxes that cannot read the installed skill file.
    - `~/.codex/plugins/cache/*/simplify/*/SKILL.md`
    - `~/.codex/plugins/cache/*/simplify/*/skills/simplify/SKILL.md`
    - `~/.codex/plugins/cache/*/simplify/*/simplify/SKILL.md`
-3. Follow the resolved `simplify:simplify` workflow, modes, fix-or-report
-   behavior, validation guidance, and guardrails. If these local instructions
-   conflict with the resolved skill, the resolved skill wins.
+3. Follow the resolved `simplify:simplify` workflow, diff scoping,
+   four-angle review, fix-or-skip behavior, validation guidance, and
+   guardrails. If these local instructions conflict with the resolved skill,
+   the resolved skill wins.
 4. If no `simplify:simplify` SKILL.md can be resolved, state that the source
    skill was unavailable and use the minimum fallback contract below.
 
@@ -57,48 +64,89 @@ sandboxes that cannot read the installed skill file.
 
 Use this only when the source skill cannot be read.
 
-### Scope the review
+### Phase 0 - Gather the diff
 
-- Respect the caller's explicit file list, diff, base ref, staged-only mode, or
-  report-only mode.
-- If no scope is provided, prefer the current working-tree diff. If there are
-  no git changes, review only files the caller named.
-- Keep the scope narrow unless the caller explicitly asks for a broader review.
+Treat the gathered diff as the review scope.
 
-### Run review passes
+1. Respect any explicit PR number, branch name, file path, changed-file list,
+   or diff supplied by the caller.
+2. If no explicit scope was supplied, prefer `git diff @{upstream}...HEAD`.
+3. If there is no upstream, fall back to `git diff main...HEAD`, then
+   `git diff HEAD~1`.
+4. If there are uncommitted changes, or the selected range diff is empty, also
+   run `git diff HEAD` and include the working-tree changes.
+5. If all diffs are empty, review only files the caller named. If no files were
+   named, return that there is no changed code to simplify.
+
+Keep scope narrow unless the caller explicitly asks for a broader cleanup.
+
+### Phase 1 - Run review passes
+
+Prefer four independent review agents in parallel when this worker environment
+can dispatch them. If nested worker dispatch is unavailable, perform the four
+reviews sequentially and keep their findings separated.
+
+Each finding must include `file`, `line`, a one-line `summary`, and the
+concrete cost: what is duplicated, wasted, or harder to maintain.
 
 ### Pass A: Reuse
-Search codebase for existing helpers, utilities, shared components, common types, and adjacent patterns. Flag duplicated or near-duplicate logic. Find existing constants, enums, shared helpers, and common validation/parsing code.
 
-### Pass B: Quality
-Flag redundant state, dead branches, unnecessary observers/effects, parameter sprawl (too many booleans/flags), copy-paste variants, leaky abstractions, unclear naming, and convoluted control flow. Prefer explicit, readable code over clever compression.
+Flag new code that re-implements something the codebase already has. Search
+shared or utility modules and files adjacent to the change, then name the
+existing helper, type, component, constant, or pattern to use instead.
+
+### Pass B: Simplification
+
+Flag unnecessary complexity added by the diff: redundant or derivable state,
+copy-paste with small variations, deep nesting, dead code left behind, and
+control flow that is harder than the behavior requires. Name the simpler form
+that does the same job.
 
 ### Pass C: Efficiency
-Flag repeated work, duplicate I/O, N+1 patterns, redundant computation, hot-path issues (startup, request handlers, render paths, tight loops), unbounded collections, missing cleanup, leaked listeners, and overly broad operations.
 
-### Fix or report
+Flag wasted work introduced by the diff: redundant computation, repeated I/O,
+independent operations run sequentially, and blocking work added to startup or
+hot paths. Also flag long-lived objects built from closures or captured
+environments because they keep the enclosing scope alive for the object's
+lifetime; prefer a class, struct, or plain data object that copies only the
+fields it needs. Name the cheaper alternative.
 
-- Report-only behavior: when the caller asks for report-only output or
-  findings-only review, do not edit files.
-- Otherwise, follow `simplify:simplify` fix-or-report behavior: fix
-  high-confidence issues when safe, and report findings that need the
-  orchestrator's decision.
-- Preserve behavior, public APIs, tests, and user-visible output unless the
-  caller explicitly requested behavioral changes.
+### Pass D: Altitude
+
+Check that each change is implemented at the right depth rather than as a
+fragile bandaid. Special cases layered on shared infrastructure usually mean
+the fix is not deep enough; prefer generalizing the underlying mechanism over
+adding one-off branches.
+
+### Phase 2 - Apply the fixes
+
+Deduplicate findings that point at the same line or mechanism, then fix each
+remaining high-confidence issue directly.
+
+Skip a finding when the fix would change intended behavior, require changes
+well outside the reviewed diff, or appear to be a false positive. Note the skip
+briefly instead of arguing with the finding.
+
+Preserve behavior, public APIs, tests, and user-visible output unless the
+caller explicitly requested a behavior change.
 
 ### Validate
 
-- Validate changed code when practical with the smallest relevant test, lint,
-  typecheck, or build command.
-- If validation is unavailable or too expensive, say exactly what was not run.
+Validate changed code when practical with the smallest relevant test, lint,
+typecheck, or build command. If validation is unavailable or too expensive, say
+exactly what was not run.
 
 ## Output
 
-Return actionable findings with file:line references:
+Return fixed and skipped work with file references and concrete costs:
+
 ```markdown
-[PASS C - EFFICIENCY] src/handler.ts:42 -> N+1 query in render path: queries database inside map() loop
-[PASS B - QUALITY] src/state.ts:18 -> Redundant state: cachedValue can be derived from source
-[PASS A - REUSE] src/utils.ts:55 -> Duplicate: existing getSlug() at lib/slugs.ts:12 handles this
+[REUSE] file=src/utils.ts line=55 summary="Duplicate slug helper" cost="Existing getSlug() at lib/slugs.ts:12 already handles this."
+[SIMPLIFICATION] file=src/state.ts line=18 summary="Redundant cached state" cost="cachedValue can be derived from source each render."
+[EFFICIENCY] file=src/handler.ts line=42 summary="Repeated database query" cost="map() issues one query per item instead of batching."
+[ALTITUDE] file=src/router.ts line=88 summary="Special-case route patch" cost="Shared route normalization still lacks the general rule."
 ```
 
-If no issues found: "SIMPLIFY: PASS - no issues."
+If no issues are found, return:
+
+`SIMPLIFY: PASS - no reuse, simplification, efficiency, or altitude issues.`

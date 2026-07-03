@@ -28,14 +28,17 @@
     {
       "name": "simplify",
       "source": "./skills/simplify",
-      "description": "Code review with reuse, quality, and efficiency passes",
-      "version": "1.0.1",
+      "description": "Code review for reuse, simplification, efficiency, and altitude",
+      "version": "1.0.2",
       "category": "code-quality",
       "keywords": [
         "simplify",
         "review",
         "refactor",
-        "quality"
+        "reuse",
+        "simplification",
+        "efficiency",
+        "altitude"
       ]
     },
     {

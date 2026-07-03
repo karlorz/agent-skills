@@ -32,14 +32,14 @@ assert_eq() {
 
 assert_contains() {
   local label="$1" haystack="$2" needle="$3"
-  if ! grep -Fq "$needle" <<<"$haystack"; then
+  if ! grep -Fq -- "$needle" <<<"$haystack"; then
     fail "$label: missing '$needle'"
   fi
 }
 
 assert_not_contains() {
   local label="$1" haystack="$2" needle="$3"
-  if grep -Fq "$needle" <<<"$haystack"; then
+  if grep -Fq -- "$needle" <<<"$haystack"; then
     fail "$label: unexpected '$needle'"
   fi
 }
@@ -255,14 +255,48 @@ run_simplify_worker_adapter_contract_checks() {
   assert_contains "simplify-worker Codex skill path" "$worker" '~/.agents/skills/simplify/SKILL.md'
   assert_contains "simplify-worker Codex plugin cache path" "$worker" '~/.codex/plugins/cache/*/simplify/*/skills/simplify/SKILL.md'
   assert_contains "simplify-worker fallback trigger" "$worker" 'If no `simplify:simplify` SKILL.md can be resolved'
-  assert_contains "simplify-worker scopes diff" "$worker" '### Scope the review'
+  assert_contains "simplify-worker phase 0 diff gathering" "$worker" '### Phase 0 - Gather the diff'
+  assert_contains "simplify-worker upstream diff preference" "$worker" 'git diff @{upstream}...HEAD'
   assert_contains "simplify-worker reuse pass" "$worker" '### Pass A: Reuse'
-  assert_contains "simplify-worker quality pass" "$worker" '### Pass B: Quality'
+  assert_contains "simplify-worker simplification pass" "$worker" '### Pass B: Simplification'
   assert_contains "simplify-worker efficiency pass" "$worker" '### Pass C: Efficiency'
-  assert_contains "simplify-worker report-only behavior" "$worker" 'Report-only behavior'
+  assert_contains "simplify-worker altitude pass" "$worker" '### Pass D: Altitude'
+  assert_contains "simplify-worker phase 2 apply fixes" "$worker" '### Phase 2 - Apply the fixes'
+  assert_contains "simplify-worker deduplicates findings" "$worker" 'Deduplicate findings'
   assert_contains "simplify-worker preserves behavior" "$worker" 'Preserve behavior'
   assert_contains "simplify-worker validates" "$worker" '### Validate'
-  assert_contains "simplify-worker file line output" "$worker" 'file:line references'
+  assert_contains "simplify-worker concrete-cost output" "$worker" 'concrete cost'
+  assert_not_contains "simplify-worker old quality pass removed" "$worker" '### Pass B: Quality'
+}
+
+run_simplify_skill_contract_checks() {
+  local skill
+  skill="$(cat "$ROOT/skills/simplify/SKILL.md")"
+
+  assert_contains "simplify skill title" "$skill" '# Simplify'
+  assert_contains "simplify skill latest behavior" "$skill" '/simplify -> 4 cleanup agents in parallel -> apply the fixes'
+  assert_contains "simplify skill phase 0" "$skill" '## Phase 0 - Gather the diff'
+  assert_contains "simplify skill upstream diff preference" "$skill" 'git diff @{upstream}...HEAD'
+  assert_contains "simplify skill main fallback" "$skill" 'git diff main...HEAD'
+  assert_contains "simplify skill head fallback" "$skill" 'git diff HEAD~1'
+  assert_contains "simplify skill working tree fallback" "$skill" 'git diff HEAD'
+  assert_contains "simplify skill explicit target scope" "$skill" 'PR number, branch name, or file path'
+  assert_contains "simplify skill phase 1" "$skill" '## Phase 1 - Review'
+  assert_contains "simplify skill parallel agents" "$skill" '4 independent review agents'
+  assert_contains "simplify skill reuse angle" "$skill" '### Reuse'
+  assert_contains "simplify skill simplification angle" "$skill" '### Simplification'
+  assert_contains "simplify skill efficiency angle" "$skill" '### Efficiency'
+  assert_contains "simplify skill altitude angle" "$skill" '### Altitude'
+  assert_contains "simplify skill findings fields" "$skill" '`file`, `line`, a one-line `summary`'
+  assert_contains "simplify skill concrete cost" "$skill" 'concrete cost'
+  assert_contains "simplify skill phase 2" "$skill" '## Phase 2 - Apply the fixes'
+  assert_contains "simplify skill dedup" "$skill" 'dedup findings that point'
+  assert_contains "simplify skill same mechanism dedup" "$skill" 'or mechanism'
+  assert_not_contains "simplify skill old quick mode removed" "$skill" '--quick'
+  assert_not_contains "simplify skill old staged-only mode removed" "$skill" '--staged-only'
+  assert_not_contains "simplify skill old json mode removed" "$skill" '--json'
+  assert_not_contains "simplify skill old report-only mode removed" "$skill" '--report-only'
+  assert_not_contains "simplify skill old quality pass removed" "$skill" 'Pass B: Quality'
 }
 
 run_sdd_execute_worker_adapter_contract_checks() {
@@ -798,6 +832,7 @@ run_codex_skill_mirror_contract_checks() {
 run_bump_version_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
+run_simplify_skill_contract_checks
 run_simplify_worker_adapter_contract_checks
 run_sdd_execute_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks
