@@ -1,0 +1,11 @@
+{
+  "name": "rtk-output-design",
+  "version": "0.1.0",
+  "description": "RTK-inspired output contract for building token-efficient CLI, skill, hook, and script developer tools.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": ["rtk", "output", "cli", "skills", "scripts", "tokens", "agents", "schema", "developer-tools", "codex", "codex-app"],
+  "skills": "./skills/"
+}

@@ -143,6 +143,24 @@
       ]
     },
     {
+      "name": "rtk-output-design",
+      "source": "./skills/rtk-output-design",
+      "description": "RTK-inspired output contract for building token-efficient CLI, skill, hook, and script developer tools.",
+      "version": "0.1.0",
+      "category": "code-quality",
+      "keywords": [
+        "rtk",
+        "output",
+        "cli",
+        "skills",
+        "scripts",
+        "tokens",
+        "agents",
+        "schema",
+        "developer-tools"
+      ]
+    },
+    {
       "name": "host-backup-restore",
       "source": "./skills/host-backup-restore",
       "description": "Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker), post-discovery research, and skillwiki infrastructure capture. v3.6.3: explicit SSH/Tailscale identity restore for post-reinstall hosts, with safety snapshots, ca-certificates handling, and SSH validation. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",

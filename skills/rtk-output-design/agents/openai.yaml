@@ -1,0 +1,4 @@
+interface:
+  display_name: "RTK Output Design"
+  short_description: "Design token-efficient CLI and skill output"
+  default_prompt: "Use $rtk-output-design to design or review output for a CLI, skill, hook, or script so it is compact, structured, and useful to agents."
