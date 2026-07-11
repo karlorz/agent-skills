@@ -4,6 +4,8 @@
 #   version: plugin version to sync (default: reads from .claude-plugin/plugin.json)
 #
 # After running this script, invoke /reload-plugins in Claude Code to pick up changes.
+#
+# Layout (nested-only): skills/dev-loop/skills/{dev-loop,investigate,...}/SKILL.md
 
 set -euo pipefail
 
@@ -31,8 +33,8 @@ echo "Syncing dev-loop v${VERSION}..."
 echo "  Source: ${SOURCE_DIR}"
 echo "  Cache:  ${CACHE_DIR}"
 
-# Sync core files (preserving cache-only files like package.json if present)
-for file in SKILL.md dependencies.yaml research/SKILL.md setup-dev-loop/SKILL.md investigate/SKILL.md office-hours/SKILL.md status/SKILL.md .claude-plugin/plugin.json .codex-plugin/plugin.json; do
+# Sync manifests + dependencies
+for file in dependencies.yaml .claude-plugin/plugin.json .codex-plugin/plugin.json; do
   src="${SOURCE_DIR}/${file}"
   dst="${CACHE_DIR}/${file}"
   if [[ -f "$src" ]]; then
@@ -49,13 +51,21 @@ if [[ -d "${CACHE_DIR}/setup" ]]; then
   echo "  ✓ removed legacy setup/"
 fi
 
-# Sync Codex skills subtree
+# Nested skills/ is the sole skill surface (Claude + Codex + Grok)
 if [[ -d "${SOURCE_DIR}/skills" ]]; then
   rm -rf "${CACHE_DIR}/skills"
   mkdir -p "${CACHE_DIR}/skills"
   cp -R "${SOURCE_DIR}/skills/." "${CACHE_DIR}/skills/"
-  echo "  ✓ skills/ (Codex mirror)"
+  echo "  ✓ skills/ (nested-only skill surface)"
 fi
+
+# Remove legacy root skill mirrors if present in older cache installs
+for legacy in SKILL.md research setup-dev-loop investigate office-hours status; do
+  if [[ -e "${CACHE_DIR}/${legacy}" ]]; then
+    rm -rf "${CACHE_DIR}/${legacy}"
+    echo "  ✓ removed legacy ${legacy}"
+  fi
+done
 
 # Sync agents directory
 if [[ -d "${SOURCE_DIR}/agents" ]]; then
@@ -79,18 +89,12 @@ if [[ -d "${SOURCE_DIR}/templates" ]]; then
   echo "  ✓ templates/"
 fi
 
-# Sync references directory (codex-tools.md and other reference docs)
+# Sync references directory
 if [[ -d "${SOURCE_DIR}/references" ]]; then
+  rm -rf "${CACHE_DIR}/references"
   mkdir -p "${CACHE_DIR}/references"
-  cp "${SOURCE_DIR}/references/"* "${CACHE_DIR}/references/"
+  cp -R "${SOURCE_DIR}/references/." "${CACHE_DIR}/references/"
   echo "  ✓ references/"
-
-  if [[ -d "${CACHE_DIR}/skills/dev-loop" ]]; then
-    mkdir -p "${CACHE_DIR}/skills/dev-loop/references"
-    cp "${SOURCE_DIR}/references/"* "${CACHE_DIR}/skills/dev-loop/references/"
-    echo "  ✓ skills/dev-loop/references/"
-  fi
 fi
 
-echo ""
-echo "Done. Now run /reload-plugins in Claude Code to activate changes."
+echo "Done. Run /reload-plugins in Claude Code to pick up changes."

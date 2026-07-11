@@ -6,6 +6,16 @@
     "name": "karlorz"
   },
   "license": "MIT",
-  "keywords": ["rtk", "output", "cli", "skills", "scripts", "tokens", "agents", "schema", "developer-tools"],
-  "skills": "./"
+  "keywords": [
+    "rtk",
+    "output",
+    "cli",
+    "skills",
+    "scripts",
+    "tokens",
+    "agents",
+    "schema",
+    "developer-tools"
+  ],
+  "skills": "./skills/"
 }

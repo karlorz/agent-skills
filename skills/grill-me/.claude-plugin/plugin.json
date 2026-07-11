@@ -6,6 +6,17 @@
     "name": "karlorz"
   },
   "license": "MIT",
-  "keywords": ["grill-me", "grill", "interview", "grilling", "plan", "design", "cross-platform", "ask-question", "codex", "antigravity"],
-  "skills": "./"
+  "keywords": [
+    "grill-me",
+    "grill",
+    "interview",
+    "grilling",
+    "plan",
+    "design",
+    "cross-platform",
+    "ask-question",
+    "codex",
+    "antigravity"
+  ],
+  "skills": "./skills/"
 }

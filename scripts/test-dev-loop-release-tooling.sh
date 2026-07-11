@@ -230,18 +230,18 @@ run_sync_script_contract_checks() {
   sync_script="$(cat "$ROOT/skills/dev-loop/sync-plugin-cache.sh")"
 
   assert_contains "sync-plugin-cache includes dependencies manifest" "$sync_script" 'dependencies.yaml'
-  assert_contains "sync-plugin-cache syncs Codex skills subtree" "$sync_script" 'Sync Codex skills subtree'
+  assert_contains "sync-plugin-cache syncs nested skills surface" "$sync_script" 'nested-only skill surface'
   assert_contains "sync-plugin-cache syncs agents directory" "$sync_script" 'Sync agents directory'
   assert_contains "sync-plugin-cache copies agents directory" "$sync_script" 'cp "${SOURCE_DIR}/agents/"* "${CACHE_DIR}/agents/"'
   assert_contains "sync-plugin-cache syncs scripts directory" "$sync_script" 'Sync scripts directory'
   assert_contains "sync-plugin-cache copies scripts recursively" "$sync_script" 'scripts/.'
-  assert_contains "sync-plugin-cache syncs skill-relative references" "$sync_script" 'skills/dev-loop/references'
+  assert_contains "sync-plugin-cache syncs references directory" "$sync_script" 'Sync references directory'
   [ -f "$ROOT/skills/dev-loop/agents/simplify-worker.md" ] ||
     fail "skills/dev-loop/agents/simplify-worker.md missing"
-  [ -f "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ] ||
-    fail "skills/dev-loop/skills/dev-loop/references/codex-tools.md missing"
-  cmp -s "$ROOT/skills/dev-loop/references/codex-tools.md" "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ||
-    fail "skills/dev-loop/skills/dev-loop/references/codex-tools.md differs from canonical reference"
+  [ -f "$ROOT/skills/dev-loop/references/codex-tools.md" ] ||
+    fail "skills/dev-loop/references/codex-tools.md missing"
+  [ -f "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md" ] ||
+    fail "skills/dev-loop/skills/dev-loop/SKILL.md missing"
 }
 
 run_simplify_worker_adapter_contract_checks() {
@@ -271,7 +271,7 @@ run_simplify_worker_adapter_contract_checks() {
 
 run_simplify_skill_contract_checks() {
   local skill
-  skill="$(cat "$ROOT/skills/simplify/SKILL.md")"
+  skill="$(cat "$ROOT/skills/simplify/skills/simplify/SKILL.md")"
 
   assert_contains "simplify skill title" "$skill" '# Simplify'
   assert_contains "simplify skill latest behavior" "$skill" '/simplify -> 4 cleanup agents in parallel -> apply the fixes'
@@ -399,9 +399,9 @@ PY
 
 run_dev_loop_prep_prompt_contract_checks() {
   local prompt template setup codex_ref
-  prompt="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
+  prompt="$(cat "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md")"
   template="$(cat "$ROOT/skills/dev-loop/templates/project-config.md")"
-  setup="$(cat "$ROOT/skills/dev-loop/setup-dev-loop/SKILL.md")"
+  setup="$(cat "$ROOT/skills/dev-loop/skills/setup-dev-loop/SKILL.md")"
   codex_ref="$(cat "$ROOT/skills/dev-loop/references/codex-tools.md")"
 
   assert_contains "dev-loop parses prep mode" "$prompt" 'MODE = prep'
@@ -458,30 +458,24 @@ run_dev_loop_prep_prompt_contract_checks() {
 }
 
 run_dev_loop_status_companion_contract_checks() {
-  local skill_root canonical mirror sync_script
+  local skill_root canonical sync_script
   skill_root="$ROOT/skills/dev-loop"
-  canonical="$skill_root/status/SKILL.md"
-  mirror="$skill_root/skills/status/SKILL.md"
+  canonical="$skill_root/skills/status/SKILL.md"
   [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
-  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
-  cmp -s "$canonical" "$mirror" || fail "dev-loop status companion mirror differs from canonical"
   sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
-  assert_contains "sync-plugin-cache syncs status companion" "$sync_script" 'status/SKILL.md'
+  assert_contains "sync-plugin-cache syncs nested skills surface" "$sync_script" 'nested-only skill surface'
   assert_contains "dev-loop status companion deny-list" "$(cat "$canonical")" 'Hard deny-list'
-  assert_contains "dev-loop references status companion" "$(cat "$skill_root/SKILL.md")" 'status/SKILL.md'
+  assert_contains "dev-loop references status companion" "$(cat "$skill_root/skills/dev-loop/SKILL.md")" 'status/SKILL.md'
   assert_contains "status companion HUD section" "$(cat "$canonical")" 'dev-loop-status-hud.js'
 }
 
 run_dev_loop_command_surface_contract_checks() {
-  local skill_root umbrella umbrella_mirror hint helper helper_mirror body helper_body
+  local skill_root umbrella hint helper body helper_body
   local helper_name helper_field helper_hint
 
   skill_root="$ROOT/skills/dev-loop"
-  umbrella="$skill_root/SKILL.md"
-  umbrella_mirror="$skill_root/skills/dev-loop/SKILL.md"
-
-  cmp -s "$umbrella" "$umbrella_mirror" ||
-    fail "dev-loop mirrored SKILL.md differs from canonical"
+  umbrella="$skill_root/skills/dev-loop/SKILL.md"
+  [ -f "$umbrella" ] || fail "${umbrella#$ROOT/} missing"
 
   hint="$(read_frontmatter_field "$umbrella" "argument-hint")"
   [ -n "$hint" ] || fail "dev-loop umbrella SKILL.md missing argument-hint"
@@ -509,12 +503,8 @@ run_dev_loop_command_surface_contract_checks() {
   assert_not_contains "dev-loop parent no setup colon command" "$body" "/dev-loop:setup-dev-loop"
 
   for helper_name in status investigate office-hours research setup-dev-loop; do
-    helper="$skill_root/$helper_name/SKILL.md"
-    helper_mirror="$skill_root/skills/$helper_name/SKILL.md"
+    helper="$skill_root/skills/$helper_name/SKILL.md"
     [ -f "$helper" ] || fail "${helper#$ROOT/} missing"
-    [ -f "$helper_mirror" ] || fail "${helper_mirror#$ROOT/} missing"
-    cmp -s "$helper" "$helper_mirror" ||
-      fail "${helper_mirror#$ROOT/} differs from ${helper#$ROOT/}"
 
     helper_field="$(read_frontmatter_field "$helper" "user-invocable")"
     assert_eq "$helper_name user-invocable" "$helper_field" "false"
@@ -529,15 +519,12 @@ run_dev_loop_command_surface_contract_checks() {
 }
 
 run_dev_loop_office_hours_contract_checks() {
-  local skill_root canonical mirror body sync_script
+  local skill_root canonical body sync_script
 
   skill_root="$ROOT/skills/dev-loop"
-  canonical="$skill_root/office-hours/SKILL.md"
-  mirror="$skill_root/skills/office-hours/SKILL.md"
+  canonical="$skill_root/skills/office-hours/SKILL.md"
 
   [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
-  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
-  cmp -s "$canonical" "$mirror" || fail "${mirror#$ROOT/} differs from ${canonical#$ROOT/}"
 
   body="$(cat "$canonical")"
   sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
@@ -577,41 +564,28 @@ run_dev_loop_office_hours_contract_checks() {
   assert_contains "office-hours stale implemented recheck" "$body" 'possibly_implemented_without_closure'
   assert_contains "office-hours stale handling remains human-controlled" "$body" 'hygiene-cleanup'
   assert_contains "office-hours optional grill hook" "$body" 'grill-me'
-  assert_contains "sync-plugin-cache syncs office-hours companion" "$sync_script" 'office-hours/SKILL.md'
+  assert_contains "sync-plugin-cache syncs nested skills surface" "$sync_script" 'nested-only skill surface'
 }
 
 run_dev_loop_investigate_queue_contract_checks() {
-  local canonical mirror prompt prompt_mirror
+  local canonical prompt
 
-  canonical="$(cat "$ROOT/skills/dev-loop/investigate/SKILL.md")"
-  mirror="$(cat "$ROOT/skills/dev-loop/skills/investigate/SKILL.md")"
-  prompt="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
-  prompt_mirror="$(cat "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md")"
-
-  cmp -s "$ROOT/skills/dev-loop/investigate/SKILL.md" "$ROOT/skills/dev-loop/skills/investigate/SKILL.md" ||
-    fail "dev-loop mirrored investigate SKILL.md differs from canonical"
-  cmp -s "$ROOT/skills/dev-loop/SKILL.md" "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md" ||
-    fail "dev-loop mirrored SKILL.md differs from canonical"
+  canonical="$(cat "$ROOT/skills/dev-loop/skills/investigate/SKILL.md")"
+  prompt="$(cat "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md")"
 
   assert_contains "investigate uses disposable schema probe" "$canonical" 'disposable schema-probe candidate'
-  assert_contains "investigate mirror uses disposable schema probe" "$mirror" 'disposable schema-probe candidate'
   assert_contains "investigate documents current-schema raw fallback" "$canonical" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
-  assert_contains "investigate mirror documents current-schema raw fallback" "$mirror" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
   assert_contains "dev-loop summary documents current-schema raw fallback" "$prompt" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
-  assert_contains "dev-loop mirror summary documents current-schema raw fallback" "$prompt_mirror" 'Current SkillWiki schemas such as 0.9.16 reject `status: proposed`'
   assert_not_contains "investigate no durable proposed workdir probe" "$canonical" 'Draft a single candidate non-executing work item in the target project'
-  assert_not_contains "investigate mirror no durable proposed workdir probe" "$mirror" 'Draft a single candidate non-executing work item in the target project'
 }
 
 run_codex_dispatch_contract_checks() {
   local skill canonical_ref
-  skill="$(cat "$ROOT/skills/dev-loop/SKILL.md")"
+  skill="$(cat "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md")"
   canonical_ref="$(cat "$ROOT/skills/dev-loop/references/codex-tools.md")"
 
-  cmp -s "$ROOT/skills/dev-loop/SKILL.md" "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md" ||
-    fail "dev-loop mirrored SKILL.md differs from canonical"
-  cmp -s "$ROOT/skills/dev-loop/references/codex-tools.md" "$ROOT/skills/dev-loop/skills/dev-loop/references/codex-tools.md" ||
-    fail "dev-loop mirrored codex-tools.md differs from canonical"
+  [ -f "$ROOT/skills/dev-loop/references/codex-tools.md" ] ||
+    fail "skills/dev-loop/references/codex-tools.md missing"
 
   assert_not_contains "dev-loop SKILL Codex spawn argument" "$skill" 'spawn_agent(agent_name='
   assert_not_contains "dev-loop codex-tools Codex spawn argument" "$canonical_ref" 'spawn_agent(agent_name='
@@ -647,7 +621,7 @@ run_dev_loop_metadata_contract_checks() {
   codex_description="$(jq -r '.description' "$codex_manifest")"
   marketplace_description="$(jq -r '.plugins[] | select(.name == "dev-loop") | .description' "$marketplace")"
 
-  assert_contains "dev-loop SKILL.md current version headline" "$(cat "$skill_root/SKILL.md")" "v${skill_version}:"
+  assert_contains "dev-loop SKILL.md current version headline" "$(cat "$skill_root/skills/dev-loop/SKILL.md")" "v${skill_version}:"
   assert_contains "dev-loop Claude manifest current version headline" "$claude_description" "v${skill_version}:"
   assert_contains "dev-loop Codex manifest current version headline" "$codex_description" "v${skill_version}:"
   assert_contains "dev-loop marketplace current version headline" "$marketplace_description" "v${skill_version}:"
@@ -663,60 +637,41 @@ run_dev_loop_metadata_contract_checks() {
   assert_json_array_contains "dev-loop marketplace prep keyword" "$marketplace" '.plugins[] | select(.name == "dev-loop") | .keywords' "prep"
   assert_json_array_contains "dev-loop marketplace preflight keyword" "$marketplace" '.plugins[] | select(.name == "dev-loop") | .keywords' "preflight"
 
-  setup_source="$skill_root/setup-dev-loop/SKILL.md"
   setup_mirror="$skill_root/skills/setup-dev-loop/SKILL.md"
-  [ -f "$setup_mirror" ] || fail "${setup_mirror#$ROOT/} missing setup-dev-loop Codex mirror"
-  cmp -s "$setup_source" "$setup_mirror" || fail "${setup_mirror#$ROOT/} differs from ${setup_source#$ROOT/}"
+  [ -f "$setup_mirror" ] || fail "${setup_mirror#$ROOT/} missing setup-dev-loop skill"
 }
 
 run_agent_plugin_porter_release_workflow_contract_checks() {
-  local skill_root canonical mirror canonical_body mirror_body version
+  local skill_root skill_body version
 
   skill_root="$ROOT/skills/agent-plugin-porter"
-  canonical="$skill_root/SKILL.md"
-  mirror="$skill_root/skills/agent-plugin-porter/SKILL.md"
+  skill_body="$(cat "$skill_root/skills/agent-plugin-porter/SKILL.md")"
   version="$(read_json_version "$skill_root/.claude-plugin/plugin.json")"
 
-  [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
-  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
-
-  canonical_body="$(cat "$canonical")"
-  mirror_body="$(cat "$mirror")"
-
-  assert_contains "agent-plugin-porter SKILL.md release workflow heading" "$canonical_body" "## GitHub Release Workflow"
-  assert_contains "agent-plugin-porter SKILL.md contents permission" "$canonical_body" "contents: write"
-  assert_contains "agent-plugin-porter SKILL.md oidc permission" "$canonical_body" "id-token: write"
-  assert_contains "agent-plugin-porter SKILL.md GitHub token" "$canonical_body" 'GH_TOKEN: ${{ github.token }}'
-  assert_contains "agent-plugin-porter SKILL.md idempotent release check" "$canonical_body" 'gh release view "$GITHUB_REF_NAME"'
-  assert_contains "agent-plugin-porter SKILL.md release create" "$canonical_body" 'gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"'
-  assert_contains "agent-plugin-porter SKILL.md missing release remediation" "$canonical_body" 'gh release create vX.Y.Z --repo <owner>/<repo> --title "vX.Y.Z" --generate-notes'
-
-  assert_contains "agent-plugin-porter mirror release workflow heading" "$mirror_body" "## GitHub Release Workflow"
+  assert_contains "agent-plugin-porter SKILL.md release workflow heading" "$skill_body" "## GitHub Release Workflow"
+  assert_contains "agent-plugin-porter SKILL.md contents permission" "$skill_body" "contents: write"
+  assert_contains "agent-plugin-porter SKILL.md oidc permission" "$skill_body" "id-token: write"
+  assert_contains "agent-plugin-porter SKILL.md GitHub token" "$skill_body" 'GH_TOKEN: ${{ github.token }}'
+  assert_contains "agent-plugin-porter SKILL.md idempotent release check" "$skill_body" 'gh release view "$GITHUB_REF_NAME"'
+  assert_contains "agent-plugin-porter SKILL.md release create" "$skill_body" 'gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"'
+  assert_contains "agent-plugin-porter SKILL.md missing release remediation" "$skill_body" 'gh release create vX.Y.Z --repo <owner>/<repo> --title "vX.Y.Z" --generate-notes'
   assert_contains "agent-plugin-porter current version" "$version" "0.2.0"
 }
 
 run_deep_research_freshness_contract_checks() {
-  local skill_root canonical mirror agent canonical_body mirror_body agent_body
+  local skill_root skill_body agent agent_body
 
   skill_root="$ROOT/skills/deep-research"
-  canonical="$skill_root/SKILL.md"
-  mirror="$skill_root/skills/deep-research/SKILL.md"
+  skill_body="$(cat "$skill_root/skills/deep-research/SKILL.md")"
   agent="$skill_root/agents/deep-research.md"
-
-  [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
-  [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing"
   [ -f "$agent" ] || fail "${agent#$ROOT/} missing"
-
-  canonical_body="$(cat "$canonical")"
-  mirror_body="$(cat "$mirror")"
   agent_body="$(cat "$agent")"
 
-  assert_contains "deep-research source triage" "$canonical_body" "Phase 1.5: Source Triage"
-  assert_contains "deep-research grok-search freshness" "$canonical_body" "grok-search"
-  assert_contains "deep-research freshness status section" "$canonical_body" "Freshness & Verification Status"
-  assert_contains "deep-research key claims table" "$canonical_body" "| Claim | Status | Source route | Notes |"
-  assert_contains "deep-research local inline triage" "$canonical_body" "local triage inline"
-  assert_contains "deep-research mirror source triage" "$mirror_body" "Phase 1.5: Source Triage"
+  assert_contains "deep-research source triage" "$skill_body" "Phase 1.5: Source Triage"
+  assert_contains "deep-research grok-search freshness" "$skill_body" "grok-search"
+  assert_contains "deep-research freshness status section" "$skill_body" "Freshness & Verification Status"
+  assert_contains "deep-research key claims table" "$skill_body" "| Claim | Status | Source route | Notes |"
+  assert_contains "deep-research local inline triage" "$skill_body" "local triage inline"
 
   assert_contains "deep-research agent source triage" "$agent_body" "Phase 1.5: Source Triage"
   assert_contains "deep-research agent grok-search freshness" "$agent_body" "grok-search"
@@ -803,29 +758,27 @@ run_plugin_manifest_contract_checks() {
   )
 
   while IFS= read -r root; do
-    manifest="$root/.codex-plugin/plugin.json"
-    rel="${manifest#$ROOT/}"
-    [ -f "$manifest" ] || fail "$rel missing"
-    skills_path="$(jq -r '.skills // empty' "$manifest")"
-    assert_eq "$rel skills path" "$skills_path" "./skills/"
+    for kind in .claude-plugin .codex-plugin; do
+      manifest="$root/$kind/plugin.json"
+      rel="${manifest#$ROOT/}"
+      [ -f "$manifest" ] || continue
+      skills_path="$(jq -r '.skills // empty' "$manifest")"
+      assert_eq "$rel skills path" "$skills_path" "./skills/"
+    done
   done < <(active_plugin_roots)
 }
 
 run_codex_skill_mirror_contract_checks() {
-  local root canonical name mirror
-
+  local root
+  # Nested-only contract: ship skills under skills/<name>/SKILL.md only.
+  # Root-level SKILL.md causes Grok to register duplicate slash commands.
   while IFS= read -r root; do
-    while IFS= read -r canonical; do
-      name="$(read_frontmatter_name "$canonical")"
-      [ -n "$name" ] || fail "${canonical#$ROOT/} missing frontmatter name"
-      mirror="$root/skills/$name/SKILL.md"
-      [ -f "$mirror" ] || fail "${mirror#$ROOT/} missing mirror for ${canonical#$ROOT/}"
-      cmp -s "$canonical" "$mirror" || fail "${mirror#$ROOT/} differs from ${canonical#$ROOT/}"
-    done < <(
-      find "$root" -maxdepth 3 -type f -name SKILL.md \
-        -not -path "$root/skills/*" \
-        -print | sort
-    )
+    if [ -f "$root/SKILL.md" ]; then
+      fail "${root#$ROOT/}/SKILL.md must not exist (nested-only layout)"
+    fi
+    if ! find "$root/skills" -mindepth 2 -maxdepth 2 -type f -name SKILL.md 2>/dev/null | grep -q .; then
+      fail "${root#$ROOT/}/skills/*/SKILL.md missing"
+    fi
   done < <(active_plugin_roots)
 }
 

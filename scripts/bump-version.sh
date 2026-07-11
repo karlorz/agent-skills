@@ -71,12 +71,19 @@ case "$CHANNEL" in stable|beta) ;; *) die "RELEASE_CHANNEL must be 'stable' or '
 
 # --- resolve manifest paths --------------------------------------------------
 SKILL_DIR="$REPO_ROOT/skills/$SKILL"
-SKILL_MD="$SKILL_DIR/SKILL.md"
+# Nested-only layout (Claude/Codex/Grok): skills/<plugin>/skills/<plugin>/SKILL.md
+if [ -f "$SKILL_DIR/skills/$SKILL/SKILL.md" ]; then
+  SKILL_MD="$SKILL_DIR/skills/$SKILL/SKILL.md"
+elif [ -f "$SKILL_DIR/SKILL.md" ]; then
+  SKILL_MD="$SKILL_DIR/SKILL.md"
+else
+  SKILL_MD=""
+fi
 PLUGIN_JSON="$SKILL_DIR/.claude-plugin/plugin.json"
 CODEX_PLUGIN_JSON="$SKILL_DIR/.codex-plugin/plugin.json"
 
 [ -d "$SKILL_DIR" ]    || die "skill not found: skills/$SKILL/"
-[ -f "$SKILL_MD" ]     || die "missing $SKILL_MD"
+[ -n "$SKILL_MD" ] && [ -f "$SKILL_MD" ] || die "missing SKILL.md under skills/$SKILL/ (expected skills/$SKILL/skills/$SKILL/SKILL.md)"
 [ -f "$PLUGIN_JSON" ]  || die "missing $PLUGIN_JSON"
 [ -f "$MARKETPLACE" ]  || die "missing $MARKETPLACE"
 

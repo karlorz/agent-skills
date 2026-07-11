@@ -1,11 +1,18 @@
 {
   "name": "hermes-cli",
   "version": "1.0.1",
-  "description": "Hermes Agent CLI commands reference — full terminal command surface for hermes-agent by NousResearch",
+  "description": "Hermes Agent CLI commands reference \u2014 full terminal command surface for hermes-agent by NousResearch",
   "author": {
     "name": "karlorz"
   },
   "license": "MIT",
-  "keywords": ["hermes", "hermes-agent", "cli", "reference", "nousresearch", "commands"],
-  "skills": "./"
+  "keywords": [
+    "hermes",
+    "hermes-agent",
+    "cli",
+    "reference",
+    "nousresearch",
+    "commands"
+  ],
+  "skills": "./skills/"
 }

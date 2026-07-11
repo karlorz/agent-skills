@@ -20,5 +20,5 @@
     "agent",
     "hermes-backup"
   ],
-  "skills": "./"
+  "skills": "./skills/"
 }
