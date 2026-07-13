@@ -1,6 +1,6 @@
 # Vault Pipeline Integration
 
-This reference documents the skillwiki vault integration used when `--vault` flag is active. It covers raw capture, schema validation, write pipeline, and related-pages search — not synthesis (which SKILL.md defines).
+This reference documents the skillwiki vault integration used when `--vault` flag is active. It covers raw capture, schema validation, transactional typed-page publication, and related-pages search — not synthesis (which SKILL.md defines).
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ Run `skillwiki lang` at start. Generate page prose in resolved language. Frontma
 
 ## Related-Pages Search
 
-Before writing the typed page, scan the vault for existing related content:
+Before composing the typed page draft, scan the vault for existing related content:
 
 1. Search `index.md` for pages with overlapping keywords or tags
 2. Check `concepts/` and `queries/` for related topics
@@ -86,7 +86,7 @@ question; the concept page preserves the transferable rule, compatibility
 mapping, or implementation pattern for future sessions.
 
 If the research also produces actionable follow-up work, queue that work only
-after every typed page validates. Never create `status: planned` work directly
+after every typed page publishes successfully. Never create `status: planned` work directly
 from research output.
 
 Use this schema-adaptive queue:
@@ -113,21 +113,37 @@ Use `task` or `bug` for concrete follow-ups that should surface as unclaimed
 transcripts. Use `idea` or `note` for exploratory or context-only findings
 that should be preserved but not automatically executed.
 
-## Write Pipeline (Strict Order)
+## Transactional typed-page publication
 
-1. **Write draft page**: Save to `concepts/<slug>.md` (or `comparisons/`, `queries/`, `entities/`)
-2. **Validate**: `skillwiki validate <page>` -- STOP if non-zero
-3. **Write and validate companion pages**: create any reusable `concepts/` companion and validate it before index/log updates
-4. **Queue follow-ups**: create schema-compatible proposed items or raw transcript captures, then validate each queued artifact
-5. **Update index**: Add typed-page entries to `index.md`
-6. **Append log**: Add entry to `log.md`
+Before producing any typed page, run `skillwiki page publish --help`. If the
+command is unavailable, do not write a final vault page, index entry, or log
+entry. Keep the synthesis in terminal/file mode and report that the active
+SkillWiki CLI/plugin must be upgraded.
 
-**Forbidden**: Never update index.md or log.md before validate passes.
+For each query or companion concept:
+
+1. Complete raw capture and validation first.
+2. Compose the complete typed page at an unpublished temporary path outside the vault.
+   Freeze its final frontmatter tags and body bytes.
+3. Run `skillwiki page publish <draft.md> <vault> --target
+   <queries-or-concepts/slug.md> --log-note "deep-research: <topic>"`. Use
+   `queries/<slug>.md` for the research query and `concepts/<slug>.md` for a
+   reusable companion concept.
+4. Inspect dry-run output and retain its operation ID in the report. Continue
+   only when the dry run is successful.
+5. Repeat the identical command with `--write`.
+6. On a nonzero result, retain the draft and operation ID and stop before
+   follow-up queueing. Do not repair SCHEMA, page, index, or log manually.
+7. Remove the draft only after complete publisher success.
+
+Only after every typed page publishes successfully may the pipeline create its
+schema-compatible follow-up queue entries.
 
 ## Safety Rules
 
-1. Always validate typed pages and queued follow-ups before writing index/log
-2. Never overwrite existing pages without user confirmation
-3. Source failures keep other sources; note in report
-4. Respect `--no-raw` for quick lookups (no provenance chain)
-5. Log all vault resolution and routing decisions
+1. Never fall back to direct typed-page, index, or log writes when publisher
+   capability or publication fails.
+2. Retain the unpublished draft and operation ID when publication fails.
+3. Source failures keep other sources; note in report.
+4. Respect `--no-raw` for quick lookups (no provenance chain).
+5. Log all vault resolution and routing decisions in the research report.

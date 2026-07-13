@@ -659,24 +659,31 @@ run_agent_plugin_porter_release_workflow_contract_checks() {
 }
 
 run_deep_research_freshness_contract_checks() {
-  local skill_root skill_body agent agent_body
+  local skill_root skill_body agent agent_body vault_pipeline
 
   skill_root="$ROOT/skills/deep-research"
   skill_body="$(cat "$skill_root/skills/deep-research/SKILL.md")"
   agent="$skill_root/agents/deep-research.md"
   [ -f "$agent" ] || fail "${agent#$ROOT/} missing"
   agent_body="$(cat "$agent")"
+  vault_pipeline="$(cat "$skill_root/references/vault-pipeline.md")"
 
   assert_contains "deep-research source triage" "$skill_body" "Phase 1.5: Source Triage"
   assert_contains "deep-research grok-search freshness" "$skill_body" "grok-search"
   assert_contains "deep-research freshness status section" "$skill_body" "Freshness & Verification Status"
   assert_contains "deep-research key claims table" "$skill_body" "| Claim | Status | Source route | Notes |"
   assert_contains "deep-research local inline triage" "$skill_body" "local triage inline"
+  assert_contains "deep-research publisher capability gate" "$vault_pipeline" 'skillwiki page publish --help'
+  assert_contains "deep-research transactional publisher" "$vault_pipeline" 'skillwiki page publish'
+  assert_contains "deep-research unpublished draft" "$vault_pipeline" 'outside the vault'
+  assert_not_contains "deep-research old direct publish sequence" "$vault_pipeline" 'write the typed page, validate it, update index.md, then log.md'
+  assert_contains "deep-research skill delegates publisher" "$skill_body" 'page publish'
 
   assert_contains "deep-research agent source triage" "$agent_body" "Phase 1.5: Source Triage"
   assert_contains "deep-research agent grok-search freshness" "$agent_body" "grok-search"
   assert_contains "deep-research agent freshness status section" "$agent_body" "Freshness & Verification Status"
   assert_contains "deep-research agent local inline triage" "$agent_body" "local triage inline"
+  assert_contains "deep-research agent delegates publisher" "$agent_body" 'page publish'
   assert_not_contains "deep-research agent no mandatory web search" "$agent_body" "always spawn at least 1"
 }
 

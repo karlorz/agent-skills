@@ -163,7 +163,7 @@ If refinement fails, keep the pre-refinement version and warn in the report.
 
 ## Phase 5: Output Routing
 
-- **Vault (default when available)**: Persist as `queries/<slug>.md` with raw source capture, validate, update index.md and log.md. See `references/vault-pipeline.md` for the full workflow. Also create a `concepts/` companion page if the research reveals a reusable pattern. If actionable follow-up work exists, queue it only after typed pages validate, using the schema-compatible follow-up queue from `references/vault-pipeline.md`; never create `planned` work directly from Phase 5 research output.
+- **Vault (default when available)**: Vault mode composes pages as unpublished drafts and delegates taxonomy, final page publication, index, and log updates to `skillwiki page publish` through `references/vault-pipeline.md`. Missing publisher capability is fail-closed; do not fall back to direct vault writes. Also create a `concepts/` companion page if the research reveals a reusable pattern. If actionable follow-up work exists, queue it only after typed pages publish successfully, using the schema-compatible follow-up queue from `references/vault-pipeline.md`; never create `planned` work directly from Phase 5 research output.
 - **--save <path>**: Write report to the specified file path.
 - **--ephemeral / stdout**: Print the report directly. Only use when user explicitly requests it or no vault exists.
 
@@ -209,7 +209,7 @@ Warnings: <any>
 
 - Every source required by the selected source plan fails and no useful local evidence exists → report total failure
 - `--vault` flag set but no vault configured → abort, advise `skillwiki init`
-- Vault validate fails → STOP, surface errors, do not write index/log
+- Vault publisher capability is unavailable, dry-run fails, or publication fails → STOP, retain the draft and operation ID, and do not write directly to the vault
 
 ## Failure Handling
 
@@ -223,4 +223,4 @@ Warnings: <any>
 | Selected source plan fails | STOP only when no useful local evidence exists; otherwise report degraded verification |
 | Refinement fails | Keep pre-refinement version; warn in report |
 | Vault not configured | Fall back to stdout; note in report |
-| Vault validate fails | STOP; surface errors; do not write index/log |
+| Vault publisher capability or publication fails | STOP; retain the draft and operation ID; do not write directly to the vault |

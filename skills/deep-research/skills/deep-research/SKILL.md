@@ -88,7 +88,7 @@ The skill auto-detects the best output mode based on vault availability:
 | `--save <path>` | **file** | Write markdown report to specified path |
 | `--vault` | **vault** | Force vault mode (error if no vault configured) |
 
-**Why vault by default?** Deep research is expensive (multiple web searches, fetches, synthesis rounds). When a user has invested in a skillwiki vault, they've opted into knowledge persistence. Defaulting to vault ensures research survives context compression and becomes queryable by future sessions. The marginal cost of validate + index + log is trivial compared to the research itself.
+**Why vault by default?** Deep research is expensive (multiple web searches, fetches, synthesis rounds). When a user has invested in a skillwiki vault, they've opted into knowledge persistence. Defaulting to vault ensures research survives context compression and becomes queryable by future sessions. The publisher transaction makes that persistence atomic with respect to its page, index, and log updates.
 
 ## Workflow
 
@@ -245,14 +245,14 @@ Route output based on active mode:
 
 **`--save <path>`**: Write the report as a markdown file to the specified path. Create parent directories if needed. Save a checkpoint draft before refinement so the raw synthesis is recoverable if refinement introduces errors.
 
-**Vault (default when vault available)**: Delegate to skillwiki vault pipeline. See `references/vault-pipeline.md` for the full integration workflow (raw capture, schema validation, index/log updates). Also scan vault index for existing related pages and add wikilinks in the Related Notes section.
+**Vault (default when vault available)**: Vault mode composes pages as unpublished drafts and delegates taxonomy, final page publication, index, and log updates to `skillwiki page publish` through `references/vault-pipeline.md`. Missing publisher capability is fail-closed; do not fall back to direct vault writes. Also scan vault index for existing related pages and add wikilinks in the Related Notes section.
 
 > **IMPORTANT — wiki-add-task routing guard**: Do NOT invoke `wiki-add-task` during Phase 5 for any reason. Any vault-capture intent (e.g., "save this to the vault", "capture this finding", "log this research") must route through `references/vault-pipeline.md` directly. If `wiki-add-task` activates, discard its output and resume with the vault-pipeline workflow.
 
 **Vault page type**: Default to `queries/` (research results are filed queries). If the research reveals a generalized, reusable pattern (not specific to one investigation), also create a companion `concepts/` page capturing the transferable knowledge. The query captures the specific investigation; the concept captures the reusable insight.
 
 **Follow-up work**: If the research produces actionable follow-up work, queue
-it only after the typed research page(s) validate. Use the schema-compatible
+it only after the typed research page(s) publish successfully. Use the schema-compatible
 follow-up queue in `references/vault-pipeline.md`: proposed work items only
 when `skillwiki validate` accepts that non-executing status, otherwise
 ad-hoc captures under `raw/transcripts/`. Do not turn research ideas directly
@@ -300,7 +300,7 @@ Warnings: <any>
 
 - Every source required by the selected source plan fails and no useful local evidence exists
 - `--vault` flag explicitly set but `skillwiki path` returns NO_VAULT_CONFIGURED
-- Vault mode: validation fails (do not write index/log)
+- Vault mode: publisher capability is unavailable, dry-run fails, or publication fails (retain the draft and operation ID; do not write directly to the vault)
 - `wiki-add-task` skill activates during Phase 5 output routing (abort wiki-add-task, resume vault-pipeline.md directly)
 
 ## Failure Handling
@@ -316,7 +316,7 @@ Warnings: <any>
 | Refinement fails | Keep pre-refinement version; warn in report |
 | Vault not configured (auto mode) | Fall back to stdout; note in report |
 | Vault not configured (`--vault` flag) | Abort with advisory to run `skillwiki init` |
-| Vault validate fails | STOP; surface errors; do not write index/log |
+| Vault publisher capability or publication fails | STOP; retain the draft and operation ID; do not write directly to the vault |
 
 ## Tool Usage
 
@@ -327,9 +327,9 @@ Warnings: <any>
 - **Web fetch**: Deep-fetch top sources for richer content extraction (used inside deep-fetch agents)
 - **Context7 MCP**: Library/framework documentation (used inside Context7 agent)
 - **DeepWiki MCP**: GitHub repository insights (used inside DeepWiki agent)
-- **skillwiki CLI**: `skillwiki path` (auto-detect vault), `skillwiki lang` (output language), `skillwiki hash`, `skillwiki validate`
+- **skillwiki CLI**: `skillwiki path` (auto-detect vault), `skillwiki lang` (output language), `skillwiki hash`, `skillwiki validate`, `skillwiki page publish`
 
 ## Related Reference
 
-- **references/vault-pipeline.md**: Vault-mode raw capture, validation, and index/log update workflow
+- **references/vault-pipeline.md**: Vault-mode raw capture, validation, transactional page publication, and follow-up queue workflow
 - **references/codex-tools.md**: Codex CLI/App tool mapping (`Agent` → `spawn_agent`/`wait_agent`), `multi_agent` config gate, model-tier fallback, and detached-HEAD sandbox handling
