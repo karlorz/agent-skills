@@ -13,3 +13,4 @@ __pycache__/
 .claude/dev-loop/dashboard/
 skills/playwright-cli/.playwright-cli/
 logs/
+.worktrees/
