@@ -7,8 +7,23 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const ACTIVE_STATUSES = new Set(["planned", "in-progress", "in_progress"]);
-const DONE_STATUSES = new Set(["completed", "complete", "abandoned"]);
+// Open chooser statuses. Keep legacy spellings and common vault aliases.
+const ACTIVE_STATUSES = new Set([
+  "planned",
+  "in-progress",
+  "in_progress",
+  "ready",
+  "active",
+]);
+const DONE_STATUSES = new Set([
+  "completed",
+  "complete",
+  "abandoned",
+  "archived",
+  "closed",
+  "done",
+  "deployed",
+]);
 const CAPTURE_KINDS = new Set(["task", "bug"]);
 const SKIPPED_CAPTURE_KINDS = new Set(["idea", "note"]);
 const IMPLEMENTED_WITHOUT_CLOSURE_FINDING = "possibly_implemented_without_closure";
@@ -16,12 +31,22 @@ const DIRTY_CRITICAL_PATH_FINDING = "dirty_critical_path_without_active_work";
 const REPO_INDEX_IGNORED_DIRS = new Set([
   "archive",
   ".git",
+  ".mypy_cache",
+  ".next",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".tox",
+  ".venv",
+  "__pycache__",
+  "build",
   "coverage",
   "dist",
   "logs",
   "node_modules",
+  "target",
   "tmp",
   "vendor",
+  "venv",
 ]);
 const REPO_INDEX_MAX_FILE_BYTES = 512 * 1024;
 const GENERIC_IMPLEMENTATION_TERMS = new Set([
@@ -1062,6 +1087,25 @@ function readWorkItems(opts) {
     const parsed = parseFrontmatter(readText(primaryPath));
     const frontmatter = parsed.data;
     const status = frontmatter.status || "";
+
+    for (const closed of Array.isArray(frontmatter.closes) ? frontmatter.closes : []) {
+      if (closed) activeCloses.add(closed);
+    }
+
+    // Completed/abandoned work is never a candidate. Skip skillwiki validate —
+    // large projects (100+ completed items) otherwise spend minutes spawning CLI.
+    if (DONE_STATUSES.has(status)) {
+      skipped.push({
+        id,
+        lane: "work",
+        path: relPath(opts.vault, primaryPath),
+        project_slug: opts.project,
+        reason: status === "abandoned" ? "abandoned" : "completed",
+        status,
+      });
+      continue;
+    }
+
     const validation = runSkillwikiValidate(primaryPath);
     const itemFindings = [...findings];
     if (status === "in_progress") itemFindings.push("legacy_status_in_progress");
@@ -1073,10 +1117,6 @@ function readWorkItems(opts) {
       validation,
       findings: itemFindings,
     };
-
-    for (const closed of Array.isArray(frontmatter.closes) ? frontmatter.closes : []) {
-      if (closed) activeCloses.add(closed);
-    }
 
     if (ACTIVE_STATUSES.has(status)) {
       const hasRepairableFindings = itemFindings.length > 0;
@@ -1101,18 +1141,6 @@ function readWorkItems(opts) {
       continue;
     }
 
-    if (DONE_STATUSES.has(status)) {
-      skipped.push({
-        id,
-        lane: "work",
-        path: relPath(opts.vault, primaryPath),
-        project_slug: opts.project,
-        reason: status === "abandoned" ? "abandoned" : "completed",
-        status,
-      });
-      continue;
-    }
-
     candidates.push(candidateBase(opts, {
       ...common,
       lane: "hygiene",
@@ -1125,78 +1153,154 @@ function readWorkItems(opts) {
   return { activeCloses, candidates, skipped };
 }
 
-function readCaptures(opts, activeCloses) {
-  const transcriptRoot = path.join(opts.vault, "raw", "transcripts");
-  const candidates = [];
+function projectSlugFromCaptureProject(projectField) {
+  const match = String(projectField || "").match(/^\[\[([^\]]+)\]\]$/);
+  return match ? match[1] : "";
+}
+
+function classifyCaptureRecord(opts, record, activeCloses) {
+  const { entryName, filePath, text, parsed, frontmatter, kind, project, relativePath } = record;
   const skipped = [];
+  const candidates = [];
+
+  if (activeCloses.has(relativePath)) {
+    skipped.push({ id: entryName, lane: "captures", path: relativePath, reason: "already_claimed" });
+    return { candidates, skipped };
+  }
+
+  if (!CAPTURE_KINDS.has(kind)) {
+    skipped.push({
+      id: entryName,
+      kind,
+      lane: "captures",
+      path: relativePath,
+      project_slug: opts.project,
+      reason: SKIPPED_CAPTURE_KINDS.has(kind) ? "non_executable_capture_kind" : "unsupported_capture_kind",
+    });
+    return { candidates, skipped };
+  }
+
+  if (project !== `[[${opts.project}]]`) {
+    skipped.push({
+      id: entryName,
+      kind,
+      lane: "captures",
+      path: relativePath,
+      project,
+      project_slug: opts.project,
+      reason: project ? "project_mismatch" : "missing_project",
+    });
+    return { candidates, skipped };
+  }
+
+  const implementedEvidence = implementedCaptureEvidence(opts, bodyText(text, parsed));
+  if (implementedEvidence) {
+    candidates.push(candidateBase(opts, {
+      absolute_path: filePath,
+      frontmatter,
+      id: entryName.replace(/\.md$/, ""),
+      lane: "hygiene",
+      kind,
+      repairable: true,
+      valid: true,
+      findings: [IMPLEMENTED_WITHOUT_CLOSURE_FINDING],
+      implemented_evidence: implementedEvidence,
+    }));
+    return { candidates, skipped };
+  }
+
+  candidates.push(candidateBase(opts, {
+    absolute_path: filePath,
+    frontmatter,
+    id: entryName.replace(/\.md$/, ""),
+    lane: "captures",
+    kind,
+    repairable: true,
+    valid: true,
+  }));
+  return { candidates, skipped };
+}
+
+function listCaptureRecords(vault) {
+  const transcriptRoot = path.join(vault, "raw", "transcripts");
+  const records = [];
 
   for (const entry of listDirSafe(transcriptRoot).filter((item) => item.isFile() && item.name.endsWith(".md"))) {
     const filePath = path.join(transcriptRoot, entry.name);
     const text = readText(filePath);
     const parsed = parseFrontmatter(text);
     const frontmatter = parsed.data;
-    const kind = frontmatter.kind || "";
-    const project = frontmatter.project || "";
-    const relativePath = relPath(opts.vault, filePath);
-
-    if (activeCloses.has(relativePath)) {
-      skipped.push({ id: entry.name, lane: "captures", path: relativePath, reason: "already_claimed" });
-      continue;
-    }
-
-    if (!CAPTURE_KINDS.has(kind)) {
-      skipped.push({
-        id: entry.name,
-        kind,
-        lane: "captures",
-        path: relativePath,
-        project_slug: opts.project,
-        reason: SKIPPED_CAPTURE_KINDS.has(kind) ? "non_executable_capture_kind" : "unsupported_capture_kind",
-      });
-      continue;
-    }
-
-    if (project !== `[[${opts.project}]]`) {
-      skipped.push({
-        id: entry.name,
-        kind,
-        lane: "captures",
-        path: relativePath,
-        project,
-        project_slug: opts.project,
-        reason: project ? "project_mismatch" : "missing_project",
-      });
-      continue;
-    }
-
-    const implementedEvidence = implementedCaptureEvidence(opts, bodyText(text, parsed));
-    if (implementedEvidence) {
-      candidates.push(candidateBase(opts, {
-        absolute_path: filePath,
-        frontmatter,
-        id: entry.name.replace(/\.md$/, ""),
-        lane: "hygiene",
-        kind,
-        repairable: true,
-        valid: true,
-        findings: [IMPLEMENTED_WITHOUT_CLOSURE_FINDING],
-        implemented_evidence: implementedEvidence,
-      }));
-      continue;
-    }
-
-    candidates.push(candidateBase(opts, {
-      absolute_path: filePath,
+    records.push({
+      entryName: entry.name,
+      filePath,
+      text,
+      parsed,
       frontmatter,
-      id: entry.name.replace(/\.md$/, ""),
-      lane: "captures",
-      kind,
-      repairable: true,
-      valid: true,
-    }));
+      kind: frontmatter.kind || "",
+      project: frontmatter.project || "",
+      projectSlug: projectSlugFromCaptureProject(frontmatter.project || ""),
+      relativePath: relPath(vault, filePath),
+    });
+  }
+
+  return records;
+}
+
+function readCaptures(opts, activeCloses, captureRecords = null) {
+  const records = captureRecords || listCaptureRecords(opts.vault);
+  const candidates = [];
+  const skipped = [];
+
+  for (const record of records) {
+    const classified = classifyCaptureRecord(opts, record, activeCloses);
+    candidates.push(...classified.candidates);
+    skipped.push(...classified.skipped);
   }
 
   return { candidates, skipped };
+}
+
+function readCapturesForAllProjects(opts, projectSlugs, activeClosesByProject) {
+  const records = listCaptureRecords(opts.vault);
+  const byProject = new Map(projectSlugs.map((slug) => [slug, { candidates: [], skipped: [] }]));
+  const projectSet = new Set(projectSlugs);
+
+  for (const record of records) {
+    const targetSlug = record.projectSlug && projectSet.has(record.projectSlug)
+      ? record.projectSlug
+      : null;
+
+    if (targetSlug) {
+      const projectOpts = { ...opts, project: targetSlug };
+      const activeCloses = activeClosesByProject.get(targetSlug) || new Set();
+      const classified = classifyCaptureRecord(projectOpts, record, activeCloses);
+      byProject.get(targetSlug).candidates.push(...classified.candidates);
+      byProject.get(targetSlug).skipped.push(...classified.skipped);
+      continue;
+    }
+
+    // One skip entry for vault-wide discovery (not N×projects project_mismatch noise).
+    const reason = !record.project
+      ? "missing_project"
+      : !CAPTURE_KINDS.has(record.kind)
+        ? (SKIPPED_CAPTURE_KINDS.has(record.kind) ? "non_executable_capture_kind" : "unsupported_capture_kind")
+        : "project_without_work_tree";
+    // Attach to first project bucket only for totals stability when no matching project exists.
+    const anchor = projectSlugs[0];
+    if (anchor) {
+      byProject.get(anchor).skipped.push({
+        id: record.entryName,
+        kind: record.kind,
+        lane: "captures",
+        path: record.relativePath,
+        project: record.project,
+        project_slug: record.projectSlug || null,
+        reason,
+      });
+    }
+  }
+
+  return byProject;
 }
 
 function yamlFenceBlocks(text) {
@@ -1410,12 +1514,20 @@ function dirtyCriticalPathCandidates(opts) {
 function score(candidate) {
   const status = candidate.status;
   const priority = candidate.priority;
-  if (candidate.lane === "work" && (status === "in-progress" || status === "in_progress")) return 10;
-  if (candidate.lane === "work" && priority === "high" && status === "planned") return 20;
+  if (candidate.lane === "work" && (status === "in-progress" || status === "in_progress" || status === "active")) {
+    return 10;
+  }
+  if (candidate.lane === "work" && priority === "high" && (status === "planned" || status === "ready")) {
+    return 20;
+  }
   if (candidate.findings.length > 0 && candidate.lane === "work") return 30;
   if (candidate.lane === "captures") return 40;
-  if (candidate.lane === "work" && priority === "medium" && status === "planned") return 50;
-  if (candidate.lane === "work" && priority === "low" && status === "planned") return 60;
+  if (candidate.lane === "work" && priority === "medium" && (status === "planned" || status === "ready")) {
+    return 50;
+  }
+  if (candidate.lane === "work" && priority === "low" && (status === "planned" || status === "ready")) {
+    return 60;
+  }
   if (candidate.lane === "hygiene") return 70;
   return 80;
 }
@@ -1446,14 +1558,33 @@ function filterAndSelect(opts, candidates) {
   return { selected, total: filtered.length };
 }
 
-function readProjectInventory(opts, project) {
+function needsCaptureScan(opts) {
+  // Captures feed the captures lane; implemented-without-closure reclassifies into hygiene.
+  return opts.lanes.has("captures") || opts.lanes.has("hygiene");
+}
+
+function needsDirtyCriticalPathScan(opts) {
+  return opts.lanes.has("hygiene");
+}
+
+function readProjectInventory(opts, project, shared = {}) {
   const projectOpts = { ...opts, project };
   const work = readWorkItems(projectOpts);
-  const captures = readCaptures(projectOpts, work.activeCloses);
-  const dirtyCriticalPaths = dirtyCriticalPathCandidates(projectOpts);
+  let captures;
+  if (!needsCaptureScan(projectOpts)) {
+    captures = { candidates: [], skipped: [] };
+  } else if (shared.capturesByProject) {
+    captures = shared.capturesByProject.get(project) || { candidates: [], skipped: [] };
+  } else {
+    captures = readCaptures(projectOpts, work.activeCloses, shared.captureRecords || null);
+  }
+  const dirtyCriticalPaths = needsDirtyCriticalPathScan(projectOpts)
+    ? dirtyCriticalPathCandidates(projectOpts)
+    : [];
   const candidates = [...work.candidates, ...captures.candidates, ...dirtyCriticalPaths];
   const skipped = [...work.skipped, ...captures.skipped];
   return {
+    activeCloses: work.activeCloses,
     candidates,
     project,
     skipped,
@@ -1509,7 +1640,41 @@ function main() {
   }
 
   const projectSlugs = opts.allProjects ? listProjectSlugs(opts.vault) : [opts.project];
-  const projectInventories = projectSlugs.map((project) => readProjectInventory(opts, project));
+  let projectInventories;
+
+  if (opts.allProjects && needsCaptureScan(opts)) {
+    // Work first (for closes), then one vault-wide capture pass partitioned by project.
+    const workOnly = projectSlugs.map((project) => {
+      const projectOpts = { ...opts, project };
+      return { project, work: readWorkItems(projectOpts) };
+    });
+    const activeClosesByProject = new Map(
+      workOnly.map(({ project, work }) => [project, work.activeCloses]),
+    );
+    const capturesByProject = readCapturesForAllProjects(opts, projectSlugs, activeClosesByProject);
+    projectInventories = workOnly.map(({ project, work }) => {
+      const captures = capturesByProject.get(project) || { candidates: [], skipped: [] };
+      const dirtyCriticalPaths = needsDirtyCriticalPathScan(opts)
+        ? dirtyCriticalPathCandidates({ ...opts, project })
+        : [];
+      const candidates = [...work.candidates, ...captures.candidates, ...dirtyCriticalPaths];
+      const skipped = [...work.skipped, ...captures.skipped];
+      return {
+        candidates,
+        project,
+        skipped,
+        summary: {
+          slug: project,
+          candidates: candidates.length,
+          selected: 0,
+          skipped: skipped.length,
+        },
+      };
+    });
+  } else {
+    projectInventories = projectSlugs.map((project) => readProjectInventory(opts, project));
+  }
+
   const allCandidates = projectInventories.flatMap((inventory) => inventory.candidates);
   const allSkipped = projectInventories.flatMap((inventory) => inventory.skipped);
   const { selected, total } = filterAndSelect(opts, allCandidates);

@@ -186,15 +186,52 @@ run the inventory helper for that one project.
 every project upfront. First run the inventory helper across projects:
 
 ```bash
+# Prefer work-lane first for fast chooser (skip capture walk + repo evidence)
 node scripts/preflight-inventory.js \
-  --all-projects --vault <vault> --limit <n>
+  --all-projects --vault <vault> --limit <n> --lane work
 ```
 
-With `--all` or a "show all projects/work" request, add `--all`.
+With `--all` or a "show all projects/work" request, add `--all`. Only add
+`--lane captures` (and later hygiene) after the user narrows to projects that
+need unclaimed transcripts — avoid default all-lane global scans on large
+vaults.
 
 Cross-project discovery is vault-only. Do not pass the current repository as
 evidence for every project; if a legacy caller passes `--repo`, the helper must
 ignore repo evidence while `--all-projects` is active.
+
+### Inventory performance / degradation
+
+The helper used to hang on large vaults when office-hours requested global or
+all-lane discovery. Root causes (fixed in the helper, still matter for usage):
+
+- Work trees with 100+ **completed** items previously ran `skillwiki validate`
+  on every item; completed items are now skipped without validation.
+- `--lane work` previously still walked `raw/transcripts/` and ran
+  implemented-capture / dirty-critical-path logic; lane flags now short-circuit
+  those scans.
+- `--all-projects` previously re-read every transcript once per project; capture
+  scans now partition in one vault pass.
+- Repo evidence still indexes local checkouts — prefer vault-only discovery
+  until a single project is selected.
+
+**If the helper is still too slow or hangs:**
+
+1. Kill stuck `preflight-inventory.js` processes rather than stacking retries.
+2. Fall back to a **hand inventory**: list finance-related (or domain-related)
+   `projects/*/work` open statuses and, if needed, `raw/transcripts` task/bug
+   captures for those slugs only.
+3. Present the hand list as the chooser (do not auto-select).
+4. After the user picks **one** topic, run brain refresh + **project-scoped**
+   inventory only:
+
+```bash
+node scripts/preflight-inventory.js \
+  --project <slug> --vault <vault> --limit 15 --lane work
+# add --lane captures only if the topic is a capture; avoid --all on huge work trees
+```
+
+5. Document the degradation in the report `## Context` when used.
 
 Present a compact project chooser from the helper's `projects[]` summaries and
 the candidate list grouped by `project_slug`, then lane. Include enough detail

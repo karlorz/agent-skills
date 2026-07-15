@@ -180,10 +180,16 @@ write_work_spec "$WORK/2026-06-05-planned-high" planned high "Planned High"
 write_plan "$WORK/2026-06-05-planned-high"
 write_work_spec "$WORK/2026-06-05-in-progress" in-progress medium "In Progress"
 write_plan "$WORK/2026-06-05-in-progress"
+write_work_spec "$WORK/2026-06-05-ready-high" ready high "Ready High"
+write_plan "$WORK/2026-06-05-ready-high"
+write_work_spec "$WORK/2026-06-05-active-high" active high "Active High"
+write_plan "$WORK/2026-06-05-active-high"
 write_work_spec "$WORK/2026-06-05-proposed-legacy" proposed medium "Proposed Legacy"
 write_plan "$WORK/2026-06-05-proposed-legacy"
 write_work_spec "$WORK/2026-06-05-completed" completed medium "Completed"
 write_plan "$WORK/2026-06-05-completed"
+write_work_spec "$WORK/2026-06-05-done-alias" done medium "Done Alias"
+write_plan "$WORK/2026-06-05-done-alias"
 write_work_spec "$WORK/2026-06-05-spec-only" planned medium "Spec Only"
 write_work_spec "$OTHER_WORK/2026-06-05-other-planned-high" planned high "Other Planned High" other-project
 write_plan "$OTHER_WORK/2026-06-05-other-planned-high"
@@ -209,9 +215,12 @@ assert_json "$all_json" '
   const ids = data.candidates.map((candidate) => candidate.id);
   assert(ids.includes("2026-06-05-planned-high"), "planned work missing");
   assert(ids.includes("2026-06-05-in-progress"), "in-progress work missing");
+  assert(ids.includes("2026-06-05-ready-high"), "ready work missing");
+  assert(ids.includes("2026-06-05-active-high"), "active work missing");
   assert(ids.includes("2026-06-05-proposed-legacy"), "legacy proposed work missing");
   assert(data.candidates.find((candidate) => candidate.id === "2026-06-05-proposed-legacy").repairable === true, "legacy proposed should be repairable");
   assert(!ids.includes("2026-06-05-completed"), "completed work should be skipped");
+  assert(!ids.includes("2026-06-05-done-alias"), "done-status work should be skipped like completed");
   assert(!ids.includes("_archive"), "archive container should be skipped");
   assert(!ids.includes("2026-06-05-history-item"), "history work should be ignored");
   assert(ids.includes("2026-06-05-task-agent-skills"), "project task capture missing");
@@ -380,6 +389,9 @@ assert_json "$limited_mixed_json" '
 work_json="$(run_inventory --all --lane work)"
 assert_json "$work_json" '
   assert(data.candidates.every((candidate) => candidate.lane === "work"), "lane work should exclude non-work candidates");
+  assert(!data.skipped.some((item) => item.lane === "captures"), "lane work should not scan capture transcripts");
+  assert(!data.candidates.some((candidate) => candidate.findings.includes("possibly_implemented_without_closure")), "lane work should not run implemented-capture evidence");
+  assert(!data.candidates.some((candidate) => String(candidate.id).startsWith("dirty-critical-path-")), "lane work should not run dirty critical-path detection");
 '
 
 captures_json="$(run_inventory --all --lane captures)"
