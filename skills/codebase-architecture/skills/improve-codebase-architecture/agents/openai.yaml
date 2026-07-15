@@ -1,0 +1,5 @@
+interface:
+  display_name: "Improve Codebase Architecture"
+  short_description: "Find deepening opportunities; HTML or offline Markdown report in temp; then grill."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Architecture to Spec"
+  short_description: "Turn architecture analysis or design conversation into a PRD/spec without interviewing."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Codebase Architecture Analyze"
+  short_description: "Analyze and extract architecture docs (wiki-first or docs/architecture) with C4, ADRs, and reimplementation blueprints."

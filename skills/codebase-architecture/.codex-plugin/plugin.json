@@ -1,0 +1,26 @@
+{
+  "name": "codebase-architecture",
+  "version": "0.1.1",
+  "description": "Codebase analysis and reimplementation skill chain: router, deep-module design vocabulary, architecture analyze/extract (wiki-first markdown to projects/{slug}/architecture else repo docs/architecture), deepening HTML/MD reviews, and architecture-to-spec PRDs. Distilled from mattpocock design skills + architecture-explainer playbook. v0.1.1: vocabulary fix (module extracts), YAGNI improve, C4 evidence, slug algorithm, router skill, Codex openai.yaml.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "architecture",
+    "codebase",
+    "c4",
+    "adr",
+    "reimplementation",
+    "deep-module",
+    "seam",
+    "topology",
+    "to-spec",
+    "skillwiki",
+    "analyze",
+    "extract",
+    "codex",
+    "codex-app"
+  ],
+  "skills": "./skills/"
+}
