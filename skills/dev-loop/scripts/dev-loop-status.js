@@ -217,9 +217,9 @@ function globMatch(relPath, pattern) {
   return re.test(norm);
 }
 
-function anyGlobMatch(files, patterns) {
+function anyGlobMatch(file, patterns) {
   if (!patterns || patterns.length === 0) return false;
-  return files.some((f) => patterns.some((p) => globMatch(f, p)));
+  return patterns.some((pattern) => globMatch(file, pattern));
 }
 
 function gitLines(repo, args) {
@@ -332,7 +332,7 @@ function browserVerifyPreview(repo, configRaw, missingOptional) {
     return { would_run: false, reason: "browser_verification.trigger empty — gate skipped" };
   }
   const changed = collectChangedFiles(repo);
-  const matched = changed.filter((f) => triggers.some((p) => globMatch(f, p)));
+  const matched = changed.filter((file) => anyGlobMatch(file, triggers));
   if (matched.length === 0) {
     return {
       would_run: false,

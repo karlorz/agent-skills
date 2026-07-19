@@ -50,6 +50,39 @@ if ((j.pipeline_preview.merge.failed_gates || []).includes("ci_configured")) thr
 process.stdout.write("ok-none-layer\n");
 '
 
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-release
+release_branch: main
+knowledge_layer: none
+prd_layer: manual
+publish_via: ci-tag-trigger
+release_policy:
+  auto_bump: true
+  trigger_globs:
+    - "src/**"
+  skip_globs:
+    - "*.md"
+```
+EOF
+git -C "$TMP" tag v0.0.1
+mkdir -p "$TMP/src"
+echo changed > "$TMP/src/changed.js"
+git -C "$TMP" add src/changed.js
+git -C "$TMP" commit -q -m "change after tag"
+
+OUT_RELEASE="$(node "$STATUS_JS" --repo "$TMP" --project test-release --format json --no-write 2>/dev/null)" || fail "status script failed on post-tag release preview"
+echo "$OUT_RELEASE" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.pipeline_preview.release.would_publish !== true) {
+  throw new Error(`expected matching post-tag change to trigger release: ${JSON.stringify(j.pipeline_preview.release)}`);
+}
+if (!(j.pipeline_preview.release.matched_files || []).includes("src/changed.js")) {
+  throw new Error(`expected changed path in release preview: ${JSON.stringify(j.pipeline_preview.release)}`);
+}
+process.stdout.write("ok-release-preview\n");
+'
+
 NESTED_REPO="$TMP/nested-repo"
 NESTED_HOME="$TMP/nested-home"
 mkdir -p "$NESTED_REPO/.claude"
