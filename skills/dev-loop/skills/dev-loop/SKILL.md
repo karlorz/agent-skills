@@ -261,6 +261,10 @@ valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 
 **Config migrate (read-only):** `node skills/dev-loop/scripts/dev-loop-config-migrate.js --repo <cwd>` — compares legacy top-level `vault:` to `knowledge_backends.skillwiki.vault`; suggests YAML fragments (`dev-loop-config-migrate.v1`). Reports under `.claude/dev-loop/migrate/` unless `--no-write`.
 
+**Write preflight (read-only):** `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent commit|push|write` — deterministic git common-dir/worktree identity, branch, detached HEAD, submodule state, and task-sandbox ownership. Exit 0 only when the intended mutation is allowed; refuses release-branch commits/pushes when repository policy forbids them (`dev-loop-write-preflight.v1`).
+
+**Verification + dispatch (read-only):** `node skills/dev-loop/scripts/dev-loop-verification-dispatch.js --repo <cwd>` — typed verification commands vs scripts (with timeouts) and capability-driven spawn/wait/cleanup/model/isolation plans. Non-Claude platforms must not require Claude-only tools (`dev-loop-verification-dispatch.v1`).
+
 **Operator dashboard (read-only):** `node skills/dev-loop/scripts/dev-loop-dashboard.js --repo <cwd>` — aggregates newest status, config-lint, migrate artifacts plus `~/.claude/dev-loop/last-doctor.json` (`dev-loop-dashboard.v1`). Optional `--refresh` runs missing probes with `--no-write`. Reports under `.claude/dev-loop/dashboard/` unless `--no-write`.
 
 **Read-only deny-list:** same as status mode — no implementation or vault mutations.
@@ -1524,7 +1528,18 @@ MERGE has two sub-steps: **commit** (always when code changed) and
 - No code changes were committed this cycle (vault-only, git-only, trivial fast-path with no LOC changes)
 - `prd_pipeline` is `manual` (user drives everything)
 
-Before either sub-step, resolve the route from `MERGE_POLICY.strategy`:
+Before either sub-step, run write preflight and resolve the route from
+`MERGE_POLICY.strategy`:
+
+```
+node skills/dev-loop/scripts/dev-loop-write-preflight.js \
+  --repo <cwd> --intent commit --format json
+```
+
+Refuse the write cycle when `allowed` is false (release-branch policy,
+detached HEAD for push, dirty submodules, missing sandbox ownership, or
+feature-branch requirement). On detached HEAD, commit in place only and
+hand off push/PR to the host App controls (see `references/codex-tools.md`).
 
 - `repo-policy` on `release_branch`: allow commit followed by direct push.
 - `repo-policy` on a feature branch: allow commit followed by PR creation.

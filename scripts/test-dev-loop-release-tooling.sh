@@ -429,6 +429,12 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop dashboard script" "$prompt" 'dev-loop-dashboard.js'
   assert_contains "dev-loop dashboard mode" "$prompt" 'MODE = dashboard'
   assert_contains "dev-loop why-skipped script" "$prompt" 'dev-loop-why-skipped.js'
+  assert_contains "dev-loop write preflight script" "$prompt" 'dev-loop-write-preflight.js'
+  assert_contains "dev-loop verification dispatch script" "$prompt" 'dev-loop-verification-dispatch.js'
+  [ -f "$ROOT/skills/dev-loop/scripts/dev-loop-verification-dispatch.js" ] ||
+    fail "skills/dev-loop/scripts/dev-loop-verification-dispatch.js missing"
+  [ -f "$ROOT/skills/dev-loop/scripts/dev-loop-write-preflight.js" ] ||
+    fail "skills/dev-loop/scripts/dev-loop-write-preflight.js missing"
   assert_contains "dev-loop status read-only deny" "$prompt" 'Read-only deny-list'
   assert_contains "dev-loop resolves preflight policy" "$prompt" 'PREFLIGHT_POLICY'
   assert_contains "dev-loop gates automation readiness" "$prompt" 'automation_ready'
@@ -832,6 +838,8 @@ run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 
 bash "$ROOT/scripts/test-dev-loop-config-schema.sh"
+bash "$ROOT/scripts/test-dev-loop-write-preflight.sh"
+bash "$ROOT/scripts/test-dev-loop-verification-dispatch.sh"
 bash "$ROOT/scripts/test-dev-loop-config-lint.sh"
 bash "$ROOT/scripts/test-dev-loop-status.sh"
 bash "$ROOT/scripts/test-dev-loop-config-migrate.sh"

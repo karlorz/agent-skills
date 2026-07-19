@@ -93,6 +93,51 @@ TOP_LEVEL_SCHEMA = mapping(
                 "direct_push_to_release_branch": BOOLEAN,
                 "pr_fallback": STRING,
                 "branch_protection_required": BOOLEAN,
+                "feature_branch_pattern": NULLABLE_STRING,
+                "require_feature_branch": BOOLEAN,
+                "release_branch": NULLABLE_STRING,
+            }
+        ),
+        "worktree_policy": mapping(
+            {
+                "required": BOOLEAN,
+                "release_branch": NULLABLE_STRING,
+                "feature_branch_pattern": NULLABLE_STRING,
+                "allow_detached": BOOLEAN,
+                "allow_submodules": BOOLEAN,
+                "sandbox_root": NULLABLE_STRING,
+                "enforce_before_write": BOOLEAN,
+            }
+        ),
+        "task_sandbox": mapping(
+            {
+                "required": BOOLEAN,
+                "owner": NULLABLE_STRING,
+                "root": NULLABLE_STRING,
+                "allow_shared": BOOLEAN,
+                "isolation": NULLABLE_STRING,
+                "ownership_file": NULLABLE_STRING,
+            }
+        ),
+        "verification": mapping(
+            {
+                "commands": list_of(JSON_VALUE),
+                "scripts": list_of(JSON_VALUE),
+                "timeout_seconds": INTEGER,
+                "required": BOOLEAN,
+                "allow_failure": BOOLEAN,
+            }
+        ),
+        "dispatch": mapping(
+            {
+                "platforms": JSON_VALUE,
+                "spawn": JSON_VALUE,
+                "wait": JSON_VALUE,
+                "cleanup": JSON_VALUE,
+                "model": NULLABLE_STRING,
+                "isolation": NULLABLE_STRING,
+                "capabilities": STRING_LIST,
+                "fallback": JSON_VALUE,
             }
         ),
         "prd_layer": STRING,
