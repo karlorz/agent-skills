@@ -500,11 +500,15 @@ function dependencyRefs(section) {
     const kind = line.match(/^\s*-\s+kind:\s*(\S+)/);
     if (kind) {
       if (current && current.kind && current.ref) entries.push(current);
-      current = { kind: kind[1], ref: "" };
+      current = { kind: kind[1], ref: "", capability: "", used_by: "" };
       continue;
     }
     const ref = line.match(/^\s+ref:\s*(\S+)/);
     if (ref && current) current.ref = ref[1];
+    const capability = line.match(/^\s+capability:\s*(.+?)\s*$/);
+    if (capability && current) current.capability = capability[1].replace(/^['"]|['"]$/g, "");
+    const usedBy = line.match(/^\s+used_by:\s*(.+?)\s*$/);
+    if (usedBy && current) current.used_by = usedBy[1];
   }
   if (current && current.kind && current.ref) entries.push(current);
   return entries;
@@ -575,26 +579,29 @@ function probeDependency(entry, repo) {
   return false;
 }
 
-function missingDependencies(section, repo) {
-  return dependencyRefs(section)
-    .filter((entry) => !probeDependency(entry, repo))
-    .map((entry) => entry.ref);
-}
-
 function probeDependencies(repo) {
   const manifestPath = path.join(repo, "skills", "dev-loop", "dependencies.yaml");
   if (!fileExists(manifestPath)) {
     return { dep_status: "unknown", missing_required: [], missing_optional: [], note: "dependencies.yaml not found" };
   }
   const text = readText(manifestPath);
+  const missingRequired = [];
   const reqSection = text.split(/^optional:/m)[0];
   const optSection = text.split(/^optional:/m)[1] || "";
-  const missingRequired = missingDependencies(reqSection, repo);
-  const missingOptional = missingDependencies(optSection, repo);
+  for (const entry of dependencyRefs(reqSection)) {
+    if (!probeDependency(entry, repo)) missingRequired.push(entry.ref);
+  }
+  const missingOptionalEntries = dependencyRefs(optSection).filter((entry) => !probeDependency(entry, repo));
+  const missingOptional = missingOptionalEntries.map((entry) => entry.ref);
   let dep_status = "healthy";
   if (missingRequired.length > 0) dep_status = "broken";
   else if (missingOptional.length > 0) dep_status = "degraded";
-  return { dep_status, missing_required: missingRequired, missing_optional: missingOptional };
+  return {
+    dep_status,
+    missing_required: missingRequired,
+    missing_optional: missingOptional,
+    missing_optional_entries: missingOptionalEntries,
+  };
 }
 
 function readLastDoctor() {
@@ -723,6 +730,80 @@ function pipelineSteps(flat) {
   return map[pipeline] || map.full;
 }
 
+function previewOperations(nextAction, flat, browserVerify) {
+  if (nextAction === "idle") return ["IDLE"];
+  if (nextAction === "investigate") return ["INVESTIGATE"];
+  if (nextAction === "prep") return ["PREP", "QUERY", "WORK"];
+  if (nextAction === "status") return ["STATUS", "REFRESH"];
+  if (nextAction !== "core") return [];
+  const operations = pipelineSteps(flat).map((step) => step.toUpperCase());
+  if (browserVerify.would_run || (browserVerify.matched_files || []).length > 0) {
+    operations.push("BROWSER-VERIFY");
+  }
+  return operations;
+}
+
+function configBlock(raw, key) {
+  if (!raw) return "";
+  const match = raw.match(new RegExp(`^${key}:\\s*\\n((?:[ \\t]+.*(?:\\n|$))*)`, "m"));
+  return match ? match[1] : "";
+}
+
+function codeReviewBackendEnabled(raw, backend, intensity) {
+  const block = configBlock(raw, "code_review");
+  const lines = block.split(/\r?\n/);
+  let inBackend = false;
+  for (const line of lines) {
+    const section = line.match(/^\s{2}([A-Za-z0-9_-]+):\s*$/);
+    if (section) inBackend = section[1] === backend;
+    if (inBackend && new RegExp(`^\\s{4,}enabled_in_${intensity}:\\s*true\\s*$`).test(line)) return true;
+  }
+  return false;
+}
+
+function prdDisciplineConfigured(raw, ref) {
+  return configBlock(raw, "prd_disciplines").includes(`skill: ${ref}`);
+}
+
+function optionalDependencyRelevant(entry, operations, context) {
+  if (!entry.used_by || !operations.some((operation) => entry.used_by.toUpperCase().includes(operation))) {
+    return false;
+  }
+  if (["codex_code_review_backend", "codex_code_review_wrapper"].includes(entry.capability)) {
+    return codeReviewBackendEnabled(context.configRaw, "codex", context.intensity);
+  }
+  if (entry.capability === "execute_with_subagent_dispatch_adapter" && context.prdLayer !== "superpowers") {
+    return false;
+  }
+  if (entry.capability === "tdd_discipline") {
+    return context.prdLayer === "superpowers" && prdDisciplineConfigured(context.configRaw, entry.ref);
+  }
+  if (entry.capability === "reactive_debugging") return false;
+  if (entry.ref === "superpowers:requesting-code-review") {
+    return context.prdLayer === "superpowers" && context.prdPipeline === "tdd-first";
+  }
+  if (entry.ref.startsWith("superpowers:") && context.prdLayer !== "superpowers") return false;
+  if (entry.ref.startsWith("skillwiki:") && context.knowledgeLayer !== "skillwiki") return false;
+  if (entry.capability === "browser_verify" && !operations.includes("BROWSER-VERIFY")) return false;
+  if (entry.capability === "deep_research") {
+    return operations.includes("INVESTIGATE") && context.intensity === "high";
+  }
+  return true;
+}
+
+function healthState(reasons) {
+  if (reasons.some((reason) => reason.severity === "blocked")) return "blocked";
+  if (reasons.some((reason) => reason.severity === "degraded")) return "degraded";
+  return "healthy";
+}
+
+function lifecycleReason(nextAction, wouldPick, blockers) {
+  if (blockers.length > 0) return blockers[0].detail;
+  if (wouldPick) return `Would pick work item ${wouldPick}`;
+  if (nextAction === "idle") return "No claimable work in preview";
+  return `Would run ${nextAction} preview`;
+}
+
 function buildReport(opts) {
   const repo = opts.repo;
   const cfg = loadDevLoopConfig(repo);
@@ -803,6 +884,18 @@ function buildReport(opts) {
   const ciConfigured = flat.ci_configured === true;
   const release = releasePreview(repo, flat, cfg.raw);
   const browserVerify = browserVerifyPreview(repo, cfg.raw, depsInline.missing_optional);
+  const operations = previewOperations(nextAction, flat, browserVerify);
+  const relevantMissingOptional = (depsInline.missing_optional_entries || [])
+    .filter((entry) =>
+      optionalDependencyRelevant(entry, operations, {
+        configRaw: cfg.raw,
+        intensity: opts.intensity,
+        knowledgeLayer,
+        prdLayer: flat.prd_layer || "superpowers",
+        prdPipeline: flat.prd_pipeline || "full",
+      }),
+    )
+    .map((entry) => entry.ref);
   const mergePolicy = parseMergePolicyFromConfig(cfg.raw);
   const selectedWork = workReadiness.find((work) => work.id === wouldPick);
   const workItemApproved = selectedWork?.merge_auto_approved === true;
@@ -826,11 +919,25 @@ function buildReport(opts) {
   // runtime MERGE gate may remove this only for an exact `healthy` result.
   autoMergeFailedGates.push("ci_health:healthy");
 
-  let overallState = "healthy";
-  if (blockers.length > 0) overallState = "blocked";
-  else if (depStatus === "degraded" || depsInline.missing_optional.length > 0 || vaultInfo.warning) {
-    overallState = "degraded";
+  const healthReasons = blockers.map((blocker) => ({ ...blocker, severity: "blocked" }));
+  if (relevantMissingOptional.length > 0) {
+    healthReasons.push({
+      code: "missing_relevant_optional_deps",
+      severity: "degraded",
+      detail: relevantMissingOptional.join(", "),
+    });
   }
+  if (vaultInfo.configured && vaultInfo.warning) {
+    healthReasons.push({ code: "vault_warning", severity: "degraded", detail: vaultInfo.warning });
+  }
+  const effectiveDepStatus =
+    depsInline.missing_required.length > 0 ? "broken" : relevantMissingOptional.length > 0 ? "degraded" : "healthy";
+  const health = { state: healthState(healthReasons), reasons: healthReasons };
+  const lifecycle = {
+    state: nextAction === "idle" ? "idle" : "active",
+    next_action: nextAction,
+    reason: lifecycleReason(nextAction, wouldPick, blockers),
+  };
 
   const recommendations = [];
   if (drift.state === "drifted_stale") recommendations.push("Run `/reload-plugins` then re-run `/dev-loop status`.");
@@ -840,8 +947,8 @@ function buildReport(opts) {
   if (nextAction === "idle") {
     recommendations.push("No claimable work — next core cycle would run IDLE DISCOVERY (maintenance + research-worker).");
   }
-  if (depsInline.missing_optional.length > 0) {
-    recommendations.push(`Optional deps missing (degraded): ${depsInline.missing_optional.slice(0, 3).join(", ")}`);
+  if (relevantMissingOptional.length > 0) {
+    recommendations.push(`Relevant optional deps missing (degraded): ${relevantMissingOptional.slice(0, 3).join(", ")}`);
   }
   if (recommendations.length === 0) {
     recommendations.push(wouldPick ? `Run \`/dev-loop\` to pick ${wouldPick}` : "Re-run `/dev-loop status` before a write cycle");
@@ -855,10 +962,11 @@ function buildReport(opts) {
     writes_executed: false,
     project: { slug, repo, release_branch: releaseBranch },
     overall: {
-      state: overallState,
-      next_action: nextAction,
-      reason: blockers[0]?.detail || (wouldPick ? `Would pick work item ${wouldPick}` : "No claimable work in preview"),
+      state: health.state,
+      next_action: lifecycle.next_action,
+      reason: health.reasons[0]?.detail || lifecycle.reason,
     },
+    lifecycle,
     mode: {
       requested: "status",
       intensity: opts.intensity,
@@ -874,9 +982,12 @@ function buildReport(opts) {
       dispatch_mode: "unknown",
     },
     health: {
+      ...health,
       dep_status: depStatus,
+      effective_dep_status: effectiveDepStatus,
       missing_required: depsInline.missing_required,
       missing_optional: depsInline.missing_optional,
+      relevant_missing_optional: relevantMissingOptional,
       compact_count: compactCount,
       last_doctor_present: lastDoctor.present,
       skill_cache: drift,
@@ -945,8 +1056,9 @@ function renderMarkdown(json) {
   lines.push(`# Dev Loop Status — ${json.project.slug}`);
   lines.push("");
   lines.push("## Summary");
-  lines.push(`- Overall state: **${json.overall.state}**`);
-  lines.push(`- Next action: **${json.overall.next_action}**`);
+  lines.push(`- Health state: **${json.health.state}**`);
+  lines.push(`- Lifecycle state: **${json.lifecycle.state}**`);
+  lines.push(`- Next action: **${json.lifecycle.next_action}**`);
   lines.push(`- Reason: ${json.overall.reason}`);
   lines.push(`- Read-only: ${json.read_only} (no vault/git/PR/release writes executed)`);
   lines.push("");
@@ -964,8 +1076,10 @@ function renderMarkdown(json) {
   lines.push("");
   lines.push("## Dependency / Environment Health");
   lines.push(`- dep_status: ${json.health.dep_status}`);
+  lines.push(`- effective dep_status: ${json.health.effective_dep_status}`);
   lines.push(`- missing required: ${json.health.missing_required.join(", ") || "(none)"}`);
   lines.push(`- missing optional: ${json.health.missing_optional.join(", ") || "(none)"}`);
+  lines.push(`- relevant missing optional: ${json.health.relevant_missing_optional.join(", ") || "(none)"}`);
   lines.push(`- compact_count: ${json.health.compact_count === null ? "unknown" : json.health.compact_count}`);
   lines.push(`- skill cache: ${json.health.skill_cache.state}`);
   if (json.health.skill_cache.detail) lines.push(`  - ${json.health.skill_cache.detail}`);

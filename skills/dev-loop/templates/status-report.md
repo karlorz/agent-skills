@@ -2,10 +2,14 @@
 
 ## Summary
 
-- Overall state: {{overall_state}}
-- Next action: {{next_action}}
+- Health state: {{health_state}}
+- Lifecycle state: {{lifecycle_state}}
+- Next action: {{lifecycle_next_action}}
 - Reason: {{reason}}
 - Read-only: true (no writes executed)
+
+`overall.state` and `overall.next_action` remain compatibility projections of
+the independent health and lifecycle fields.
 
 ## Mode Parse
 
@@ -22,6 +26,9 @@
 ## Dependency / Environment Health
 
 - dep_status: {{dep_status}}
+- effective_dep_status: {{effective_dep_status}}
+- relevant_missing_optional: {{relevant_missing_optional}}
+- health reasons: {{health_reasons}}
 - compact_count: {{compact_count}}
 - skill cache: {{skill_cache_state}}
 

@@ -117,10 +117,16 @@ cat > "$NESTED_REPO/skills/dev-loop/dependencies.yaml" <<'EOF'
 optional:
   - kind: agent
     ref: dev-loop:research-worker
+    capability: research_scan
+    used_by: ["IDLE step 4"]
   - kind: agent
     ref: playwright-cli:browser-worker
+    capability: browser_verify
+    used_by: ["BROWSER-VERIFY step 6a"]
   - kind: agent
-    ref: missing:ghost-worker
+    ref: missing:browser-worker
+    capability: browser_verify
+    used_by: ["BROWSER-VERIFY step 6a"]
 EOF
 
 OUT_NESTED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)" || fail "nested-layout status failed"
@@ -135,9 +141,83 @@ if (!j.health.skill_cache.cache_path.endsWith("/skills/dev-loop/SKILL.md")) {
 const missing = j.health.missing_optional;
 if (missing.includes("dev-loop:research-worker")) throw new Error("self agent false negative");
 if (missing.includes("playwright-cli:browser-worker")) throw new Error("cached agent false negative");
-if (!missing.includes("missing:ghost-worker")) throw new Error("genuine missing agent not reported");
+if (!missing.includes("missing:browser-worker")) throw new Error("genuine missing agent not reported");
 if (j.health.dep_status !== "degraded") throw new Error("genuine optional miss must degrade");
+if (j.health.state !== "healthy") throw new Error(`irrelevant optional miss must not degrade health: ${JSON.stringify(j.health)}`);
+if ((j.health.relevant_missing_optional || []).length !== 0) throw new Error("irrelevant optional miss classified relevant");
+if ((j.health.reasons || []).length !== 0) throw new Error("healthy state must have no reasons");
+if (j.lifecycle?.state !== "idle" || j.lifecycle?.next_action !== "idle") {
+  throw new Error(`expected independent idle lifecycle: ${JSON.stringify(j.lifecycle)}`);
+}
+if (j.overall.state !== j.health.state || j.overall.next_action !== j.lifecycle.next_action) {
+  throw new Error("overall must project health and lifecycle");
+}
 process.stdout.write("ok-nested-cache\n");
+'
+
+cat > "$NESTED_REPO/skills/dev-loop/dependencies.yaml" <<'EOF'
+optional:
+  - kind: agent
+    ref: missing:research-worker
+    capability: research_scan
+    used_by: ["IDLE step 4"]
+EOF
+
+OUT_RELEVANT="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)" || fail "relevant optional status failed"
+echo "$OUT_RELEVANT" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.health.state !== "degraded") throw new Error(`relevant optional miss must degrade: ${JSON.stringify(j.health)}`);
+if (!(j.health.relevant_missing_optional || []).includes("missing:research-worker")) {
+  throw new Error("relevant optional dependency not classified");
+}
+const reason = (j.health.reasons || []).find((item) => item.code === "missing_relevant_optional_deps");
+if (!reason || reason.severity !== "degraded" || !reason.detail.includes("missing:research-worker")) {
+  throw new Error(`missing structured degradation reason: ${JSON.stringify(j.health.reasons)}`);
+}
+if (j.lifecycle?.state !== "idle" || j.lifecycle?.next_action !== "idle") {
+  throw new Error("health degradation must not change idle lifecycle");
+}
+process.stdout.write("ok-relevant-optional\n");
+'
+
+OUT_STATUS_MODE="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --preview-mode status --format json --no-write 2>/dev/null)" || fail "explicit status preview failed"
+echo "$OUT_STATUS_MODE" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.lifecycle?.state !== "active" || j.lifecycle?.next_action !== "status") {
+  throw new Error(`explicit preview must be active: ${JSON.stringify(j.lifecycle)}`);
+}
+if (!j.lifecycle.reason.includes("status")) throw new Error(`lifecycle reason must name requested action: ${j.lifecycle.reason}`);
+process.stdout.write("ok-explicit-lifecycle\n");
+'
+
+OUT_MARKDOWN="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format markdown --no-write 2>/dev/null)" || fail "markdown status failed"
+grep -q -- "- Health state: \*\*degraded\*\*" <<<"$OUT_MARKDOWN" || fail "markdown missing independent health state"
+grep -q -- "- Lifecycle state: \*\*idle\*\*" <<<"$OUT_MARKDOWN" || fail "markdown missing independent lifecycle state"
+
+cat > "$NESTED_REPO/skills/dev-loop/dependencies.yaml" <<'EOF'
+required:
+  - kind: skill
+    ref: missing:required-skill
+    capability: create_work_item
+    used_by: ["WORK step 2"]
+optional: []
+EOF
+
+set +e
+OUT_BLOCKED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)"
+BLOCKED_EXIT=$?
+set -e
+[[ "$BLOCKED_EXIT" -eq 1 ]] || fail "blocked status must exit 1, got $BLOCKED_EXIT"
+echo "$OUT_BLOCKED" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.health.state !== "blocked") throw new Error(`required miss must block health: ${JSON.stringify(j.health)}`);
+if (j.lifecycle?.state !== "active" || j.lifecycle?.next_action !== "blocked") {
+  throw new Error(`blocked operation must retain active lifecycle: ${JSON.stringify(j.lifecycle)}`);
+}
+if (j.overall.state !== "blocked" || j.overall.next_action !== "blocked" || j.overall.reason !== j.health.reasons[0].detail) {
+  throw new Error("blocked overall projection mismatch");
+}
+process.stdout.write("ok-blocked-lifecycle\n");
 '
 
 VAULT="$TMP/wiki"
@@ -168,6 +248,103 @@ title: Skip item
 status: planned
 ---
 EOF
+
+mkdir -p "$TMP/skills/dev-loop"
+cat > "$TMP/skills/dev-loop/dependencies.yaml" <<'EOF'
+optional:
+  - kind: agent
+    ref: codex:codex-rescue
+    capability: codex_code_review_backend
+    used_by: ["REVIEW step 6 when code_review.codex.enabled_in_<intensity>: true"]
+  - kind: agent
+    ref: dev-loop:codex-review-worker
+    capability: codex_code_review_wrapper
+    used_by: ["REVIEW step 6 when codex backend enabled"]
+  - kind: agent
+    ref: dev-loop:sdd-execute-worker
+    capability: execute_with_subagent_dispatch_adapter
+    used_by: ["EXECUTE step 5 preferred subagent adapter"]
+  - kind: skill
+    ref: superpowers:test-driven-development
+    capability: tdd_discipline
+    used_by: ["EXECUTE step 5 when prd_disciplines declares it"]
+  - kind: skill
+    ref: deep-research:deep-research
+    capability: deep_research
+    used_by: ["IDLE step 4.5", "INVESTIGATE step 3"]
+EOF
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: agent-skills
+release_branch: main
+knowledge_layer: none
+prd_layer: manual
+prd_pipeline: full
+```
+EOF
+
+OUT_DISABLED_CAPS="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$TMP" --vault "$VAULT" --project agent-skills --format json --no-write --orchestration goal 2>/dev/null)" || fail "disabled capability status failed"
+echo "$OUT_DISABLED_CAPS" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.lifecycle.next_action !== "core") throw new Error("fixture must preview core");
+if (j.health.state !== "healthy") throw new Error(`disabled capabilities must not degrade: ${JSON.stringify(j.health)}`);
+if ((j.health.relevant_missing_optional || []).length !== 0) {
+  throw new Error(`disabled capabilities classified relevant: ${JSON.stringify(j.health.relevant_missing_optional)}`);
+}
+process.stdout.write("ok-disabled-capabilities\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: agent-skills
+release_branch: main
+knowledge_layer: none
+prd_layer: manual
+prd_pipeline: full
+idle_deep_research:
+  enabled: true
+```
+EOF
+
+IDLE_VAULT="$TMP/idle-wiki"
+mkdir -p "$IDLE_VAULT"
+OUT_HIGH_IDLE="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$TMP" --vault "$IDLE_VAULT" --project agent-skills --intensity high --format json --no-write --orchestration goal 2>/dev/null)" || fail "high idle capability status failed"
+echo "$OUT_HIGH_IDLE" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.lifecycle.next_action !== "idle") throw new Error("fixture must preview idle");
+if ((j.health.relevant_missing_optional || []).includes("deep-research:deep-research")) {
+  throw new Error("deep research is not eligible from intensity alone");
+}
+process.stdout.write("ok-ineligible-deep-research\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: agent-skills
+release_branch: main
+knowledge_layer: none
+prd_layer: manual
+prd_pipeline: full
+code_review:
+  codex:
+    enabled_in_normal: true
+```
+EOF
+
+OUT_ENABLED_REVIEW="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$TMP" --vault "$VAULT" --project agent-skills --format json --no-write --orchestration goal 2>/dev/null)" || fail "enabled review status failed"
+echo "$OUT_ENABLED_REVIEW" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const relevant = j.health.relevant_missing_optional || [];
+for (const ref of ["codex:codex-rescue", "dev-loop:codex-review-worker"]) {
+  if (!relevant.includes(ref)) throw new Error(`enabled Codex backend missing relevance: ${ref}`);
+}
+if (relevant.includes("dev-loop:sdd-execute-worker") || relevant.includes("superpowers:test-driven-development")) {
+  throw new Error(`non-Superpowers capabilities must remain irrelevant: ${JSON.stringify(relevant)}`);
+}
+if (j.health.state !== "degraded") throw new Error("enabled missing review backend must degrade");
+process.stdout.write("ok-enabled-review-capability\n");
+'
 
 cat > "$TMP/.claude/dev-loop.config.md" <<EOF
 \`\`\`yaml

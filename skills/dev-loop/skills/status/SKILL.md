@@ -35,6 +35,21 @@ Parent `dev-loop` sets `MODE = status` when args contain `status` or `doctor` (a
    (gitignored). Use `--no-write` for stdout-only.
 4. **EXIT** — before WORK, SPEC, PLAN, EXECUTE, REVIEW, MERGE, SAVE, PUSH, DEPLOY.
 
+The `dev-loop-status.v1` report keeps two independent dimensions:
+
+- `health.state` (`healthy`, `degraded`, or `blocked`) and structured
+  `health.reasons` explain environment and capability readiness. The report
+  retains all observed optional gaps in `health.missing_optional`, but only
+  gaps relevant to the configured preview operation appear in
+  `health.relevant_missing_optional` and lower health.
+- `lifecycle.state` (`idle` or `active`), `lifecycle.next_action`, and
+  `lifecycle.reason` describe work selection and the requested preview. A
+  blocked operation remains active while its health is blocked.
+
+For compatibility, `overall.state`, `overall.next_action`, and `overall.reason`
+project the corresponding health/lifecycle values. Consumers should prefer the
+explicit fields for new integrations.
+
 Optional isolation: `dev-loop:status-worker` per `agents/status-worker.md`.
 
 ## CLI flags (helper)

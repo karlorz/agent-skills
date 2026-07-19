@@ -206,8 +206,14 @@ Optional Codex/Agent isolation: `Agent(subagent_type: "dev-loop:status-worker", 
 per `agents/status-worker.md` (inline `node` fallback when dispatch unavailable).
 
 **S2. REPORT:** Helper writes `dev-loop-status.v1` JSON and human Markdown per
-`templates/status-report.md` (sections in PRD). Treat missing vault as **degraded**
-for skillwiki projects, not fatal, unless `preview-mode` is `prep` or `investigate`.
+`templates/status-report.md` (sections in PRD). Reports expose independent
+`health` (`state`, structured `reasons`, observed and relevant dependency gaps)
+and `lifecycle` (`state`, `next_action`, `reason`) objects. Optional dependency
+gaps degrade health only when their declared capability participates in the
+configured preview operation. `overall` remains a compatibility projection of
+those objects. Treat a configured, unresolved vault as **degraded** for
+skillwiki projects, not fatal, unless `preview-mode` is `prep` or
+`investigate`; `knowledge_layer: none` is not itself a health failure.
 
 **Read-only deny-list (hard rule):** status mode must not create work items, edit
 spec/plan, append retros, `git commit`, `git push`, `gh pr create`, deploy, run
