@@ -360,4 +360,40 @@ assert.ok(result.errors.some(({ code }) => code === "parser_unavailable"));
 process.stdout.write("ok-parser-unavailable\n");
 NODE
 
+
+cat > "$TMP/live-keys.md" <<'EOF'
+```yaml
+slug: live-keys
+release_branch: main
+interview:
+  work_item:
+    default: native
+    upgrade: grill-me
+    source: mattpocock/skills
+    install: "npx skills add example"
+    trigger: auto
+    goal_override: never
+release_script: bash scripts/release.sh
+release_workflow: release.yml
+release_policy:
+  auto_bump: false
+  stable_release_guard: require-main
+```
+EOF
+LIVE_OUT="$TMP/live-keys.json"
+python3 "$SCHEMA" --file "$TMP/live-keys.md" >"$LIVE_OUT" ||
+  fail "live configuration keys were rejected"
+assert_contract_fields "$LIVE_OUT"
+node - "$LIVE_OUT" <<'NODE'
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const result = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+assert.deepEqual(result.errors, []);
+assert.equal(result.config.interview.work_item.default, "native");
+assert.equal(result.config.release_script, "bash scripts/release.sh");
+assert.equal(result.config.release_workflow, "release.yml");
+assert.equal(result.config.release_policy.stable_release_guard, "require-main");
+process.stdout.write("ok-live-config-keys\n");
+NODE
+
 printf 'test-dev-loop-config-schema: all checks passed\n'
