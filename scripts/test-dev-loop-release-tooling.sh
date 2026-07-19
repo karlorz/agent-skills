@@ -437,6 +437,7 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "project config includes unattended skip behavior" "$template" 'unattended_not_ready_behavior: skip'
   assert_contains "project config includes readiness state" "$template" 'preflight_state: ready'
   assert_contains "project config includes independent merge policy" "$template" 'merge_policy:'
+  assert_contains "project config uses repo policy strategy" "$template" 'strategy: repo-policy'
   assert_contains "project config defaults auto merge off" "$template" 'auto_merge: false'
   assert_contains "project config requires work-item merge approval" "$template" 'require_work_item_approval: true'
   assert_contains "setup separates merge authority from CI" "$setup" '**Section F2 — Merge authority.**'

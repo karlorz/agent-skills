@@ -43,8 +43,10 @@ const j = JSON.parse(fs.readFileSync(0, "utf8"));
 if (j.schema_version !== "dev-loop-status.v1") throw new Error("bad schema");
 if (j.read_only !== true || j.writes_executed !== false) throw new Error("read_only contract");
 if (j.project.slug !== "test-none") throw new Error("slug");
+if (j.pipeline_preview.merge.strategy !== "repo-policy") throw new Error("repo-policy must be canonical");
 if (j.pipeline_preview.merge.auto_merge_configured !== false) throw new Error("auto merge must default off");
 if (j.pipeline_preview.merge.auto_merge_eligible !== false) throw new Error("auto merge must fail closed");
+if ((j.pipeline_preview.merge.failed_gates || []).includes("ci_configured")) throw new Error("CI configuration is not merge authority");
 process.stdout.write("ok-none-layer\n");
 '
 
