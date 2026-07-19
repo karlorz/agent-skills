@@ -457,10 +457,6 @@ function probeSkillRef(ref, repo) {
   const parts = clean.split(":");
   const plugin = parts.length > 1 ? parts[0] : "";
   const name = parts.length > 1 ? parts[1] : parts[0];
-  if (plugin === "dev-loop" && repo) {
-    const agentPath = path.join(repo, "skills", "dev-loop", "agents", `${name}.md`);
-    if (fileExists(agentPath)) return true;
-  }
   const home = os.homedir();
   const candidates = [
     path.join(home, ".claude", "skills", plugin, name, "SKILL.md"),
@@ -487,6 +483,94 @@ function probeSkillRef(ref, repo) {
   return false;
 }
 
+function dependencyRefs(section) {
+  const entries = [];
+  let current = null;
+  for (const line of section.split(/\r?\n/)) {
+    const kind = line.match(/^\s*-\s+kind:\s*(\S+)/);
+    if (kind) {
+      if (current && current.kind && current.ref) entries.push(current);
+      current = { kind: kind[1], ref: "" };
+      continue;
+    }
+    const ref = line.match(/^\s+ref:\s*(\S+)/);
+    if (ref && current) current.ref = ref[1];
+  }
+  if (current && current.kind && current.ref) entries.push(current);
+  return entries;
+}
+
+function agentFileMatches(filePath, name) {
+  if (path.basename(filePath, ".md") === name) return true;
+  try {
+    return parseFrontmatter(readText(filePath)).name === name;
+  } catch {
+    return false;
+  }
+}
+
+function agentDirectoryMatches(directory, name) {
+  if (!fileExists(directory)) return false;
+  try {
+    return fs.readdirSync(directory, { withFileTypes: true }).some((entry) => {
+      if (!entry.isFile() || path.extname(entry.name) !== ".md") return false;
+      return agentFileMatches(path.join(directory, entry.name), name);
+    });
+  } catch {
+    return false;
+  }
+}
+
+function cachedAgentMatches(root, plugin, name) {
+  if (!plugin || !fileExists(root)) return false;
+  const stack = [root];
+  while (stack.length) {
+    const directory = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const full = path.join(directory, entry.name);
+      if (entry.name === "agents") {
+        const segments = path.relative(root, directory).split(path.sep);
+        if (segments.includes(plugin) && agentDirectoryMatches(full, name)) return true;
+        continue;
+      }
+      stack.push(full);
+    }
+  }
+  return false;
+}
+
+function probeAgentRef(ref, repo) {
+  const clean = ref.replace(/"/g, "");
+  const parts = clean.split(":");
+  const plugin = parts.length > 1 ? parts[0] : "";
+  const name = parts.length > 1 ? parts[1] : parts[0];
+  if (plugin === "dev-loop" && repo) {
+    const agentDirectory = path.join(repo, "skills", "dev-loop", "agents");
+    if (agentDirectoryMatches(agentDirectory, name)) return true;
+  }
+  const home = os.homedir();
+  const globalAgent = path.join(home, ".claude", "agents", `${name}.md`);
+  if (fileExists(globalAgent) && agentFileMatches(globalAgent, name)) return true;
+  const cacheRoots = [
+    path.join(home, ".claude", "plugins", "cache"),
+    path.join(home, ".codex", "plugins", "cache"),
+  ];
+  return cacheRoots.some((root) => cachedAgentMatches(root, plugin, name));
+}
+
+function probeDependency(entry, repo) {
+  if (entry.kind === "skill") return probeSkillRef(entry.ref, repo);
+  if (entry.kind === "agent") return probeAgentRef(entry.ref, repo);
+  return false;
+}
+
 function probeDependencies(repo) {
   const manifestPath = path.join(repo, "skills", "dev-loop", "dependencies.yaml");
   if (!fileExists(manifestPath)) {
@@ -497,13 +581,11 @@ function probeDependencies(repo) {
   const missingOptional = [];
   const reqSection = text.split(/^optional:/m)[0];
   const optSection = text.split(/^optional:/m)[1] || "";
-  for (const line of reqSection.split(/\r?\n/)) {
-    const m = line.match(/^\s+ref:\s*(\S+)/);
-    if (m && !probeSkillRef(m[1], repo)) missingRequired.push(m[1]);
+  for (const entry of dependencyRefs(reqSection)) {
+    if (!probeDependency(entry, repo)) missingRequired.push(entry.ref);
   }
-  for (const line of optSection.split(/\r?\n/)) {
-    const m = line.match(/^\s+ref:\s*(\S+)/);
-    if (m && !probeSkillRef(m[1], repo)) missingOptional.push(m[1]);
+  for (const entry of dependencyRefs(optSection)) {
+    if (!probeDependency(entry, repo)) missingOptional.push(entry.ref);
   }
   let dep_status = "healthy";
   if (missingRequired.length > 0) dep_status = "broken";
