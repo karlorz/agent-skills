@@ -452,11 +452,25 @@ function listWorkReadiness(vault, project) {
   return items;
 }
 
-function probeSkillRef(ref, repo) {
+function parseDependencyRef(ref) {
   const clean = ref.replace(/"/g, "");
   const parts = clean.split(":");
-  const plugin = parts.length > 1 ? parts[0] : "";
-  const name = parts.length > 1 ? parts[1] : parts[0];
+  return {
+    plugin: parts.length > 1 ? parts[0] : "",
+    name: parts.length > 1 ? parts[1] : parts[0],
+  };
+}
+
+function pluginCacheRoots() {
+  const home = os.homedir();
+  return [
+    path.join(home, ".claude", "plugins", "cache"),
+    path.join(home, ".codex", "plugins", "cache"),
+  ];
+}
+
+function probeSkillRef(ref, repo) {
+  const { plugin, name } = parseDependencyRef(ref);
   const home = os.homedir();
   const candidates = [
     path.join(home, ".claude", "skills", plugin, name, "SKILL.md"),
@@ -464,11 +478,7 @@ function probeSkillRef(ref, repo) {
     path.join(home, ".agents", "skills", name, "SKILL.md"),
   ];
   if (fileExists(candidates[0]) || fileExists(candidates[1]) || fileExists(candidates[2])) return true;
-  const cacheRoots = [
-    path.join(home, ".claude", "plugins", "cache"),
-    path.join(home, ".codex", "plugins", "cache"),
-  ];
-  for (const root of cacheRoots) {
+  for (const root of pluginCacheRoots()) {
     if (!fileExists(root)) continue;
     const stack = [root];
     while (stack.length) {
@@ -523,34 +533,32 @@ function agentDirectoryMatches(directory, name) {
 
 function cachedAgentMatches(root, plugin, name) {
   if (!plugin || !fileExists(root)) return false;
-  const stack = [root];
-  while (stack.length) {
-    const directory = stack.pop();
-    let entries;
+  let marketplaces;
+  try {
+    marketplaces = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const marketplace of marketplaces) {
+    if (!marketplace.isDirectory()) continue;
+    const pluginDirectory = path.join(root, marketplace.name, plugin);
+    let versions;
     try {
-      entries = fs.readdirSync(directory, { withFileTypes: true });
+      versions = fs.readdirSync(pluginDirectory, { withFileTypes: true });
     } catch {
       continue;
     }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const full = path.join(directory, entry.name);
-      if (entry.name === "agents") {
-        const segments = path.relative(root, directory).split(path.sep);
-        if (segments.includes(plugin) && agentDirectoryMatches(full, name)) return true;
-        continue;
-      }
-      stack.push(full);
+    for (const version of versions) {
+      if (!version.isDirectory()) continue;
+      const agentsDirectory = path.join(pluginDirectory, version.name, "agents");
+      if (agentDirectoryMatches(agentsDirectory, name)) return true;
     }
   }
   return false;
 }
 
 function probeAgentRef(ref, repo) {
-  const clean = ref.replace(/"/g, "");
-  const parts = clean.split(":");
-  const plugin = parts.length > 1 ? parts[0] : "";
-  const name = parts.length > 1 ? parts[1] : parts[0];
+  const { plugin, name } = parseDependencyRef(ref);
   if (plugin === "dev-loop" && repo) {
     const agentDirectory = path.join(repo, "skills", "dev-loop", "agents");
     if (agentDirectoryMatches(agentDirectory, name)) return true;
@@ -558,11 +566,7 @@ function probeAgentRef(ref, repo) {
   const home = os.homedir();
   const globalAgent = path.join(home, ".claude", "agents", `${name}.md`);
   if (fileExists(globalAgent) && agentFileMatches(globalAgent, name)) return true;
-  const cacheRoots = [
-    path.join(home, ".claude", "plugins", "cache"),
-    path.join(home, ".codex", "plugins", "cache"),
-  ];
-  return cacheRoots.some((root) => cachedAgentMatches(root, plugin, name));
+  return pluginCacheRoots().some((root) => cachedAgentMatches(root, plugin, name));
 }
 
 function probeDependency(entry, repo) {
@@ -571,22 +575,22 @@ function probeDependency(entry, repo) {
   return false;
 }
 
+function missingDependencies(section, repo) {
+  return dependencyRefs(section)
+    .filter((entry) => !probeDependency(entry, repo))
+    .map((entry) => entry.ref);
+}
+
 function probeDependencies(repo) {
   const manifestPath = path.join(repo, "skills", "dev-loop", "dependencies.yaml");
   if (!fileExists(manifestPath)) {
     return { dep_status: "unknown", missing_required: [], missing_optional: [], note: "dependencies.yaml not found" };
   }
   const text = readText(manifestPath);
-  const missingRequired = [];
-  const missingOptional = [];
   const reqSection = text.split(/^optional:/m)[0];
   const optSection = text.split(/^optional:/m)[1] || "";
-  for (const entry of dependencyRefs(reqSection)) {
-    if (!probeDependency(entry, repo)) missingRequired.push(entry.ref);
-  }
-  for (const entry of dependencyRefs(optSection)) {
-    if (!probeDependency(entry, repo)) missingOptional.push(entry.ref);
-  }
+  const missingRequired = missingDependencies(reqSection, repo);
+  const missingOptional = missingDependencies(optSection, repo);
   let dep_status = "healthy";
   if (missingRequired.length > 0) dep_status = "broken";
   else if (missingOptional.length > 0) dep_status = "degraded";
