@@ -7,7 +7,7 @@ description: >
   "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
