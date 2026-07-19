@@ -33,6 +33,9 @@
 
 - Would pick: {{would_pick}}
 - Pipeline: {{pipeline_steps}}
+- Merge route: {{merge_strategy}} — {{merge_route_reason}}
+- Auto-merge eligible: {{auto_merge_eligible}}
+- Failed auto-merge gates: {{auto_merge_failed_gates}}
 
 ## Blockers
 

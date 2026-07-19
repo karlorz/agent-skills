@@ -120,7 +120,9 @@ Default posture: propose `auto`. Most projects never notice the interview is the
 
 **Section F — CI Setup.**
 
-> Explainer: Dev-loop can create PRs with auto-merge after each cycle, but auto-merge without CI checks means code can merge untested. Setting up a minimal CI workflow ensures every PR is validated before it lands on main.
+> Explainer: CI tells dev-loop which checks exist and whether they are healthy.
+> It does not grant permission to merge. Setting up a minimal workflow gives
+> the separate merge-policy gate reliable evidence.
 
 Check for existing CI:
 - Does `.github/workflows/ci.yml` already exist? If yes, skip to confirmation.
@@ -156,6 +158,36 @@ The generated workflow uses:
 After generating the workflow:
 - Set `ci_configured: true` in the `dev-loop.config.md` output
 - Set `ci_workflow: .github/workflows/ci.yml` in the config
+
+**Section F2 — Merge authority.**
+
+After CI setup, ask separately:
+
+> "How should completed code reach the release branch, and may dev-loop ever
+> enable auto-merge? Auto-merge still requires explicit approval on each work
+> item's spec and an exact healthy CI result."
+
+Options:
+
+- **Branch policy, manual merge (recommended)** — direct push on the release
+  branch, PR on feature branches, and `auto_merge: false`.
+- **PR required, manual merge** — require feature-branch PRs and set
+  `auto_merge: false`.
+- **PR with approved auto-merge** — require feature-branch PRs, set
+  `auto_merge: true`, and keep `require_work_item_approval: true`.
+
+Never offer repository-wide auto-merge without per-work-item approval. Emit:
+
+```yaml
+merge_policy:
+  strategy: repo-policy
+  auto_merge: false
+  merge_method: squash
+  require_work_item_approval: true
+```
+
+Change `strategy` or `auto_merge` only to reflect the selected option. CI
+discovery fields remain unchanged by this answer.
 
 **Section G — Critical paths.**
 
@@ -538,7 +570,11 @@ pre-1.19.0 behavior. Schema reference: `templates/project-config.md`
 
 ### 3. Confirm and write
 
-Show the user a draft of `./.claude/dev-loop.config.md` covering all thirteen sections (PRD, knowledge, release, interview, glossary, CI setup, critical paths, fact-check tier, idle deep-research, browser verification, reactive debugging, discipline path scoping, release policy). Let them edit before writing.
+Show the user a draft of `./.claude/dev-loop.config.md` covering all sections
+(PRD, knowledge, release, interview, glossary, CI setup, merge authority,
+critical paths, fact-check tier, idle deep-research, browser verification,
+reactive debugging, discipline path scoping, release policy). Let them edit
+before writing.
 
 ### 4. Write
 
@@ -555,6 +591,8 @@ Tell the user:
 - To change config later, edit `./.claude/dev-loop.config.md` directly
 - If Section F was completed: CI workflow written to `.github/workflows/ci.yml`, `ci_configured: true` in config
 - If Section F was skipped: set `ci_configured: false` — dev-loop MERGE step will warn about missing CI
+- Section F2 always emits a separate `merge_policy` block; default to manual
+  merge and require explicit per-work-item approval if auto-merge is enabled
 - If Section G was completed: `critical_paths:` block in config with 1-3 named hot-spots
 - If Section G was skipped: `critical_paths: {}` (empty, engine uses equal priority)
 - If Section H was completed: `fact_check:` block with source order, web tools, and evidence contract

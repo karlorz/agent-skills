@@ -20,6 +20,11 @@ prd_layer: not-a-layer
 knowledge_layer: skillwiki
 release_policy:
   auto_bump: true
+merge_policy:
+  strategy: unsafe-direct
+  auto_merge: true
+  merge_method: fast-forward
+  require_work_item_approval: false
 ```
 EOF
 
@@ -32,7 +37,34 @@ if (j.overall.state !== "blocked") throw new Error("expected blocked");
 const codes = j.findings.map((f) => f.code);
 if (!codes.includes("invalid_prd_layer")) throw new Error("prd_layer");
 if (!codes.includes("auto_bump_no_triggers")) throw new Error("triggers");
+if (!codes.includes("invalid_merge_strategy")) throw new Error("merge_strategy");
+if (!codes.includes("invalid_merge_method")) throw new Error("merge_method");
+if (!codes.includes("auto_merge_requires_work_item_approval")) throw new Error("merge_approval");
 process.stdout.write("ok-bad-config\n");
+'
+
+VALID="$TMP/valid"
+mkdir -p "$VALID/.claude"
+cat > "$VALID/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: valid
+release_branch: main
+prd_layer: manual
+knowledge_layer: none
+merge_policy:
+  strategy: repo-policy
+  auto_merge: false
+  merge_method: squash
+  require_work_item_approval: true
+```
+EOF
+
+OUT_VALID="$(node "$LINT_JS" --repo "$VALID" --format json --no-write 2>/dev/null)" || true
+echo "$OUT_VALID" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+const codes = j.findings.map((f) => f.code);
+if (codes.includes("invalid_merge_strategy")) throw new Error("repo-policy must be accepted");
+process.stdout.write("ok-merge-policy\n");
 '
 
 mkdir -p "$ROOT/.claude"

@@ -15,6 +15,8 @@ const KNOWLEDGE_LAYERS = new Set(["skillwiki", "none"]);
 const CI_DISCOVERY = new Set(["runtime", "explicit"]);
 const PUBLISH_VIA = new Set(["ci-tag-trigger", "local", "none", ""]);
 const PREFLIGHT_LANES = new Set(["work", "captures", "hygiene"]);
+const MERGE_STRATEGIES = new Set(["repo-policy", "branch-policy", "pull-request"]);
+const MERGE_METHODS = new Set(["squash", "merge", "rebase"]);
 
 function usage() {
   return [
@@ -169,6 +171,29 @@ function parsePreflight(raw) {
   };
 }
 
+function parseMergePolicy(raw) {
+  if (!raw) return null;
+  const block = raw.match(/^merge_policy:\s*\n((?:[ \t]+.*(?:\n|$))*)/m);
+  if (!block) return null;
+  const text = block[1];
+  const scalar = (key) => {
+    const match = text.match(new RegExp(`^\\s+${key}:\\s*([^#\\n]+)`, "m"));
+    return match ? match[1].trim().replace(/^['"]|['"]$/g, "") : "";
+  };
+  const bool = (key, fallback) => {
+    const value = scalar(key);
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return fallback;
+  };
+  return {
+    strategy: scalar("strategy") || "repo-policy",
+    auto_merge: bool("auto_merge", false),
+    merge_method: scalar("merge_method") || "squash",
+    require_work_item_approval: bool("require_work_item_approval", true),
+  };
+}
+
 function lint(repo) {
   const configPath = path.join(repo, ".claude", "dev-loop.config.md");
   const templatePath = path.join(repo, "skills", "dev-loop", "templates", "project-config.md");
@@ -301,6 +326,28 @@ function lint(repo) {
     infos.push({
       code: "publish_without_release_policy",
       message: "publish_via set but release_policy block absent — auto-bump at PUSH will not run",
+    });
+  }
+  const mergePolicy = parseMergePolicy(raw);
+  if (mergePolicy && !MERGE_STRATEGIES.has(mergePolicy.strategy)) {
+    findings.push({
+      severity: "error",
+      code: "invalid_merge_strategy",
+      message: `merge_policy.strategy must be one of: ${[...MERGE_STRATEGIES].join(", ")}`,
+    });
+  }
+  if (mergePolicy && !MERGE_METHODS.has(mergePolicy.merge_method)) {
+    findings.push({
+      severity: "error",
+      code: "invalid_merge_method",
+      message: `merge_policy.merge_method must be one of: ${[...MERGE_METHODS].join(", ")}`,
+    });
+  }
+  if (mergePolicy?.auto_merge && !mergePolicy.require_work_item_approval) {
+    findings.push({
+      severity: "error",
+      code: "auto_merge_requires_work_item_approval",
+      message: "merge_policy.auto_merge true requires require_work_item_approval: true",
     });
   }
   const e2e = parseListFromBlock(raw, "e2e_scripts");

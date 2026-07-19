@@ -247,6 +247,7 @@ Map user `--json` to `--format json --no-write`. Output schema:
 `dev-loop-config-lint.v1`. Checks include: required `slug` / `release_branch`,
 valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 `ci_discovery` + `required_checks`, `preflight` lanes/limit,
+`merge_policy` strategy/method + per-work-item approval safety,
 `release_policy.auto_bump` + `trigger_globs` + `bump_script` existence,
 `e2e_scripts` paths on disk, legacy `vault:` alias advisory.
 
@@ -363,7 +364,10 @@ approval. After approval, write only selected approved items and only:
 - Managed frontmatter fields:
   `automation_ready`, `human_questions_resolved`,
   `spec_preflight_approved`, `plan_preflight_approved`,
-  `preflight_state`, `last_preflight`.
+  `preflight_state`, `last_preflight`, and `merge_auto_approved`.
+  General approval does not imply merge approval: default
+  `merge_auto_approved: false` and set it true only when the operator explicitly
+  approves auto-merge for that candidate.
 - Managed body sections: `## Preflight Approval`,
   `## Automation Readiness`, and `## Open Questions`.
 - Spec/plan refinements that directly encode approved execution-critical
@@ -858,6 +862,16 @@ prd_disciplines:
        `REQUIRED_CHECKS = required_checks` list from config.
      If `ci_configured: false` or absent → `CI_DISCOVERY = none`,
      `REQUIRED_CHECKS = []`.
+     **Resolve merge authority separately** — parse `merge_policy` with
+     fail-closed defaults:
+     `{strategy: repo-policy, auto_merge: false, merge_method: squash,
+     require_work_item_approval: true}`. Store the normalized result as `MERGE_POLICY` independently of `CI_DISCOVERY`;
+     CI existence or health never grants merge authority. `strategy` is
+     `repo-policy` (`branch-policy` compatibility alias) or `pull-request`;
+     `merge_method` is `squash`, `merge`, or `rebase`.
+     `auto_merge: true` requires `require_work_item_approval: true`, and the
+     active work-item spec must carry `merge_auto_approved: true` before the
+     runtime gate may enable auto-merge.
      **Resolve `critical_paths`** — parse into `CRITICAL_PATHS` dict (name →
      `{code, vault, history_pins}`). Absent or empty → `{}` (equal priority).
      Schema: see `templates/project-config.md` § Critical paths. Setup flow:
@@ -1489,11 +1503,21 @@ Schema: `templates/project-config.md` § Browser verification. Setup flow:
 ### 6b. MERGE — post-cycle commit + push/PR (conditional on pipeline)
 
 MERGE has two sub-steps: **commit** (always when code changed) and
-**push + PR** (conditional on branch).
+**push + PR** (conditional on merge policy and branch).
 
 **Skip entirely if any of:**
 - No code changes were committed this cycle (vault-only, git-only, trivial fast-path with no LOC changes)
 - `prd_pipeline` is `manual` (user drives everything)
+
+Before either sub-step, resolve the route from `MERGE_POLICY.strategy`:
+
+- `repo-policy` on `release_branch`: allow commit followed by direct push.
+- `repo-policy` on a feature branch: allow commit followed by PR creation.
+- `pull-request` on a feature branch: allow commit followed by PR creation.
+- `pull-request` on `release_branch`: refuse the commit/push because a PR
+  cannot be created from the release branch to itself. Report the policy
+  violation and require a feature branch; do not silently downgrade to direct
+  push.
 
 #### 6b-1: Commit (when code changed and no commit was made this cycle)
 
@@ -1501,38 +1525,41 @@ If code changes exist and no commit was made this cycle → commit them.
 This applies **regardless of which branch we're on** — including the
 release branch. Message format: conventional commit from work item title.
 
-#### 6b-2: Push + PR (conditional on branch)
+#### 6b-2: Push + PR (conditional on merge policy and branch)
 
-**On release_branch:** `git push` directly. No PR needed — changes land
-directly on the default branch. Report: "Changes committed and pushed to
-<release_branch>."
+When the resolved route is direct, run `git push` and report that the change
+landed on `release_branch` without a PR.
 
-**On feature branch:**
+**When the resolved route is a PR:**
 
 1. **Push feature branch** — `git push -u origin <current-branch>`
 2. **Create PR** — `gh pr create --base <release_branch> --title "<work-item-title>" --body "<summary>"`
    - If a PR already exists for this branch (open), skip creation and use the existing PR.
    - If the existing PR is merged or closed, create a new PR.
-3. **CI gate decision:**
-   - If `ci_configured: true` in config:
-     - Spawn `ci-health-worker` agent (model: sonnet) to assess CI health
-       before enabling auto-merge. The agent handles CI discovery (runtime
-       vs explicit) and returns a structured health classification.
+3. **Observe CI health independently:**
+   - If `CI_DISCOVERY != none`, spawn `ci-health-worker` (model: sonnet). The
+     agent handles runtime vs explicit discovery and returns a structured
+     `healthy`, `degraded`, or `broken` classification.
        ```
        Agent(description: "Pre-merge CI check", subagent_type: "dev-loop:ci-health-worker", model: "sonnet", prompt: "Check CI health for the repo before enabling auto-merge on a new PR. ci_discovery: <runtime|explicit>. required_checks: <list or 'discover from API'>. release_branch: <branch>. Run: (1) Discover required checks per ci_discovery mode. (2) Fetch recent workflow runs. (3) Assess health for each required check. (4) Report: healthy/degraded/broken with findings.")
        ```
-     - Based on ci-health-worker's health classification:
-       - `healthy` or `degraded`: Enable auto-merge with squash:
-         `gh pr merge --auto --squash`. Report: "PR #N created with
-         auto-merge (squash). CI health: <classification>."
-       - `broken`: Do NOT enable auto-merge. Report: "PR #N created
-         WITHOUT auto-merge — CI is broken on the release branch.
-         Fix CI issues before merging." Surface as P2 finding.
-   - If `ci_configured: false` or absent:
-     - Do NOT enable auto-merge — without CI, auto-merge can bypass review.
-     - Warn: "No CI checks configured — PR #N created without auto-merge. Run /dev-loop setup and set ci_configured: true to enable CI-gated auto-merge."
-     - The user must manually review and merge the PR.
-4. **Error handling:**
+   - If `CI_DISCOVERY == none`, record CI health as `missing` without spawning.
+4. **Evaluate auto-merge authority as a conjunction:**
+   - `MERGE_POLICY.auto_merge == true`;
+   - `MERGE_POLICY.require_work_item_approval == true`;
+   - active work-item `spec.md` has `merge_auto_approved: true`; and
+   - CI health is exactly `healthy`.
+
+   Only an exact `healthy` classification satisfies the CI gate. `degraded`,
+   `broken`, `missing`, and `unknown` never enable auto-merge.
+
+   When every gate passes, map `MERGE_POLICY.merge_method` to exactly one of
+   `gh pr merge --auto --squash`, `--merge`, or `--rebase`. When any gate
+   fails, leave the PR open for manual merge and report every failed gate
+   (`repository_auto_merge`, `work_item_approval`, or `ci_health:healthy`).
+   CI may still be reported as degraded/broken for repair, but it is never
+   treated as merge authority.
+5. **Error handling:**
    - If `gh` is not installed or not authenticated, report: "gh CLI not available — push branch manually and create PR via GitHub."
    - If push fails (network, permissions), report and continue — do not block the cycle on merge.
 
@@ -2110,8 +2137,8 @@ setup.
 | REVIEW | `simplify:simplify` code review | MERGE (if code changed) | Fix issues, re-run |
 | MERGE | On release_branch | `git push` directly | — |
 | MERGE | On feature branch | Push + create PR | — |
-| MERGE (CI) | `ci_configured: true` | Spawn ci-health-worker (sonnet) → healthy/degraded: auto-merge (squash), broken: skip auto-merge | — |
-| MERGE (no CI) | `ci_configured: false` | Warn, no auto-merge | — |
+| MERGE (CI observation) | `CI_DISCOVERY != none` | Spawn ci-health-worker; report health independently | Missing/unknown cannot satisfy auto-merge |
+| MERGE (auto) | Policy enabled + item approved + CI exactly healthy | Enable configured auto-merge method | Leave PR open and report every failed gate |
 | E2E | `e2e_scripts` non-empty | DEPLOY (if applicable) | Fix, re-run from SIMPLIFY |
 | DEPLOY | `remote_hosts` / `deploy_script` set | PUSH | Report failure, do not retry auth |
 | PUSH | `publish_via` set | Bump → commit → push → tag (CI publishes) | — |

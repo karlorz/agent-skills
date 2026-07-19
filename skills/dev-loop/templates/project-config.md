@@ -386,7 +386,12 @@ spec_preflight_approved: true
 plan_preflight_approved: true
 preflight_state: ready
 last_preflight: 2026-06-05
+merge_auto_approved: false
 ```
+
+`merge_auto_approved` is independent from general automation readiness. Keep
+it false unless the operator explicitly approves auto-merge for this one work
+item.
 
 Recommended managed sections:
 - `## Preflight Approval` - approval timestamp, approved defaults, deferred
@@ -855,9 +860,10 @@ Semantics:
 
 ## CI Configuration
 
-Controls whether the dev-loop MERGE step enforces CI checks before
-auto-merging feature-branch PRs, and how CI health is monitored during
-IDLE DISCOVERY.
+Controls how required checks are discovered and how CI health is monitored
+during MERGE and IDLE DISCOVERY. CI configuration is observational: it does
+not grant authority to merge a PR. Merge authority is configured separately
+under `merge_policy`.
 
 Set `ci_configured: true` after running `/dev-loop setup` Section F,
 which generates GitHub Actions workflows and optionally configures
@@ -885,11 +891,10 @@ required_checks:                  # check names matching GitHub Actions job name
   # - security-scan              # uncomment when security.yml is added
 ```
 
-When `ci_configured: false` (the default), the MERGE step warns but
-still creates the PR — it does not block the cycle. When `true`, the
-MERGE step enables auto-merge (squash) on the PR — GitHub will merge
-once all required checks pass. The step does not block or poll; it
-schedules and continues.
+When `ci_configured: false` (the default), the MERGE step can still create a
+PR but cannot satisfy the auto-merge CI gate. When `true`, dev-loop observes
+the configured checks. Only an exact `healthy` classification can satisfy the
+CI gate; `degraded`, `broken`, missing, and unknown results fail closed.
 
 **Runtime discovery** uses:
 - `gh api repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks`
@@ -901,6 +906,41 @@ schedules and continues.
 - Branch protection is managed by a different team/tool
 - You want dev-loop to monitor specific checks regardless of branch protection
 - You have workflows that are required but not enforced by branch protection
+
+## Merge policy
+
+Controls repository routing and auto-merge authority independently from CI
+discovery. Omitting the block applies the fail-closed defaults shown below.
+
+```yaml
+merge_policy:
+  strategy: repo-policy                # repo-policy | branch-policy alias | pull-request
+  auto_merge: false                    # explicit repository capability switch
+  merge_method: squash                 # squash | merge | rebase
+  require_work_item_approval: true     # required whenever auto_merge is true
+```
+
+- `repo-policy` preserves the normal route: direct push on
+  `release_branch`, PR from a feature branch.
+- `branch-policy` is accepted as a compatibility alias for `repo-policy`.
+- `pull-request` refuses a release-branch commit/push and requires work to be
+  performed on a feature branch so a PR can be created.
+- `auto_merge: true` does not authorize any individual work item. The active
+  `spec.md` must also contain `merge_auto_approved: true`.
+- `require_work_item_approval` must remain `true` when auto-merge is enabled.
+  Config lint rejects the unsafe combination.
+- Auto-merge is eligible only for a PR with repository authorization,
+  per-work-item approval, and an exact `healthy` CI classification.
+
+Recommended default:
+
+```yaml
+merge_auto_approved: false
+```
+
+`/dev-loop prep` may set this work-item field to `true` only after the operator
+explicitly approves automatic merging for that candidate. General preflight
+approval is not merge approval.
 
 ## Notes (optional)
 
@@ -960,6 +1000,12 @@ remote_hosts: [sg01]
 ci_configured: true
 ci_discovery: runtime
 # required_checks: not needed — branch protection is the source of truth
+
+merge_policy:
+  strategy: repo-policy
+  auto_merge: false
+  merge_method: squash
+  require_work_item_approval: true
 
 notes:
   canonical_spec: ~/wiki/projects/llm-wiki/history/specs/2026-05-02-llm-wiki-skill-design.md

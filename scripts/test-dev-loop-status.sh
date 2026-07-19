@@ -33,6 +33,7 @@ git -C "$TMP" config user.name "test"
 echo x > "$TMP/README.md"
 git -C "$TMP" add README.md
 git -C "$TMP" commit -q -m "init"
+git -C "$TMP" branch -M main
 
 OUT="$(node "$STATUS_JS" --repo "$TMP" --project test-none --format json --no-write 2>/dev/null)" || fail "status script failed on none layer"
 
@@ -42,6 +43,8 @@ const j = JSON.parse(fs.readFileSync(0, "utf8"));
 if (j.schema_version !== "dev-loop-status.v1") throw new Error("bad schema");
 if (j.read_only !== true || j.writes_executed !== false) throw new Error("read_only contract");
 if (j.project.slug !== "test-none") throw new Error("slug");
+if (j.pipeline_preview.merge.auto_merge_configured !== false) throw new Error("auto merge must default off");
+if (j.pipeline_preview.merge.auto_merge_eligible !== false) throw new Error("auto merge must fail closed");
 process.stdout.write("ok-none-layer\n");
 '
 
@@ -63,6 +66,7 @@ human_questions_resolved: true
 spec_preflight_approved: true
 plan_preflight_approved: true
 preflight_state: ready
+merge_auto_approved: true
 ---
 EOF
 
@@ -79,6 +83,12 @@ slug: agent-skills
 release_branch: main
 knowledge_layer: skillwiki
 vault: $VAULT
+ci_configured: true
+merge_policy:
+  strategy: pull-request
+  auto_merge: true
+  merge_method: squash
+  require_work_item_approval: true
 \`\`\`
 EOF
 
@@ -91,6 +101,13 @@ const skips = j.work_preview.readiness_skips || [];
 if (!skips.some((s) => s.id.includes("skip"))) throw new Error("expected readiness skip");
 const ready = j.work_preview.claimable_unattended || [];
 if (!ready.some((id) => id.includes("ready"))) throw new Error("expected unattended ready");
+const merge = j.pipeline_preview.merge;
+if (merge.auto_merge_configured !== true) throw new Error("expected explicit auto-merge config");
+if (merge.work_item_approved !== true) throw new Error("expected selected work-item approval");
+if (merge.route_blocked !== true) throw new Error("pull-request policy on release branch must block route");
+if (merge.would_create_pr !== false || merge.would_push_direct !== false) throw new Error("blocked route must not claim PR or push");
+if (merge.auto_merge_eligible !== false) throw new Error("unknown CI health must fail closed");
+if (!(merge.failed_gates || []).includes("ci_health:healthy")) throw new Error("expected exact healthy CI gate");
 process.stdout.write("ok-readiness\n");
 '
 

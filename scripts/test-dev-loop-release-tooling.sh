@@ -398,11 +398,12 @@ PY
 }
 
 run_dev_loop_prep_prompt_contract_checks() {
-  local prompt template setup codex_ref
+  local prompt template setup codex_ref config_example
   prompt="$(cat "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md")"
   template="$(cat "$ROOT/skills/dev-loop/templates/project-config.md")"
   setup="$(cat "$ROOT/skills/dev-loop/skills/setup-dev-loop/SKILL.md")"
   codex_ref="$(cat "$ROOT/skills/dev-loop/references/codex-tools.md")"
+  config_example="$(cat "$ROOT/.claude/dev-loop.config.example.md")"
 
   assert_contains "dev-loop parses prep mode" "$prompt" 'MODE = prep'
   assert_contains "dev-loop dispatches prep mode" "$prompt" '**`prep`**'
@@ -427,10 +428,18 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop gates automation readiness" "$prompt" 'automation_ready'
   assert_contains "dev-loop reports readiness skips" "$prompt" 'Automation Readiness Skips'
   assert_contains "dev-loop prep never starts goal" "$prompt" 'Do not start `/goal`'
+  assert_contains "dev-loop resolves merge policy independently" "$prompt" 'Store the normalized result as `MERGE_POLICY` independently of `CI_DISCOVERY`'
+  assert_contains "dev-loop manages merge auto approval" "$prompt" '`merge_auto_approved`'
+  assert_contains "dev-loop exact healthy CI gate" "$prompt" 'Only an exact `healthy` classification satisfies the CI gate.'
+  assert_not_contains "dev-loop no degraded auto merge" "$prompt" '`healthy` or `degraded`: Enable auto-merge'
 
   assert_contains "project config includes preflight block" "$template" 'preflight:'
   assert_contains "project config includes unattended skip behavior" "$template" 'unattended_not_ready_behavior: skip'
   assert_contains "project config includes readiness state" "$template" 'preflight_state: ready'
+  assert_contains "project config includes independent merge policy" "$template" 'merge_policy:'
+  assert_contains "project config defaults auto merge off" "$template" 'auto_merge: false'
+  assert_contains "project config requires work-item merge approval" "$template" 'require_work_item_approval: true'
+  assert_contains "setup separates merge authority from CI" "$setup" '**Section F2 — Merge authority.**'
   assert_contains "project config requires simplify base skill" "$template" 'The base `simplify:simplify`'
   assert_contains "project config simplify always runs" "$template" 'skill always runs for code changes'
   assert_contains "project config prefers simplify-worker" "$template" '`dev-loop:simplify-worker` subagent adapter when worker dispatch is available'
@@ -442,6 +451,7 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop documents skillwiki path precedence" "$prompt" 'run `skillwiki path`'
   assert_contains "dev-loop documents validated wiki fallback" "$prompt" 'validated `~/wiki` fallback'
   assert_contains "dev-loop documents explicit vault mismatch warning" "$prompt" 'Configured SkillWiki vault'
+  assert_contains "repo example includes independent merge policy" "$config_example" 'merge_policy:'
 
   assert_contains "dev-loop requires simplify skill review" "$prompt" '**REQUIRED SUB-SKILL:** Use `simplify:simplify`'
   assert_contains "dev-loop prefers simplify-worker adapter" "$prompt" 'Default to the `dev-loop:simplify-worker` subagent adapter'

@@ -280,6 +280,39 @@ function parseBrowserVerificationFromConfig(raw) {
   return { enabled, trigger: triggers };
 }
 
+function parseMergePolicyFromConfig(raw) {
+  const defaults = {
+    strategy: "repo-policy",
+    auto_merge: false,
+    merge_method: "squash",
+    require_work_item_approval: true,
+  };
+  if (!raw) return defaults;
+  const block = raw.match(/^merge_policy:\s*\n((?:[ \t]+.*(?:\n|$))*)/m);
+  if (!block) return defaults;
+  const text = block[1];
+  const scalar = (key) => {
+    const match = text.match(new RegExp(`^\\s+${key}:\\s*([^#\\n]+)`, "m"));
+    return match ? match[1].trim().replace(/^['"]|['"]$/g, "") : "";
+  };
+  const bool = (key, fallback) => {
+    const value = scalar(key);
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return fallback;
+  };
+  const configuredStrategy = scalar("strategy") || defaults.strategy;
+  return {
+    strategy: configuredStrategy === "branch-policy" ? "repo-policy" : configuredStrategy,
+    auto_merge: bool("auto_merge", defaults.auto_merge),
+    merge_method: scalar("merge_method") || defaults.merge_method,
+    require_work_item_approval: bool(
+      "require_work_item_approval",
+      defaults.require_work_item_approval,
+    ),
+  };
+}
+
 function collectChangedFiles(repo) {
   const unstaged = gitLines(repo, ["diff", "--name-only", "HEAD"]);
   const staged = gitLines(repo, ["diff", "--cached", "--name-only"]);
@@ -413,6 +446,7 @@ function listWorkReadiness(vault, project) {
       priority: fm.priority || "",
       unattended_ready: readiness.ready,
       missing_readiness: readiness.missing,
+      merge_auto_approved: fm.merge_auto_approved === true,
     });
   }
   return items;
@@ -676,6 +710,28 @@ function buildReport(opts) {
   const ciConfigured = flat.ci_configured === true;
   const release = releasePreview(repo, flat, cfg.raw);
   const browserVerify = browserVerifyPreview(repo, cfg.raw, depsInline.missing_optional);
+  const mergePolicy = parseMergePolicyFromConfig(cfg.raw);
+  const selectedWork = workReadiness.find((work) => work.id === wouldPick);
+  const workItemApproved = selectedWork?.merge_auto_approved === true;
+  const routeBlocked = mergePolicy.strategy === "pull-request" && onRelease;
+  const wouldCreatePr = !routeBlocked && !onRelease;
+  const wouldPushDirect = !routeBlocked && !wouldCreatePr;
+  let mergeReason = `repo-policy on release_branch ${releaseBranch}`;
+  if (routeBlocked) {
+    mergeReason = `merge_policy requires a feature branch before creating a PR to ${releaseBranch}`;
+  } else if (wouldCreatePr) {
+    mergeReason = `feature branch → PR to ${releaseBranch}`;
+  }
+  const autoMergeFailedGates = [];
+  if (routeBlocked) autoMergeFailedGates.push("merge_route");
+  if (!wouldCreatePr) autoMergeFailedGates.push("pull_request");
+  if (!mergePolicy.auto_merge) autoMergeFailedGates.push("repository_auto_merge");
+  if (mergePolicy.require_work_item_approval && !workItemApproved) {
+    autoMergeFailedGates.push("work_item_approval");
+  }
+  // Status is a pre-execution preview and does not claim a CI result. The
+  // runtime MERGE gate may remove this only for an exact `healthy` result.
+  autoMergeFailedGates.push("ci_health:healthy");
 
   let overallState = "healthy";
   if (blockers.length > 0) overallState = "blocked";
@@ -755,10 +811,20 @@ function buildReport(opts) {
         reason: ciConfigured ? `ci_configured: true` : "ci_configured false or absent",
       },
       merge: {
-        would_create_pr: !onRelease,
-        would_push_direct: onRelease,
+        strategy: mergePolicy.strategy,
+        would_create_pr: wouldCreatePr,
+        would_push_direct: wouldPushDirect,
+        route_blocked: routeBlocked,
         current_branch: branch,
-        reason: onRelease ? `on release_branch ${releaseBranch}` : `feature branch → PR to ${releaseBranch}`,
+        reason: mergeReason,
+        auto_merge_configured: mergePolicy.auto_merge,
+        merge_method: mergePolicy.merge_method,
+        require_work_item_approval: mergePolicy.require_work_item_approval,
+        work_item_approved: workItemApproved,
+        required_ci_state: "healthy",
+        observed_ci_state: "unknown",
+        auto_merge_eligible: false,
+        failed_gates: autoMergeFailedGates,
       },
       release,
     },
@@ -835,6 +901,9 @@ function renderMarkdown(json) {
   lines.push(`- CI gate: ${json.pipeline_preview.ci_gate.would_run} — ${json.pipeline_preview.ci_gate.reason}`);
   lines.push(
     `- PR vs direct push: ${json.pipeline_preview.merge.would_create_pr ? "would open PR" : "would push direct"} — ${json.pipeline_preview.merge.reason}`,
+  );
+  lines.push(
+    `- Auto-merge: ${json.pipeline_preview.merge.auto_merge_eligible ? "eligible" : "not eligible"} — ${json.pipeline_preview.merge.failed_gates.join(", ") || "all gates satisfied"}`,
   );
   lines.push(`- Release/publish: ${json.pipeline_preview.release.would_publish} — ${json.pipeline_preview.release.reason}`);
   lines.push("");

@@ -89,6 +89,17 @@ required_checks:
 branch_protection: false
 ```
 
+## Merge Policy
+
+```yaml
+# CI discovery reports check health; it does not grant merge authority.
+merge_policy:
+  strategy: repo-policy
+  auto_merge: false
+  merge_method: squash
+  require_work_item_approval: true
+```
+
 ## Release
 
 ```yaml
