@@ -87,8 +87,10 @@ NESTED_REPO="$TMP/nested-repo"
 NESTED_HOME="$TMP/nested-home"
 mkdir -p "$NESTED_REPO/.claude"
 mkdir -p "$NESTED_REPO/skills/dev-loop/.claude-plugin"
+mkdir -p "$NESTED_REPO/skills/dev-loop/agents"
 mkdir -p "$NESTED_REPO/skills/dev-loop/skills/dev-loop"
 mkdir -p "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.7/skills/dev-loop"
+mkdir -p "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/playwright-cli/1.2.3/agents"
 cp "$TMP/.claude/dev-loop.config.md" "$NESTED_REPO/.claude/dev-loop.config.md"
 cat > "$NESTED_REPO/skills/dev-loop/.claude-plugin/plugin.json" <<'EOF'
 {"name":"dev-loop","version":"9.8.7"}
@@ -101,6 +103,25 @@ name: dev-loop
 EOF
 cp "$NESTED_REPO/skills/dev-loop/skills/dev-loop/SKILL.md" \
   "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.7/skills/dev-loop/SKILL.md"
+cat > "$NESTED_REPO/skills/dev-loop/agents/research.md" <<'EOF'
+---
+name: research-worker
+---
+EOF
+cat > "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/playwright-cli/1.2.3/agents/browser-worker.md" <<'EOF'
+---
+name: browser-worker
+---
+EOF
+cat > "$NESTED_REPO/skills/dev-loop/dependencies.yaml" <<'EOF'
+optional:
+  - kind: agent
+    ref: dev-loop:research-worker
+  - kind: agent
+    ref: playwright-cli:browser-worker
+  - kind: agent
+    ref: missing:ghost-worker
+EOF
 
 OUT_NESTED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)" || fail "nested-layout status failed"
 echo "$OUT_NESTED" | node -e '
@@ -111,6 +132,11 @@ if (j.health.skill_cache.state !== "in_sync") {
 if (!j.health.skill_cache.cache_path.endsWith("/skills/dev-loop/SKILL.md")) {
   throw new Error(`unexpected nested cache path: ${j.health.skill_cache.cache_path}`);
 }
+const missing = j.health.missing_optional;
+if (missing.includes("dev-loop:research-worker")) throw new Error("self agent false negative");
+if (missing.includes("playwright-cli:browser-worker")) throw new Error("cached agent false negative");
+if (!missing.includes("missing:ghost-worker")) throw new Error("genuine missing agent not reported");
+if (j.health.dep_status !== "degraded") throw new Error("genuine optional miss must degrade");
 process.stdout.write("ok-nested-cache\n");
 '
 
