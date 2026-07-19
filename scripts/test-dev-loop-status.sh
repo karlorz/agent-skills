@@ -50,6 +50,37 @@ if ((j.pipeline_preview.merge.failed_gates || []).includes("ci_configured")) thr
 process.stdout.write("ok-none-layer\n");
 '
 
+NESTED_REPO="$TMP/nested-repo"
+NESTED_HOME="$TMP/nested-home"
+mkdir -p "$NESTED_REPO/.claude"
+mkdir -p "$NESTED_REPO/skills/dev-loop/.claude-plugin"
+mkdir -p "$NESTED_REPO/skills/dev-loop/skills/dev-loop"
+mkdir -p "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.7/skills/dev-loop"
+cp "$TMP/.claude/dev-loop.config.md" "$NESTED_REPO/.claude/dev-loop.config.md"
+cat > "$NESTED_REPO/skills/dev-loop/.claude-plugin/plugin.json" <<'EOF'
+{"name":"dev-loop","version":"9.8.7"}
+EOF
+cat > "$NESTED_REPO/skills/dev-loop/skills/dev-loop/SKILL.md" <<'EOF'
+---
+name: dev-loop
+---
+# nested source
+EOF
+cp "$NESTED_REPO/skills/dev-loop/skills/dev-loop/SKILL.md" \
+  "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.7/skills/dev-loop/SKILL.md"
+
+OUT_NESTED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)" || fail "nested-layout status failed"
+echo "$OUT_NESTED" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.health.skill_cache.state !== "in_sync") {
+  throw new Error(`nested source/cache should be in_sync, got ${JSON.stringify(j.health.skill_cache)}`);
+}
+if (!j.health.skill_cache.cache_path.endsWith("/skills/dev-loop/SKILL.md")) {
+  throw new Error(`unexpected nested cache path: ${j.health.skill_cache.cache_path}`);
+}
+process.stdout.write("ok-nested-cache\n");
+'
+
 VAULT="$TMP/wiki"
 mkdir -p "$VAULT/projects/agent-skills/work/2026-07-01-ready"
 mkdir -p "$VAULT/projects/agent-skills/work/2026-07-01-skip"

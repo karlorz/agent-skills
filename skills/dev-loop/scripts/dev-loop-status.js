@@ -542,7 +542,9 @@ function resolveCachedDevLoopSkill(repo) {
   const candidates = [];
   if (version) {
     candidates.push(
+      path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "skills", "dev-loop", "SKILL.md"),
       path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "SKILL.md"),
+      path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "skills", "dev-loop", "SKILL.md"),
       path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "SKILL.md"),
     );
   }
@@ -554,6 +556,7 @@ function resolveCachedDevLoopSkill(repo) {
     if (!fileExists(root)) continue;
     for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
       if (!ent.isDirectory()) continue;
+      candidates.push(path.join(root, ent.name, "skills", "dev-loop", "SKILL.md"));
       candidates.push(path.join(root, ent.name, "SKILL.md"));
     }
   }
@@ -567,8 +570,12 @@ function resolveCachedDevLoopSkill(repo) {
 }
 
 function skillCacheDrift(repo) {
-  const source = path.join(repo, "skills", "dev-loop", "SKILL.md");
-  if (!fileExists(source)) return { state: "unknown", detail: "source SKILL.md not in repo" };
+  const sourceCandidates = [
+    path.join(repo, "skills", "dev-loop", "skills", "dev-loop", "SKILL.md"),
+    path.join(repo, "skills", "dev-loop", "SKILL.md"),
+  ];
+  const source = sourceCandidates.find(fileExists);
+  if (!source) return { state: "unknown", detail: "source SKILL.md not in repo" };
   const sourceHash = hashFileShort(source);
   const cachePath = resolveCachedDevLoopSkill(repo);
   if (!cachePath) {
