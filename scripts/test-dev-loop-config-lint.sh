@@ -97,8 +97,21 @@ if (j.overall.state !== "blocked") throw new Error("parser-unavailable config mu
 process.stdout.write("ok-schema-capability-error\n");
 '
 
-mkdir -p "$ROOT/.claude"
-OUT2="$(node "$LINT_JS" --repo "$ROOT" --format json --no-write 2>/dev/null)" || fail "real config lint failed"
+# Prefer the local config when present (developer workspaces). CI checkouts only
+# have the committed example, so stage that under a temp repo whose scripts/
+# tree links back to the real suite paths for e2e existence checks.
+HEALTHY_REPO="$TMP/healthy-repo"
+mkdir -p "$HEALTHY_REPO/.claude" "$HEALTHY_REPO/skills/dev-loop/templates"
+if [[ -f "$ROOT/.claude/dev-loop.config.md" ]]; then
+  cp "$ROOT/.claude/dev-loop.config.md" "$HEALTHY_REPO/.claude/dev-loop.config.md"
+else
+  cp "$ROOT/.claude/dev-loop.config.example.md" "$HEALTHY_REPO/.claude/dev-loop.config.md"
+fi
+cp "$ROOT/skills/dev-loop/templates/project-config.md" \
+  "$HEALTHY_REPO/skills/dev-loop/templates/project-config.md"
+ln -s "$ROOT/scripts" "$HEALTHY_REPO/scripts"
+OUT2="$(node "$LINT_JS" --repo "$HEALTHY_REPO" --format json --no-write 2>/dev/null)" ||
+  fail "healthy config lint failed"
 echo "$OUT2" | node -e '
 const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
 if (j.overall.state !== "healthy") throw new Error("agent-skills config should be healthy: "+JSON.stringify(j.findings));
