@@ -7,6 +7,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
 
 const SCHEMA_VERSION = "dev-loop-config-migrate.v1";
 
@@ -48,42 +49,42 @@ function parseArgs(argv) {
   return opts;
 }
 
-function extractYamlBlocks(text) {
-  const blocks = [];
-  const re = /```ya?ml\n([\s\S]*?)```/gi;
-  let m;
-  while ((m = re.exec(text)) !== null) blocks.push(m[1]);
-  return blocks;
-}
-
 function readConfig(repo) {
   const configPath = path.join(repo, ".claude", "dev-loop.config.md");
   if (!fs.existsSync(configPath)) {
-    return { configPath, missing: true, raw: "", flat: {} };
+    return { configPath, missing: true, config: {}, provenance: {}, errors: [], parser: null };
   }
-  const raw = fs.readFileSync(configPath, "utf8");
-  const flat = {};
-  for (const inner of extractYamlBlocks(raw)) {
-    for (const line of inner.split(/\r?\n/)) {
-      const m = line.trim().match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-      if (!m || line.trim().startsWith("#")) continue;
-      let val = m[2].trim().replace(/^["']|["']$/g, "");
-      flat[m[1]] = val === "true" ? true : val === "false" ? false : val;
-    }
-  }
-  return { configPath, missing: false, raw, flat };
+  const parsed = parseDevLoopConfig(configPath);
+  return {
+    configPath,
+    missing: false,
+    config: parsed.config || {},
+    provenance: parsed.provenance || {},
+    errors: parsed.errors || [],
+    parser: parsed.parser || null,
+  };
 }
 
-function detectVaultShape(raw) {
-  const legacyMatch = raw.match(/^vault:\s*(\S+)/m);
-  const legacy = legacyMatch ? legacyMatch[1].replace(/["']/g, "") : null;
-  const nestedMatch = raw.match(/knowledge_backends:\s*\n[\s\S]*?skillwiki:\s*\n[\s\S]*?vault:\s*(\S+)/);
-  const nested = nestedMatch ? nestedMatch[1].replace(/["']/g, "") : null;
-  const hasBlock = /knowledge_backends:/.test(raw);
-  return { legacy, nested, hasBlock };
+function detectVaultShape(config, provenance) {
+  const hasLegacy = Object.prototype.hasOwnProperty.call(config, "vault");
+  const backends = config.knowledge_backends;
+  const skillwiki = backends && typeof backends === "object" ? backends.skillwiki : null;
+  const hasNested = Boolean(
+    skillwiki && typeof skillwiki === "object" && Object.prototype.hasOwnProperty.call(skillwiki, "vault"),
+  );
+  const shape = {
+    legacy: hasLegacy ? config.vault : null,
+    nested: hasNested ? skillwiki.vault : null,
+    hasBlock: Object.prototype.hasOwnProperty.call(config, "knowledge_backends"),
+  };
+  if (Number.isInteger(provenance.vault?.line)) shape.legacy_line = provenance.vault.line;
+  if (Number.isInteger(provenance["knowledge_backends.skillwiki.vault"]?.line)) {
+    shape.nested_line = provenance["knowledge_backends.skillwiki.vault"].line;
+  }
+  return shape;
 }
 
-function advise(shape, flat) {
+function advise(shape, config) {
   const recs = [];
   let state = "unknown";
   let suggestedYaml = "";
@@ -124,7 +125,7 @@ function advise(shape, flat) {
   } else if (!shape.legacy && shape.hasBlock && shape.nested) {
     state = "modern_nested_only";
     recs.push("Config already uses knowledge_backends.skillwiki.vault — no migration required.");
-    if (shape.nested !== "auto" && flat.knowledge_layer !== "none") {
+    if (shape.nested !== "auto" && config.knowledge_layer !== "none") {
       recs.push("Consider `vault: auto` unless this machine must pin an absolute path.");
     }
   } else if (shape.legacy && shape.hasBlock && !shape.nested) {
@@ -149,25 +150,45 @@ function advise(shape, flat) {
 
 function buildReport(repo) {
   const cfg = readConfig(repo);
+  const generatedAt = new Date().toISOString();
   if (cfg.missing) {
     return {
       schema_version: SCHEMA_VERSION,
       read_only: true,
       writes_executed: false,
+      generated_at: generatedAt,
       config_path: cfg.configPath,
       overall: { state: "blocked", reason: "missing config" },
       vault_shape: null,
       migration: { state: "missing_config", recommendations: ["Create .claude/dev-loop.config.md from template"] },
     };
   }
-  const shape = detectVaultShape(cfg.raw);
-  const migration = advise(shape, cfg.flat);
+  if (cfg.errors.length > 0) {
+    return {
+      schema_version: SCHEMA_VERSION,
+      read_only: true,
+      writes_executed: false,
+      generated_at: generatedAt,
+      config_path: cfg.configPath,
+      parser: cfg.parser,
+      parser_errors: cfg.errors,
+      overall: { state: "blocked", reason: "invalid_config" },
+      vault_shape: null,
+      migration: {
+        state: "invalid_config",
+        recommendations: ["Resolve schema parser errors before applying migration advice."],
+      },
+    };
+  }
+  const shape = detectVaultShape(cfg.config, cfg.provenance);
+  const migration = advise(shape, cfg.config);
   return {
     schema_version: SCHEMA_VERSION,
     read_only: true,
     writes_executed: false,
-    generated_at: new Date().toISOString(),
+    generated_at: generatedAt,
     config_path: cfg.configPath,
+    parser: cfg.parser,
     vault_shape: shape,
     overall: { state: migration.overall, reason: migration.state },
     migration,

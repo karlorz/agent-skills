@@ -18,6 +18,29 @@ type: template
 > backend names — adding a new backend means declaring which capabilities
 > it supports in the `knowledge_backends` registry.
 
+## Parser contract
+
+Dev-loop reads this Markdown document through
+`scripts/dev-loop-config-schema.js`, which invokes the read-only
+`dev-loop-config-schema.py` bridge. Runtime parsing requires Python 3 and
+PyYAML. If either capability is unavailable, status, config-lint, and migration
+report a structured parser error and fail closed; they never fall back to
+line-oriented regular expressions.
+
+- Put configuration only in `yaml` or `yml` fenced blocks. Initial Markdown
+  frontmatter is document metadata and is not part of the dev-loop config.
+- Blocks merge in document order. Maps merge recursively; a later scalar or
+  list replaces the earlier value at the same path.
+- Every normalized path retains the one-based source line of its winning key
+  or list item. Lint and migration diagnostics expose that provenance.
+- The schema rejects malformed YAML, duplicate mapping keys, unknown schema
+  keys, and incorrect nested value types. Explicit extension maps such as
+  `preflight.defaults` and `notes` may contain project-defined keys.
+- A key-shaped YAML declaration outside a fenced block is an error. Ordinary
+  Markdown prose, headings, and non-YAML code fences remain valid.
+- `dev-loop-config-migrate.js` is an advisor only. It consumes the same parsed
+  object, emits suggested YAML, and never rewrites this file.
+
 ## Identity
 
 ```yaml

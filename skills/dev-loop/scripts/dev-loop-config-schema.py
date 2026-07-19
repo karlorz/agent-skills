@@ -245,7 +245,12 @@ TOP_LEVEL_SCHEMA = mapping(
                 ),
                 "work_item": mapping(
                     {
+                        # Live configs document an explicit native default plus
+                        # optional external upgrade install metadata.
+                        "default": NULLABLE_STRING,
                         "upgrade": NULLABLE_STRING,
+                        "source": NULLABLE_STRING,
+                        "install": NULLABLE_STRING,
                         "trigger": STRING,
                         "goal_override": STRING,
                     }
@@ -260,6 +265,7 @@ TOP_LEVEL_SCHEMA = mapping(
         "bump_script": NULLABLE_STRING,
         "publish_via": NULLABLE_STRING,
         "deploy_script": NULLABLE_STRING,
+        "release_script": NULLABLE_STRING,
         "manifests_count": INTEGER,
         "remote_hosts": STRING_LIST,
         "release_policy": mapping(
@@ -270,10 +276,12 @@ TOP_LEVEL_SCHEMA = mapping(
                 "skip_globs": STRING_LIST,
                 "tag_format": STRING,
                 "verify_after_push": BOOLEAN,
+                "stable_release_guard": NULLABLE_STRING,
             }
         ),
         "ci_configured": BOOLEAN,
         "ci_workflow": NULLABLE_STRING,
+        "release_workflow": NULLABLE_STRING,
         "ci_discovery": STRING,
         "required_checks": STRING_LIST,
         "branch_protection": BOOLEAN,

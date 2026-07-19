@@ -797,7 +797,16 @@ prd_disciplines:
 
 3. **Load project config** in this order:
    - **Primary**: read `./.claude/dev-loop.config.md` (relative to CWD).
-     Parse the YAML-style fields described in `templates/project-config.md`.
+     Invoke `scripts/dev-loop-config-schema.js`, which runs the bounded,
+     read-only Python/PyYAML bridge in `dev-loop-config-schema.py`. Consume its
+     normalized nested `config`, path/line `provenance`, block metadata, and
+     diagnostics. YAML maps deep-merge across fenced blocks; later scalars and
+     lists replace earlier values. Initial Markdown frontmatter is metadata,
+     while key-shaped YAML outside a `yaml`/`yml` fence is an error. Malformed
+     YAML, duplicate keys, unknown schema keys, invalid nested types, parser
+     timeout, or missing Python/PyYAML block the write cycle. Never fall back to
+     regex config parsing. The schema is documented in
+     `templates/project-config.md`.
      Parse `knowledge_layer` (default: `skillwiki`). Then resolve
      `BACKEND_CAPS` — read the `knowledge_backends` map if present in
      config (see templates/project-config.md for schema); otherwise derive

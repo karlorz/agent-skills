@@ -67,6 +67,36 @@ if (codes.includes("invalid_merge_strategy")) throw new Error("repo-policy must 
 process.stdout.write("ok-merge-policy\n");
 '
 
+SCHEMA_BAD="$TMP/schema-bad"
+mkdir -p "$SCHEMA_BAD/.claude"
+cat > "$SCHEMA_BAD/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: schema-bad
+release_branch: main
+knowledge_layer: none
+merge_policy:
+  unknown_nested: true
+```
+EOF
+OUT_SCHEMA_BAD="$(node "$LINT_JS" --repo "$SCHEMA_BAD" --format json --no-write 2>/dev/null)" || true
+echo "$OUT_SCHEMA_BAD" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+const finding = (j.findings || []).find((item) => item.code === "unknown_key" && item.path === "merge_policy.unknown_nested");
+if (!finding) throw new Error(`schema unknown-key finding missing: ${JSON.stringify(j.findings)}`);
+if (!Number.isInteger(finding.line)) throw new Error(`schema finding lost source line: ${JSON.stringify(finding)}`);
+process.stdout.write("ok-schema-diagnostics\n");
+'
+
+OUT_SCHEMA_UNAVAILABLE="$(DEV_LOOP_CONFIG_PYTHON=/definitely/missing/python node "$LINT_JS" --repo "$SCHEMA_BAD" --format json --no-write 2>/dev/null)" || true
+echo "$OUT_SCHEMA_UNAVAILABLE" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+if (!(j.findings || []).some((item) => item.code === "parser_unavailable")) {
+  throw new Error(`parser-unavailable finding missing: ${JSON.stringify(j.findings)}`);
+}
+if (j.overall.state !== "blocked") throw new Error("parser-unavailable config must be blocked");
+process.stdout.write("ok-schema-capability-error\n");
+'
+
 mkdir -p "$ROOT/.claude"
 OUT2="$(node "$LINT_JS" --repo "$ROOT" --format json --no-write 2>/dev/null)" || fail "real config lint failed"
 echo "$OUT2" | node -e '

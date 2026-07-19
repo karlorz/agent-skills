@@ -7,6 +7,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
 
 const SCHEMA_VERSION = "dev-loop-config-lint.v1";
 const PRD_LAYERS = new Set(["superpowers", "codestable", "tdd", "manual", "none"]);
@@ -56,10 +57,6 @@ function parseArgs(argv) {
   return opts;
 }
 
-function readText(p) {
-  return fs.readFileSync(p, "utf8");
-}
-
 function exists(p) {
   try {
     fs.accessSync(p, fs.constants.F_OK);
@@ -67,131 +64,6 @@ function exists(p) {
   } catch {
     return false;
   }
-}
-
-function extractYamlBlocks(text) {
-  const blocks = [];
-  const re = /```ya?ml\n([\s\S]*?)```/gi;
-  let m;
-  while ((m = re.exec(text)) !== null) blocks.push(m[1]);
-  return blocks;
-}
-
-function parseSimpleYaml(text) {
-  const data = {};
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const match = trimmed.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (!match) continue;
-    const key = match[1];
-    let val = match[2].trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (val === "true") data[key] = true;
-    else if (val === "false") data[key] = false;
-    else if (/^\d+$/.test(val)) data[key] = Number(val);
-    else data[key] = val;
-  }
-  return data;
-}
-
-function mergeBlocks(blocks) {
-  const merged = {};
-  for (const b of blocks) Object.assign(merged, parseSimpleYaml(b));
-  return merged;
-}
-
-function vaultFromRaw(raw) {
-  if (!raw) return "";
-  const m = raw.match(/knowledge_backends:\s*\n[\s\S]*?skillwiki:\s*\n[\s\S]*?vault:\s*(\S+)/);
-  if (m) return m[1].replace(/"/g, "");
-  const legacy = raw.match(/^vault:\s*(\S+)/m);
-  return legacy ? legacy[1].replace(/"/g, "") : "";
-}
-
-function parseListFromBlock(raw, key) {
-  if (!raw) return [];
-  const re = new RegExp(`${key}:\\s*\\n([\\s\\S]*?)(?=\\n[a-z_]+:|\\n## |$)`, "m");
-  const m = raw.match(re);
-  if (!m) return [];
-  const items = [];
-  for (const line of m[1].split(/\r?\n/)) {
-    const item = line.match(/^\s*-\s+"?([^"]+)"?\s*$/);
-    if (item) items.push(item[1]);
-  }
-  return items;
-}
-
-function parseReleasePolicy(raw) {
-  const block = raw.match(/release_policy:\s*\n([\s\S]*?)(?=\n## |\n```)/);
-  if (!block) return null;
-  const text = block[1];
-  return {
-    auto_bump: /auto_bump:\s*true/.test(text),
-    trigger_globs: parseListFromBlock(`trigger_globs:\n${text}`, "trigger_globs").length
-      ? parseListFromBlock(text, "trigger_globs")
-      : (() => {
-          const items = [];
-          let inT = false;
-          for (const line of text.split(/\r?\n/)) {
-            if (/trigger_globs:/.test(line)) inT = true;
-            else if (/skip_globs:/.test(line)) inT = false;
-            else if (inT) {
-              const item = line.match(/^\s*-\s+"?([^"]+)"?\s*$/);
-              if (item) items.push(item[1]);
-            }
-          }
-          return items;
-        })(),
-  };
-}
-
-function parsePreflight(raw) {
-  const block = raw.match(/preflight:\s*\n([\s\S]*?)(?=\n## |\n```)/);
-  if (!block) return null;
-  const text = block[1];
-  const limit = text.match(/default_limit:\s*(\d+)/);
-  const lanes = [];
-  let inLanes = false;
-  for (const line of text.split(/\r?\n/)) {
-    if (/default_lanes:/.test(line)) inLanes = true;
-    else if (inLanes && /^\s{2}[a-z_]/.test(line) && !/^\s+-/.test(line)) inLanes = false;
-    if (inLanes) {
-      const item = line.match(/^\s*-\s*(\w+)/);
-      if (item) lanes.push(item[1]);
-    }
-  }
-  const behavior = text.match(/unattended_not_ready_behavior:\s*(\S+)/);
-  return {
-    default_limit: limit ? Number(limit[1]) : null,
-    default_lanes: lanes,
-    unattended_not_ready_behavior: behavior ? behavior[1] : null,
-  };
-}
-
-function parseMergePolicy(raw) {
-  if (!raw) return null;
-  const block = raw.match(/^merge_policy:\s*\n((?:[ \t]+.*(?:\n|$))*)/m);
-  if (!block) return null;
-  const text = block[1];
-  const scalar = (key) => {
-    const match = text.match(new RegExp(`^\\s+${key}:\\s*([^#\\n]+)`, "m"));
-    return match ? match[1].trim().replace(/^['"]|['"]$/g, "") : "";
-  };
-  const bool = (key, fallback) => {
-    const value = scalar(key);
-    if (value === "true") return true;
-    if (value === "false") return false;
-    return fallback;
-  };
-  return {
-    strategy: scalar("strategy") || "repo-policy",
-    auto_merge: bool("auto_merge", false),
-    merge_method: scalar("merge_method") || "squash",
-    require_work_item_approval: bool("require_work_item_approval", true),
-  };
 }
 
 function lint(repo) {
@@ -209,9 +81,19 @@ function lint(repo) {
     return { configPath, flat: {}, findings, infos, overall: "blocked" };
   }
 
-  const raw = readText(configPath);
-  const flat = mergeBlocks(extractYamlBlocks(raw));
-  const vault = flat.vault || vaultFromRaw(raw);
+  const parsed = parseDevLoopConfig(configPath);
+  const flat = parsed.config || {};
+  const nestedVault = flat.knowledge_backends?.skillwiki?.vault || "";
+  const vault = nestedVault || flat.vault || "";
+  for (const diagnostic of parsed.errors || []) {
+    findings.push({
+      severity: "error",
+      code: diagnostic.code,
+      message: diagnostic.message,
+      ...(diagnostic.path ? { path: diagnostic.path } : {}),
+      ...(Number.isInteger(diagnostic.line) ? { line: diagnostic.line } : {}),
+    });
+  }
 
   if (!flat.slug) {
     findings.push({ severity: "error", code: "missing_slug", message: "slug is required in Identity block" });
@@ -262,7 +144,7 @@ function lint(repo) {
     });
   }
   if (flat.ci_configured === true && flat.ci_discovery === "explicit") {
-    const checks = parseListFromBlock(raw, "required_checks");
+    const checks = flat.required_checks || [];
     if (checks.length === 0) {
       findings.push({
         severity: "warn",
@@ -271,16 +153,20 @@ function lint(repo) {
       });
     }
   }
-  const preflight = parsePreflight(raw);
+  const preflight = flat.preflight || null;
   if (preflight) {
-    if (preflight.default_limit !== null && (!Number.isInteger(preflight.default_limit) || preflight.default_limit < 1)) {
+    if (
+      preflight.default_limit !== null &&
+      preflight.default_limit !== undefined &&
+      (!Number.isInteger(preflight.default_limit) || preflight.default_limit < 1)
+    ) {
       findings.push({
         severity: "error",
         code: "invalid_preflight_limit",
         message: "preflight.default_limit must be a positive integer",
       });
     }
-    for (const lane of preflight.default_lanes) {
+    for (const lane of preflight.default_lanes || []) {
       if (!PREFLIGHT_LANES.has(lane)) {
         findings.push({
           severity: "error",
@@ -297,8 +183,8 @@ function lint(repo) {
       });
     }
   }
-  const release = parseReleasePolicy(raw);
-  if (release && release.auto_bump && release.trigger_globs.length === 0) {
+  const release = flat.release_policy || null;
+  if (release && release.auto_bump && (release.trigger_globs || []).length === 0) {
     findings.push({
       severity: "error",
       code: "auto_bump_no_triggers",
@@ -328,15 +214,15 @@ function lint(repo) {
       message: "publish_via set but release_policy block absent — auto-bump at PUSH will not run",
     });
   }
-  const mergePolicy = parseMergePolicy(raw);
-  if (mergePolicy && !MERGE_STRATEGIES.has(mergePolicy.strategy)) {
+  const mergePolicy = flat.merge_policy || null;
+  if (mergePolicy && mergePolicy.strategy && !MERGE_STRATEGIES.has(mergePolicy.strategy)) {
     findings.push({
       severity: "error",
       code: "invalid_merge_strategy",
       message: `merge_policy.strategy must be one of: ${[...MERGE_STRATEGIES].join(", ")}`,
     });
   }
-  if (mergePolicy && !MERGE_METHODS.has(mergePolicy.merge_method)) {
+  if (mergePolicy && mergePolicy.merge_method && !MERGE_METHODS.has(mergePolicy.merge_method)) {
     findings.push({
       severity: "error",
       code: "invalid_merge_method",
@@ -350,7 +236,7 @@ function lint(repo) {
       message: "merge_policy.auto_merge true requires require_work_item_approval: true",
     });
   }
-  const e2e = parseListFromBlock(raw, "e2e_scripts");
+  const e2e = flat.e2e_scripts || [];
   for (const script of e2e) {
     const cmd = script.replace(/^bash\s+/, "").trim();
     const scriptPath = path.join(repo, cmd);
@@ -364,7 +250,7 @@ function lint(repo) {
   }
   if (!exists(templatePath)) {
     infos.push({ code: "template_missing", message: "project-config template not found in repo (skipped structural compare)" });
-  } else if (vaultFromRaw(raw) && !raw.includes("knowledge_backends:") && raw.includes("vault:")) {
+  } else if (flat.vault && !nestedVault) {
     infos.push({
       code: "legacy_vault_alias",
       message: "Using top-level vault alias — prefer knowledge_backends.skillwiki.vault: auto for portability",

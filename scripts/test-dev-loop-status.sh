@@ -51,6 +51,71 @@ process.stdout.write("ok-none-layer\n");
 '
 
 cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+---
+name: status merge fixture
+---
+
+```yaml
+slug: test-merged
+release_branch: main
+knowledge_layer: none
+prd_layer: manual
+merge_policy:
+  strategy: pull-request
+  auto_merge: true
+  merge_method: rebase
+  require_work_item_approval: true
+```
+
+```yaml
+merge_policy:
+  auto_merge: false
+```
+EOF
+OUT_MERGED="$(node "$STATUS_JS" --repo "$TMP" --project test-merged --format json --no-write 2>/dev/null)" || fail "status failed on deep-merged config"
+echo "$OUT_MERGED" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const merge = j.pipeline_preview.merge;
+if (merge.strategy !== "pull-request" || merge.merge_method !== "rebase") throw new Error(`nested fields lost: ${JSON.stringify(merge)}`);
+if (merge.auto_merge_configured !== false) throw new Error(`later scalar did not win: ${JSON.stringify(merge)}`);
+process.stdout.write("ok-deep-merged-config\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-invalid
+release_branch: main
+knowledge_layer: none
+merge_policy:
+  strategy: pull-request
+  unknown_nested: true
+```
+EOF
+set +e
+OUT_INVALID="$(node "$STATUS_JS" --repo "$TMP" --project test-invalid --format json --no-write 2>/dev/null)"
+INVALID_EXIT=$?
+set -e
+[[ "$INVALID_EXIT" -eq 1 ]] || fail "schema-invalid status must exit 1, got $INVALID_EXIT"
+echo "$OUT_INVALID" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.health.state !== "blocked" || !j.blockers.some((item) => item.code === "invalid_config")) throw new Error(`schema error must block: ${JSON.stringify(j)}`);
+if (!(j.health.config_parser?.errors || []).some((item) => item.path === "merge_policy.unknown_nested")) throw new Error("schema path missing from health");
+if (j.pipeline_preview.merge.strategy !== "repo-policy") throw new Error("status consumed config after schema failure");
+process.stdout.write("ok-schema-blocker\n");
+'
+
+set +e
+OUT_PARSER_MISSING="$(DEV_LOOP_CONFIG_PYTHON=/definitely/missing/python node "$STATUS_JS" --repo "$TMP" --project test-invalid --format json --no-write 2>/dev/null)"
+PARSER_MISSING_EXIT=$?
+set -e
+[[ "$PARSER_MISSING_EXIT" -eq 1 ]] || fail "parser-unavailable status must exit 1, got $PARSER_MISSING_EXIT"
+echo "$OUT_PARSER_MISSING" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (!(j.health.config_parser?.errors || []).some((item) => item.code === "parser_unavailable")) throw new Error("parser capability error missing");
+process.stdout.write("ok-parser-capability-blocker\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
 ```yaml
 slug: test-release
 release_branch: main

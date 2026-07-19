@@ -420,6 +420,12 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_contains "dev-loop config-lint mode" "$prompt" 'MODE = config-lint'
   assert_contains "dev-loop config-lint script" "$prompt" 'dev-loop-config-lint.js'
   assert_contains "dev-loop config migrate script" "$prompt" 'dev-loop-config-migrate.js'
+  assert_contains "dev-loop schema parser contract" "$prompt" 'dev-loop-config-schema.js'
+  assert_contains "dev-loop refuses regex parser fallback" "$prompt" 'Never fall back to'
+  [ -f "$ROOT/skills/dev-loop/scripts/dev-loop-config-schema.py" ] ||
+    fail "skills/dev-loop/scripts/dev-loop-config-schema.py missing"
+  [ -f "$ROOT/skills/dev-loop/scripts/dev-loop-config-schema.js" ] ||
+    fail "skills/dev-loop/scripts/dev-loop-config-schema.js missing"
   assert_contains "dev-loop dashboard script" "$prompt" 'dev-loop-dashboard.js'
   assert_contains "dev-loop dashboard mode" "$prompt" 'MODE = dashboard'
   assert_contains "dev-loop why-skipped script" "$prompt" 'dev-loop-why-skipped.js'
@@ -434,6 +440,9 @@ run_dev_loop_prep_prompt_contract_checks() {
   assert_not_contains "dev-loop no degraded auto merge" "$prompt" '`healthy` or `degraded`: Enable auto-merge'
 
   assert_contains "project config includes preflight block" "$template" 'preflight:'
+  assert_contains "project config documents parser prerequisite" "$template" 'Runtime parsing requires Python 3 and'
+  assert_contains "project config documents deep merge" "$template" 'Maps merge recursively'
+  assert_contains "project config documents source provenance" "$template" 'one-based source line'
   assert_contains "project config includes unattended skip behavior" "$template" 'unattended_not_ready_behavior: skip'
   assert_contains "project config includes readiness state" "$template" 'preflight_state: ready'
   assert_contains "project config includes independent merge policy" "$template" 'merge_policy:'
@@ -822,8 +831,9 @@ run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 
-bash "$ROOT/scripts/test-dev-loop-status.sh"
 bash "$ROOT/scripts/test-dev-loop-config-schema.sh"
+bash "$ROOT/scripts/test-dev-loop-config-lint.sh"
+bash "$ROOT/scripts/test-dev-loop-status.sh"
 bash "$ROOT/scripts/test-dev-loop-config-migrate.sh"
 bash "$ROOT/scripts/test-dev-loop-dashboard.sh"
 

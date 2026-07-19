@@ -11,6 +11,7 @@ const { createHash } = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
 
 const SCHEMA_VERSION = "dev-loop-status.v1";
 
@@ -98,52 +99,21 @@ function fileExists(p) {
   }
 }
 
-function extractYamlBlocks(text) {
-  const blocks = [];
-  const re = /```ya?ml\n([\s\S]*?)```/gi;
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    blocks.push(m[1]);
-  }
-  return blocks;
-}
-
-function parseSimpleYaml(text) {
-  const data = {};
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const match = trimmed.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (!match) continue;
-    const key = match[1];
-    let val = match[2].trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (val === "true") data[key] = true;
-    else if (val === "false") data[key] = false;
-    else if (/^\d+$/.test(val)) data[key] = Number(val);
-    else data[key] = val;
-  }
-  return data;
-}
-
-function mergeConfigBlocks(blocks) {
-  const merged = {};
-  for (const block of blocks) {
-    Object.assign(merged, parseSimpleYaml(block));
-  }
-  return merged;
-}
-
 function loadDevLoopConfig(repo) {
   const configPath = path.join(repo, ".claude", "dev-loop.config.md");
   if (!fileExists(configPath)) {
-    return { configPath, flat: {}, raw: null };
+    return { configPath, flat: {}, parser: { errors: [], ok: true }, missing: true };
   }
-  const raw = readText(configPath);
-  const flat = mergeConfigBlocks(extractYamlBlocks(raw));
-  return { configPath, flat, raw };
+  const parser = parseDevLoopConfig(configPath);
+  // Fail closed: invalid schema results are diagnostics only. Downstream
+  // previews must use defaults rather than a partial/invalid config object.
+  const invalid = parser.ok === false || (parser.errors || []).length > 0;
+  return {
+    configPath,
+    flat: invalid ? {} : parser.config || {},
+    parser,
+    missing: false,
+  };
 }
 
 function resolveSkillwikiPath() {
@@ -160,15 +130,7 @@ function resolveSkillwikiPath() {
   return "";
 }
 
-function vaultFromConfigRaw(raw) {
-  if (!raw) return "";
-  const m = raw.match(/knowledge_backends:\s*\n[\s\S]*?skillwiki:\s*\n[\s\S]*?vault:\s*(\S+)/);
-  if (m) return m[1].replace(/"/g, "");
-  const legacy = raw.match(/^vault:\s*(\S+)/m);
-  return legacy ? legacy[1].replace(/"/g, "") : "";
-}
-
-function resolveVault(repo, flat, vaultOverride, configRaw) {
+function resolveVault(repo, flat, vaultOverride) {
   if (vaultOverride) {
     return { path: vaultOverride, configured: true, resolved: fileExists(vaultOverride), warning: null };
   }
@@ -176,7 +138,7 @@ function resolveVault(repo, flat, vaultOverride, configRaw) {
   if (layer === "none") {
     return { path: null, configured: false, resolved: false, warning: "knowledge_layer: none" };
   }
-  let configuredPath = flat.vault || vaultFromConfigRaw(configRaw) || "";
+  let configuredPath = flat.knowledge_backends?.skillwiki?.vault || flat.vault || "";
   if (!configuredPath) {
     configuredPath = resolveSkillwikiPath();
     if (!configuredPath) {
@@ -231,85 +193,21 @@ function gitLines(repo, args) {
     .filter(Boolean);
 }
 
-function parseReleasePolicyFromConfig(raw) {
-  if (!raw) return null;
-  const m = raw.match(/release_policy:\s*\n([\s\S]*?)(?=\n```|\n## |\n[a-z_]+:)/i);
-  if (!m) return null;
-  const block = m[1];
-  const policy = { auto_bump: /auto_bump:\s*true/.test(block) };
-  const tg = [];
-  const sg = [];
-  let inTrigger = false;
-  let inSkip = false;
-  for (const line of block.split(/\r?\n/)) {
-    if (/trigger_globs:/.test(line)) inTrigger = true;
-    else if (/skip_globs:/.test(line)) {
-      inTrigger = false;
-      inSkip = true;
-    } else if (/^\s{2}[a-z_]/.test(line) && !/^\s+-/.test(line)) {
-      inTrigger = false;
-      inSkip = false;
-    }
-    const item = line.match(/^\s+-\s+"?([^"]+)"?\s*$/);
-    if (item) {
-      if (inTrigger) tg.push(item[1]);
-      if (inSkip) sg.push(item[1]);
-    }
-  }
-  policy.trigger_globs = tg;
-  policy.skip_globs = sg;
-  return policy;
-}
-
-function parseBrowserVerificationFromConfig(raw) {
-  if (!raw) return null;
-  const m = raw.match(/browser_verification:\s*\n([\s\S]*?)(?=\n```|\n## |\n[a-z_]+:)/i);
-  if (!m) return null;
-  const block = m[1];
-  const enabled = /enabled:\s*true/.test(block);
-  const triggers = [];
-  let inTrigger = false;
-  for (const line of block.split(/\r?\n/)) {
-    if (/^\s*trigger:\s*$/.test(line)) inTrigger = true;
-    else if (/^\s{2}[a-z_]/.test(line) && !/^\s+-/.test(line)) {
-      inTrigger = false;
-    }
-    const item = line.match(/^\s+-\s+"?([^"]+)"?\s*$/);
-    if (item && inTrigger) triggers.push(item[1]);
-  }
-  return { enabled, trigger: triggers };
-}
-
-function parseMergePolicyFromConfig(raw) {
+function parseMergePolicyFromConfig(config) {
   const defaults = {
     strategy: "repo-policy",
     auto_merge: false,
     merge_method: "squash",
     require_work_item_approval: true,
   };
-  if (!raw) return defaults;
-  const block = raw.match(/^merge_policy:\s*\n((?:[ \t]+.*(?:\n|$))*)/m);
-  if (!block) return defaults;
-  const text = block[1];
-  const scalar = (key) => {
-    const match = text.match(new RegExp(`^\\s+${key}:\\s*([^#\\n]+)`, "m"));
-    return match ? match[1].trim().replace(/^['"]|['"]$/g, "") : "";
-  };
-  const bool = (key, fallback) => {
-    const value = scalar(key);
-    if (value === "true") return true;
-    if (value === "false") return false;
-    return fallback;
-  };
-  const configuredStrategy = scalar("strategy") || defaults.strategy;
+  const policy = config?.merge_policy || {};
+  const configuredStrategy = policy.strategy || defaults.strategy;
   return {
     strategy: configuredStrategy === "branch-policy" ? "repo-policy" : configuredStrategy,
-    auto_merge: bool("auto_merge", defaults.auto_merge),
-    merge_method: scalar("merge_method") || defaults.merge_method,
-    require_work_item_approval: bool(
-      "require_work_item_approval",
-      defaults.require_work_item_approval,
-    ),
+    auto_merge: policy.auto_merge ?? defaults.auto_merge,
+    merge_method: policy.merge_method || defaults.merge_method,
+    require_work_item_approval:
+      policy.require_work_item_approval ?? defaults.require_work_item_approval,
   };
 }
 
@@ -319,8 +217,8 @@ function collectChangedFiles(repo) {
   return [...new Set([...unstaged, ...staged])];
 }
 
-function browserVerifyPreview(repo, configRaw, missingOptional) {
-  const cfg = parseBrowserVerificationFromConfig(configRaw);
+function browserVerifyPreview(repo, config, missingOptional) {
+  const cfg = config.browser_verification || null;
   if (!cfg) {
     return { would_run: false, reason: "browser_verification absent or disabled in config" };
   }
@@ -354,9 +252,9 @@ function browserVerifyPreview(repo, configRaw, missingOptional) {
   };
 }
 
-function releasePreview(repo, flat, configRaw) {
+function releasePreview(repo, flat) {
   const publishVia = flat.publish_via || "";
-  const policy = parseReleasePolicyFromConfig(configRaw) || null;
+  const policy = flat.release_policy || null;
   if (!publishVia || publishVia === "none") {
     return { would_publish: false, reason: "publish_via unset or none" };
   }
@@ -743,26 +641,12 @@ function previewOperations(nextAction, flat, browserVerify) {
   return operations;
 }
 
-function configBlock(raw, key) {
-  if (!raw) return "";
-  const match = raw.match(new RegExp(`^${key}:\\s*\\n((?:[ \\t]+.*(?:\\n|$))*)`, "m"));
-  return match ? match[1] : "";
+function codeReviewBackendEnabled(config, backend, intensity) {
+  return config.code_review?.[backend]?.[`enabled_in_${intensity}`] === true;
 }
 
-function codeReviewBackendEnabled(raw, backend, intensity) {
-  const block = configBlock(raw, "code_review");
-  const lines = block.split(/\r?\n/);
-  let inBackend = false;
-  for (const line of lines) {
-    const section = line.match(/^\s{2}([A-Za-z0-9_-]+):\s*$/);
-    if (section) inBackend = section[1] === backend;
-    if (inBackend && new RegExp(`^\\s{4,}enabled_in_${intensity}:\\s*true\\s*$`).test(line)) return true;
-  }
-  return false;
-}
-
-function prdDisciplineConfigured(raw, ref) {
-  return configBlock(raw, "prd_disciplines").includes(`skill: ${ref}`);
+function prdDisciplineConfigured(config, ref) {
+  return (config.prd_disciplines || []).some((discipline) => discipline.skill === ref);
 }
 
 function optionalDependencyRelevant(entry, operations, context) {
@@ -770,13 +654,13 @@ function optionalDependencyRelevant(entry, operations, context) {
     return false;
   }
   if (["codex_code_review_backend", "codex_code_review_wrapper"].includes(entry.capability)) {
-    return codeReviewBackendEnabled(context.configRaw, "codex", context.intensity);
+    return codeReviewBackendEnabled(context.config, "codex", context.intensity);
   }
   if (entry.capability === "execute_with_subagent_dispatch_adapter" && context.prdLayer !== "superpowers") {
     return false;
   }
   if (entry.capability === "tdd_discipline") {
-    return context.prdLayer === "superpowers" && prdDisciplineConfigured(context.configRaw, entry.ref);
+    return context.prdLayer === "superpowers" && prdDisciplineConfigured(context.config, entry.ref);
   }
   if (entry.capability === "reactive_debugging") return false;
   if (entry.ref === "superpowers:requesting-code-review") {
@@ -810,7 +694,7 @@ function buildReport(opts) {
   const flat = cfg.flat;
   const slug = opts.project || flat.slug || path.basename(repo);
   const releaseBranch = flat.release_branch || "main";
-  const vaultInfo = resolveVault(repo, flat, opts.vault, cfg.raw);
+  const vaultInfo = resolveVault(repo, flat, opts.vault);
   const knowledgeLayer = flat.knowledge_layer || (vaultInfo.resolved ? "skillwiki" : "none");
   const backendCaps =
     knowledgeLayer === "skillwiki" && vaultInfo.resolved
@@ -827,6 +711,14 @@ function buildReport(opts) {
   const drift = skillCacheDrift(repo);
 
   const blockers = [];
+  if (!cfg.missing && (cfg.parser?.errors || []).length > 0) {
+    const first = cfg.parser.errors[0];
+    const location = first.path ? ` (${first.path})` : "";
+    blockers.push({
+      code: "invalid_config",
+      detail: `config parser reported ${cfg.parser.errors.length} error(s)${location}: ${first.message}`,
+    });
+  }
   if (depsInline.missing_required.length > 0) {
     blockers.push({ code: "missing_required_deps", detail: depsInline.missing_required.join(", ") });
   }
@@ -882,13 +774,13 @@ function buildReport(opts) {
   const branch = gitLines(repo, ["rev-parse", "--abbrev-ref", "HEAD"])[0] || "unknown";
   const onRelease = branch === releaseBranch;
   const ciConfigured = flat.ci_configured === true;
-  const release = releasePreview(repo, flat, cfg.raw);
-  const browserVerify = browserVerifyPreview(repo, cfg.raw, depsInline.missing_optional);
+  const release = releasePreview(repo, flat);
+  const browserVerify = browserVerifyPreview(repo, flat, depsInline.missing_optional);
   const operations = previewOperations(nextAction, flat, browserVerify);
   const relevantMissingOptional = (depsInline.missing_optional_entries || [])
     .filter((entry) =>
       optionalDependencyRelevant(entry, operations, {
-        configRaw: cfg.raw,
+        config: flat,
         intensity: opts.intensity,
         knowledgeLayer,
         prdLayer: flat.prd_layer || "superpowers",
@@ -896,7 +788,7 @@ function buildReport(opts) {
       }),
     )
     .map((entry) => entry.ref);
-  const mergePolicy = parseMergePolicyFromConfig(cfg.raw);
+  const mergePolicy = parseMergePolicyFromConfig(flat);
   const selectedWork = workReadiness.find((work) => work.id === wouldPick);
   const workItemApproved = selectedWork?.merge_auto_approved === true;
   const routeBlocked = mergePolicy.strategy === "pull-request" && onRelease;
@@ -985,6 +877,12 @@ function buildReport(opts) {
       ...health,
       dep_status: depStatus,
       effective_dep_status: effectiveDepStatus,
+      config_parser: {
+        ok: cfg.missing ? true : cfg.parser?.ok === true,
+        parser: cfg.parser?.parser || null,
+        errors: cfg.parser?.errors || [],
+        blocks: cfg.parser?.blocks || [],
+      },
       missing_required: depsInline.missing_required,
       missing_optional: depsInline.missing_optional,
       relevant_missing_optional: relevantMissingOptional,
