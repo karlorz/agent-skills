@@ -1,0 +1,22 @@
+Grok Resume skill extraction
+
+This package contains source artifacts extracted from the locally installed
+Grok Build 0.2.106 distribution, build bde89716f679, on 2026-07-22.
+
+The byte-identical source snapshot is stored under:
+
+  raw/grok-0.2.106-bde89716/
+
+The active shared copies under shared/resume-session/ preserve CORE.md and
+session_reader.py byte-for-byte. The two installable wrapper SKILL.md files
+under skills/ remove Grok's unsupported `argument-hint` frontmatter key and
+express argument handling in cross-platform wording; their behavior and
+shared-reader contract are otherwise unchanged.
+
+The open-source Grok Build repository does not contain these bundled skill
+bodies. Runtime integration evidence is pinned to xai-org/grok-build commit
+3af4d5d39897855bdcc74f23e690024a5dc05573, while the extracted bodies are
+pinned independently by the installed build identifier and MANIFEST.sha256.
+
+Copyright 2023-2026 SpaceXAI. Licensed under the Apache License, Version 2.0;
+see LICENSE.

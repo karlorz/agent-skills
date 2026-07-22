@@ -223,6 +223,23 @@
         "codex",
         "codex-app"
       ]
+    },
+    {
+      "name": "grok-resume",
+      "source": "./skills/grok-resume",
+      "description": "Source-faithful Grok Build resume-codex and resume-claude skills with the complete inert session reader, raw source snapshots, and cross-platform wrapper compatibility.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "keywords": [
+        "grok",
+        "resume",
+        "codex",
+        "claude-code",
+        "sessions",
+        "handoff",
+        "continuity",
+        "security"
+      ]
     }
   ]
 }

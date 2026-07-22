@@ -1,0 +1,4 @@
+interface:
+  display_name: "Resume Codex"
+  short_description: "Continue safely from a Codex session"
+  default_prompt: "Use $resume-codex to continue from my most recent Codex session for this repository."

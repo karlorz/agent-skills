@@ -1,0 +1,33 @@
+{
+  "name": "grok-resume",
+  "version": "0.1.0",
+  "description": "Source-faithful Grok Build resume-codex and resume-claude skills with the complete inert session reader and cross-platform wrapper compatibility.",
+  "author": {
+    "name": "karlorz"
+  },
+  "homepage": "https://x.ai/cli",
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "grok",
+    "resume",
+    "codex",
+    "claude-code",
+    "sessions",
+    "handoff",
+    "continuity",
+    "security"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Grok Resume",
+    "shortDescription": "Resume Codex or Claude sessions safely",
+    "longDescription": "Extracted from Grok Build 0.2.106, this plugin reads Codex and Claude Code session stores as untrusted inert history, produces a concise handoff, and verifies current repository state before continuing.",
+    "developerName": "karlorz",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": "Resume my most recent coding-agent session for this repository."
+  }
+}

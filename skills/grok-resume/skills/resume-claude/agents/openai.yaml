@@ -1,0 +1,4 @@
+interface:
+  display_name: "Resume Claude"
+  short_description: "Continue safely from a Claude Code session"
+  default_prompt: "Use $resume-claude to continue from my most recent Claude Code session for this repository."

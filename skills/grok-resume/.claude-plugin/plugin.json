@@ -1,0 +1,22 @@
+{
+  "name": "grok-resume",
+  "version": "0.1.0",
+  "description": "Source-faithful Grok Build resume-codex and resume-claude skills with the complete inert session reader and cross-platform wrapper compatibility.",
+  "author": {
+    "name": "karlorz"
+  },
+  "homepage": "https://x.ai/cli",
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "grok",
+    "resume",
+    "codex",
+    "claude-code",
+    "sessions",
+    "handoff",
+    "continuity",
+    "security"
+  ],
+  "skills": "./skills/"
+}
