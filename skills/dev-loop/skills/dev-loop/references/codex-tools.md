@@ -114,9 +114,40 @@ this is detection + degradation, not platform branching in the loop logic.
 
 ## Discovery
 
-On Claude Code, dev-loop loads from the plugin marketplace. On Codex, place or
-symlink the dev-loop skills into `~/.agents/skills/` so they auto-load. The
-`.codex-plugin/plugin.json` manifest declares the plugin for Codex tooling.
+On Claude Code, dev-loop loads from the plugin marketplace. On Codex, packaged
+dev-loop discovery requires both the root marketplace entry and
+`.codex-plugin/plugin.json`; install it through the supported installer:
+
+```bash
+codex plugin add dev-loop@karlorz-agent-skills --json
+```
+
+Verify the returned version and installed path, then start a new Codex chat or
+CLI session. The current session does not hot-swap instructions after install.
+
+Standalone personal skills under `~/.agents/skills/` are a separate Codex
+discovery channel. They may be useful for unbundled skills, but they do not
+replace installing the versioned dev-loop plugin.
+
+## Plugin Cache Drift on Codex
+
+Treat `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/` as immutable.
+Diagnose the exact version declared by the manifests; do not select a cache by
+modification time and do not copy source files into an existing version
+directory.
+
+If source differs from the installed payload:
+
+1. If the declared version is already released, advance it for the changed
+   distributable payload.
+2. Run `codex plugin add dev-loop@karlorz-agent-skills --json`.
+3. Verify the installer reports the required version and a versioned path.
+4. Compare source and installed hashes.
+5. End the stale current session.
+6. Start a new Codex chat or CLI session and run a read-only status probe.
+
+Do not delete Codex session history as routine remediation. Existing sessions
+are evidence and user data, not a plugin refresh mechanism.
 
 ## Troubleshooting: Subagents Not Working on Codex
 
@@ -139,10 +170,14 @@ If dev-loop cycles complete but workers always fall back to inline execution:
    is not being exposed — check if the Codex session loaded the plugin and
    the project is trusted.
 
-4. **Clear stale session cache:**
+4. **Verify the installed plugin and start a new session:**
    ```bash
-   rm -rf ~/.codex/sessions/*
+   codex plugin list --json
    ```
+   Confirm `dev-loop@karlorz-agent-skills` is enabled at the expected version.
+   If installation is stale, run
+   `codex plugin add dev-loop@karlorz-agent-skills --json`, verify its returned
+   version/path, then start a new Codex chat or CLI session.
 
 5. **Disable `multi_agent_v2` if encountering "encrypted parameters" errors:**
    ```toml

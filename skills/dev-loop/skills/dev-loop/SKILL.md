@@ -7,7 +7,7 @@ description: >
   "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.23: deterministic write preflight and typed verification dispatch add fail-closed mutation routing, repository/worktree identity checks, and suite selection before writes or verification. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.23: immutable plugin-payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -192,15 +192,17 @@ auto-commit, `skillwiki doctor` network writes.
 node skills/dev-loop/scripts/dev-loop-status.js \
   --repo <cwd> \
   --project <slug> \
+  --host <codex|claude|unknown> \
   --format both \
   --intensity <normal|high> \
   --preview-mode <core|prep|investigate|status> \
   --orchestration <attended|goal>
 ```
 
-`STATUS_ARGS` may pass `--no-write` (stdout only), `--format json|markdown`, or
-`--vault <path>` override. Map user `--json` to `--format json --no-write` when
-appropriate.
+Resolve `--host` from the live platform capability; do not infer the active
+cache from whichever filesystem entry is newest. `STATUS_ARGS` may pass
+`--no-write` (stdout only), `--format json|markdown`, or `--vault <path>`
+override. Map user `--json` to `--format json --no-write` when appropriate.
 
 Optional Codex/Agent isolation: `Agent(subagent_type: "dev-loop:status-worker", model: "sonnet", ...)`
 per `agents/status-worker.md` (inline `node` fallback when dispatch unavailable).
@@ -776,28 +778,43 @@ prd_disciplines:
 
 ### 0. REFRESH — context hygiene + config load (mandatory, ~15s)
 
-1. **Hot-reload drift guard** — before any other step, detect whether the
-   skill source has drifted from the cached version:
-   - Hash the cached SKILL.md from `~/.claude/plugins/cache/<plugin>/dev-loop/<version>/SKILL.md`
-   - Hash the source SKILL.md at the skill repo (known from plugin manifest or CWD)
-   - Compare to `LAST_SKILL_HASH` from the previous cycle (absent on first cycle)
-   - **Three states:**
-     - `in_sync`: cache hash == source hash → proceed normally
-     - `drifted_reloaded`: cache hash changed from LAST_SKILL_HASH (user ran
-       `/reload-plugins`) → warn: "SKILL.md updated — running new version",
-       update LAST_SKILL_HASH, proceed
-     - `drifted_stale`: source hash != cache hash AND cache hash == LAST_SKILL_HASH
-       → **block the cycle**: "Source SKILL.md has edits not yet loaded.
-       Run `/reload-plugins` before continuing this cycle."
-   - Store cache hash as `LAST_SKILL_HASH` after check.
-   - **Session-start warning**: on the first cycle of a new session, if the
-     cache hash differs from what `LAST_SKILL_HASH` would be (i.e., the
-     skill was reloaded between sessions), emit a one-line note:
-     "Skill version changed since last session — running updated SKILL.md."
-     This surfaces drift that occurs between sessions, not just mid-session.
+1. **Immutable plugin drift guard** — before any other step, diagnose the
+   active host's exact declared plugin version:
+   - Read the version from both dev-loop plugin manifests and require them to
+     agree.
+   - Resolve the runtime host from the live platform capability
+     (`DISPATCH_MODE = codex|claude_code`) or pass an explicit host to
+     `dev-loop-status.js --host <codex|claude>`. Unknown hosts fail closed.
+   - For Codex, inspect only
+     `~/.codex/plugins/cache/karlorz-agent-skills/dev-loop/<version>/`.
+     For Claude, inspect only
+     `~/.claude/plugins/cache/karlorz-agent-skills/dev-loop/<version>/`.
+   - Hash the source and exact-version cached `SKILL.md`. Other semantic
+     versions may be listed as inactive evidence, but never selected by mtime.
+   - **States:**
+     - `in_sync`: exact declared version exists and hashes match → proceed.
+     - `not_installed`: no active-host cache is installed → block.
+     - `installed_version_stale`: only another version is installed → block.
+     - `drifted_stale`: exact version exists but its payload hash differs →
+       block; same-version cache mutation is not a valid repair.
+     - `unknown_host` or `manifest_version_mismatch` → block without suggesting
+       a write.
+   - **Codex recovery:** advance the plugin version if the declared version is
+     already released and its source payload changed, then run
+     `codex plugin add dev-loop@karlorz-agent-skills --json`, verify the
+     returned version/path and source/cache hashes, stop the stale current
+     session, then start a new Codex chat or CLI session.
+   - **Claude recovery:** advance the plugin version if the declared version
+     is already released and its source payload changed, then run
+     `claude plugin update dev-loop@karlorz-agent-skills`, verify hashes, then
+     restart Claude Code as required by the updater.
+   - Never copy into an existing versioned cache, delete session history, or
+     present a Claude refresh command as Codex remediation.
 
-2. **Reload plugins** — run `/reload-plugins` to pick up any skill or
-   command changes from prior cycles. Skip on first cycle if no edits.
+2. **Respect the session loading boundary** — installing or updating a plugin
+   does not hot-swap instructions already loaded into the current agent
+   session. After recovery, end the stale session and verify the next cycle
+   from a fresh session before allowing writes.
 
 3. **Load project config** in this order:
    - **Primary**: read `./.claude/dev-loop.config.md` (relative to CWD).
@@ -2285,10 +2302,11 @@ stale local state:
     must see which steps were skipped and why. When new backends are
     added, they declare capabilities in the config; steps pick them
     up automatically.
-19. **Block on skill-source drift.** If REFRESH detects that the cached
-    SKILL.md differs from the source but the user hasn't reloaded
-    plugins, block the cycle. Running stale skill logic silently is
-    worse than stopping and asking the user to `/reload-plugins`.
+19. **Block on skill-source drift.** REFRESH must select the active host's
+    exact declared cache version and compare hashes without mtime heuristics.
+    Missing, stale-version, mismatched, unknown-host, or manifest-conflict
+    states block the cycle. Recovery must use the platform's supported plugin
+    installer/update path and a fresh session; never mutate an installed cache.
 20. **Execution subagents always run on sonnet.** When `subagent_dispatch`
     in PRD_CAPS, every subagent spawned during EXECUTE must include
     `model: "sonnet"`. For
@@ -2544,8 +2562,11 @@ matching syntax.
    / "Hand off to local" controls instead of pushing. Surface the deferral in
    RETRO, not as a cycle failure.
 
-Discovery on Codex is via `~/.agents/skills/`; the `.codex-plugin/plugin.json`
-manifest declares the plugin for Codex tooling. Full tool mapping details:
+Packaged Codex discovery uses the root marketplace entry plus
+`.codex-plugin/plugin.json`; install with
+`codex plugin add dev-loop@karlorz-agent-skills --json`. Standalone personal
+skills under `~/.agents/skills/` are a separate discovery channel and are not
+a replacement for installing this plugin. Full tool mapping details:
 `references/codex-tools.md`.
 
 ## Research Agent

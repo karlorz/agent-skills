@@ -229,13 +229,13 @@ run_sync_script_contract_checks() {
   local sync_script
   sync_script="$(cat "$ROOT/skills/dev-loop/sync-plugin-cache.sh")"
 
-  assert_contains "sync-plugin-cache includes dependencies manifest" "$sync_script" 'dependencies.yaml'
-  assert_contains "sync-plugin-cache syncs nested skills surface" "$sync_script" 'nested-only skill surface'
-  assert_contains "sync-plugin-cache syncs agents directory" "$sync_script" 'Sync agents directory'
-  assert_contains "sync-plugin-cache copies agents directory" "$sync_script" 'cp "${SOURCE_DIR}/agents/"* "${CACHE_DIR}/agents/"'
-  assert_contains "sync-plugin-cache syncs scripts directory" "$sync_script" 'Sync scripts directory'
-  assert_contains "sync-plugin-cache copies scripts recursively" "$sync_script" 'scripts/.'
-  assert_contains "sync-plugin-cache syncs references directory" "$sync_script" 'Sync references directory'
+  assert_contains "sync-plugin-cache is deprecated" "$sync_script" 'deprecated and performs no writes'
+  assert_contains "sync-plugin-cache documents Codex installer" "$sync_script" 'codex plugin add dev-loop@karlorz-agent-skills --json'
+  assert_contains "sync-plugin-cache documents Claude updater" "$sync_script" 'claude plugin update dev-loop@karlorz-agent-skills'
+  assert_contains "sync-plugin-cache requires fresh Codex session" "$sync_script" 'Start a new Codex chat or CLI session'
+  assert_not_contains "sync-plugin-cache performs no cache copies" "$sync_script" 'cp '
+  assert_not_contains "sync-plugin-cache performs no recursive deletion" "$sync_script" 'rm -rf'
+  assert_not_contains "sync-plugin-cache performs no directory creation" "$sync_script" 'mkdir '
   [ -f "$ROOT/skills/dev-loop/agents/simplify-worker.md" ] ||
     fail "skills/dev-loop/agents/simplify-worker.md missing"
   [ -f "$ROOT/skills/dev-loop/references/codex-tools.md" ] ||
@@ -484,12 +484,10 @@ run_dev_loop_prep_prompt_contract_checks() {
 }
 
 run_dev_loop_status_companion_contract_checks() {
-  local skill_root canonical sync_script
+  local skill_root canonical
   skill_root="$ROOT/skills/dev-loop"
   canonical="$skill_root/skills/status/SKILL.md"
   [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
-  sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
-  assert_contains "sync-plugin-cache syncs nested skills surface" "$sync_script" 'nested-only skill surface'
   assert_contains "dev-loop status companion deny-list" "$(cat "$canonical")" 'Hard deny-list'
   assert_contains "dev-loop references status companion" "$(cat "$skill_root/skills/dev-loop/SKILL.md")" 'status/SKILL.md'
   assert_contains "status companion HUD section" "$(cat "$canonical")" 'dev-loop-status-hud.js'
@@ -545,7 +543,7 @@ run_dev_loop_command_surface_contract_checks() {
 }
 
 run_dev_loop_office_hours_contract_checks() {
-  local skill_root canonical body sync_script
+  local skill_root canonical body
 
   skill_root="$ROOT/skills/dev-loop"
   canonical="$skill_root/skills/office-hours/SKILL.md"
@@ -553,7 +551,6 @@ run_dev_loop_office_hours_contract_checks() {
   [ -f "$canonical" ] || fail "${canonical#$ROOT/} missing"
 
   body="$(cat "$canonical")"
-  sync_script="$(cat "$skill_root/sync-plugin-cache.sh")"
 
   assert_contains "office-hours uses inventory helper" "$body" 'preflight-inventory.js'
   assert_contains "office-hours documents all-projects input" "$body" '/dev-loop office-hours --all-projects'
@@ -590,7 +587,6 @@ run_dev_loop_office_hours_contract_checks() {
   assert_contains "office-hours stale implemented recheck" "$body" 'possibly_implemented_without_closure'
   assert_contains "office-hours stale handling remains human-controlled" "$body" 'hygiene-cleanup'
   assert_contains "office-hours optional grill hook" "$body" 'grill-me'
-  assert_contains "sync-plugin-cache syncs nested skills surface" "$sync_script" 'nested-only skill surface'
 }
 
 run_dev_loop_investigate_queue_contract_checks() {
@@ -619,6 +615,11 @@ run_codex_dispatch_contract_checks() {
   assert_contains "dev-loop codex-tools task_name mapping" "$canonical_ref" 'task_name'
   assert_contains "dev-loop SKILL instruction-level dispatch wording" "$skill" 'instruction-level dispatch'
   assert_contains "dev-loop codex-tools custom agent TOML location" "$canonical_ref" '.codex/agents/'
+  assert_contains "Codex discovery uses supported installer" "$canonical_ref" 'codex plugin add dev-loop@karlorz-agent-skills --json'
+  assert_contains "Codex drift requires new session" "$canonical_ref" 'Start a new Codex chat or CLI session'
+  assert_not_contains "Codex guidance never deletes sessions" "$canonical_ref" 'rm -rf ~/.codex/sessions'
+  assert_not_contains "Codex guidance never recommends reload-plugins" "$canonical_ref" '/reload-plugins'
+  assert_not_contains "Codex guidance never recommends cache helper" "$canonical_ref" 'sync-plugin-cache.sh'
 }
 
 assert_json_array_contains() {
@@ -651,6 +652,11 @@ run_dev_loop_metadata_contract_checks() {
   assert_contains "dev-loop Claude manifest current version headline" "$claude_description" "v${skill_version}:"
   assert_contains "dev-loop Codex manifest current version headline" "$codex_description" "v${skill_version}:"
   assert_contains "dev-loop marketplace current version headline" "$marketplace_description" "v${skill_version}:"
+  assert_eq "dev-loop Claude/Codex release headline" "$claude_description" "$codex_description"
+  assert_eq "dev-loop Claude/marketplace release headline" "$claude_description" "$marketplace_description"
+  assert_contains "dev-loop release headline immutable payload contract" "$claude_description" "immutable plugin payload/version enforcement"
+  assert_contains "dev-loop release headline host-aware cache contract" "$claude_description" "exact host-aware cache diagnostics"
+  assert_contains "dev-loop release headline fresh-session recovery" "$claude_description" "platform-correct fresh-session recovery"
 
   assert_contains "dev-loop Claude manifest mentions prep mode" "$claude_description" "preflight prep mode"
   assert_contains "dev-loop Codex manifest mentions prep mode" "$codex_description" "preflight prep mode"
@@ -837,6 +843,8 @@ run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 
+node "$ROOT/scripts/check-plugin-release-drift.js" --repo "$ROOT" --skill dev-loop
+bash "$ROOT/scripts/test-plugin-release-drift.sh"
 bash "$ROOT/scripts/test-dev-loop-config-schema.sh"
 bash "$ROOT/scripts/test-dev-loop-write-preflight.sh"
 bash "$ROOT/scripts/test-dev-loop-verification-dispatch.sh"

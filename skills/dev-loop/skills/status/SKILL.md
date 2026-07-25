@@ -57,6 +57,7 @@ Optional isolation: `dev-loop:status-worker` per `agents/status-worker.md`.
 | Flag | Purpose |
 |------|---------|
 | `--repo <path>` | Project repo (required) |
+| `--host auto\|codex\|claude\|unknown` | Active runtime for exact-version cache diagnosis |
 | `--format markdown\|json\|both` | Output (default both) |
 | `--no-write` | No files under `.claude/dev-loop/status/` |
 | `--intensity normal\|high` | Idle / deep-research preview |
@@ -64,6 +65,13 @@ Optional isolation: `dev-loop:status-worker` per `agents/status-worker.md`.
 | `--orchestration attended\|goal` | Unattended `/goal` readiness simulation |
 | `--vault <path>` | Vault override |
 | `--project <slug>` | Slug override |
+
+The cache probe is host-specific and exact-version-first. It never chooses a
+cache by mtime. Codex remediation uses
+`codex plugin add dev-loop@karlorz-agent-skills --json` plus a new session;
+Claude remediation uses `claude plugin update
+dev-loop@karlorz-agent-skills` plus restart. Unknown hosts fail closed, and no
+status path copies into a cache or deletes session history.
 
 ## HUD / statusline
 

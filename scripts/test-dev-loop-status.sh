@@ -9,6 +9,25 @@ fail() {
   exit 1
 }
 
+run_blocking_status() {
+  local fixture_home="$1" fixture_repo="$2" fixture_host="$3" label="$4"
+  local output status
+
+  set +e
+  output="$(
+    HOME="$fixture_home" node "$STATUS_JS" \
+      --repo "$fixture_repo" \
+      --project test-none \
+      --host "$fixture_host" \
+      --format json \
+      --no-write 2>/dev/null
+  )"
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "$label must block with exit 1, got $status"
+  printf '%s' "$output"
+}
+
 [[ -f "$STATUS_JS" ]] || fail "missing dev-loop-status.js"
 
 TMP="$(mktemp -d)"
@@ -151,13 +170,22 @@ process.stdout.write("ok-release-preview\n");
 NESTED_REPO="$TMP/nested-repo"
 NESTED_HOME="$TMP/nested-home"
 mkdir -p "$NESTED_REPO/.claude"
+mkdir -p "$NESTED_REPO/.claude-plugin"
 mkdir -p "$NESTED_REPO/skills/dev-loop/.claude-plugin"
+mkdir -p "$NESTED_REPO/skills/dev-loop/.codex-plugin"
 mkdir -p "$NESTED_REPO/skills/dev-loop/agents"
 mkdir -p "$NESTED_REPO/skills/dev-loop/skills/dev-loop"
 mkdir -p "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.7/skills/dev-loop"
+mkdir -p "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.6/skills/dev-loop"
 mkdir -p "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/playwright-cli/1.2.3/agents"
 cp "$TMP/.claude/dev-loop.config.md" "$NESTED_REPO/.claude/dev-loop.config.md"
+cat > "$NESTED_REPO/.claude-plugin/marketplace.json" <<'EOF'
+{"plugins":[{"name":"dev-loop","version":"9.8.7","source":"./skills/dev-loop"}]}
+EOF
 cat > "$NESTED_REPO/skills/dev-loop/.claude-plugin/plugin.json" <<'EOF'
+{"name":"dev-loop","version":"9.8.7"}
+EOF
+cat > "$NESTED_REPO/skills/dev-loop/.codex-plugin/plugin.json" <<'EOF'
 {"name":"dev-loop","version":"9.8.7"}
 EOF
 cat > "$NESTED_REPO/skills/dev-loop/skills/dev-loop/SKILL.md" <<'EOF'
@@ -168,6 +196,14 @@ name: dev-loop
 EOF
 cp "$NESTED_REPO/skills/dev-loop/skills/dev-loop/SKILL.md" \
   "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.7/skills/dev-loop/SKILL.md"
+cat > "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.6/skills/dev-loop/SKILL.md" <<'EOF'
+---
+name: dev-loop
+---
+# stale cache with a misleading newer mtime
+EOF
+touch -t 202001010000 "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.7/skills/dev-loop/SKILL.md"
+touch -t 203001010000 "$NESTED_HOME/.codex/plugins/cache/karlorz-agent-skills/dev-loop/9.8.6/skills/dev-loop/SKILL.md"
 cat > "$NESTED_REPO/skills/dev-loop/agents/research.md" <<'EOF'
 ---
 name: research-worker
@@ -194,14 +230,22 @@ optional:
     used_by: ["BROWSER-VERIFY step 6a"]
 EOF
 
-OUT_NESTED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)" || fail "nested-layout status failed"
+OUT_NESTED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --host codex --format json --no-write 2>/dev/null)" || fail "nested-layout status failed"
 echo "$OUT_NESTED" | node -e '
 const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (j.health.skill_cache.state !== "in_sync") {
   throw new Error(`nested source/cache should be in_sync, got ${JSON.stringify(j.health.skill_cache)}`);
 }
+if (j.health.skill_cache.host !== "codex") throw new Error("explicit Codex host not preserved");
+if (j.health.skill_cache.source_version !== "9.8.7") throw new Error("source version missing");
+if (j.health.skill_cache.installed_version !== "9.8.7") {
+  throw new Error(`exact version must beat misleading mtimes: ${JSON.stringify(j.health.skill_cache)}`);
+}
 if (!j.health.skill_cache.cache_path.endsWith("/skills/dev-loop/SKILL.md")) {
   throw new Error(`unexpected nested cache path: ${j.health.skill_cache.cache_path}`);
+}
+if ((j.health.skill_cache.inactive_versions || []).join(",") !== "9.8.6") {
+  throw new Error(`inactive cache evidence missing: ${JSON.stringify(j.health.skill_cache)}`);
 }
 const missing = j.health.missing_optional;
 if (missing.includes("dev-loop:research-worker")) throw new Error("self agent false negative");
@@ -219,6 +263,92 @@ if (j.overall.state !== j.health.state || j.overall.next_action !== j.lifecycle.
 }
 process.stdout.write("ok-nested-cache\n");
 '
+
+cat > "$NESTED_REPO/skills/dev-loop/.claude-plugin/plugin.json" <<'EOF'
+{"name":"dev-loop","version":"9.8.8"}
+EOF
+cat > "$NESTED_REPO/skills/dev-loop/.codex-plugin/plugin.json" <<'EOF'
+{"name":"dev-loop","version":"9.8.8"}
+EOF
+cat > "$NESTED_REPO/.claude-plugin/marketplace.json" <<'EOF'
+{"plugins":[{"name":"dev-loop","version":"9.8.8","source":"./skills/dev-loop"}]}
+EOF
+
+OUT_STALE_CODEX="$(run_blocking_status "$NESTED_HOME" "$NESTED_REPO" codex "stale installed Codex version")"
+echo "$OUT_STALE_CODEX" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const cache = j.health.skill_cache;
+if (cache.state !== "installed_version_stale") throw new Error(`expected stale install: ${JSON.stringify(cache)}`);
+if (cache.source_version !== "9.8.8" || cache.installed_version !== "9.8.7") {
+  throw new Error(`version evidence missing: ${JSON.stringify(cache)}`);
+}
+if (cache.cache_path !== null || !cache.inactive_cache_path.endsWith("/9.8.7/skills/dev-loop/SKILL.md")) {
+  throw new Error(`inactive evidence was selected as active cache: ${JSON.stringify(cache)}`);
+}
+if (cache.plugin_selector !== "dev-loop@karlorz-agent-skills") throw new Error("plugin selector missing");
+if (cache.install_command !== "codex plugin add dev-loop@karlorz-agent-skills --json") {
+  throw new Error(`supported installer missing: ${JSON.stringify(cache)}`);
+}
+if (cache.restart_required !== true) throw new Error("Codex stale install must require a new session");
+const rendered = JSON.stringify(j);
+for (const forbidden of ["/reload-plugins", "sync-plugin-cache.sh", "rm -rf", ".codex/sessions"]) {
+  if (rendered.includes(forbidden)) throw new Error(`Codex output contains forbidden remediation: ${forbidden}`);
+}
+process.stdout.write("ok-stale-codex-cache\n");
+'
+
+EMPTY_HOME="$TMP/empty-home"
+mkdir -p "$EMPTY_HOME"
+OUT_MISSING_CODEX="$(run_blocking_status "$EMPTY_HOME" "$NESTED_REPO" codex "missing Codex install")"
+echo "$OUT_MISSING_CODEX" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const cache = j.health.skill_cache;
+if (cache.state !== "not_installed") throw new Error(`expected not_installed: ${JSON.stringify(cache)}`);
+if (cache.installed_version !== null || cache.cache_path !== null) throw new Error("missing install reported an active cache");
+if (cache.restart_required !== true) throw new Error("Codex install must require a new session");
+process.stdout.write("ok-missing-codex-cache\n");
+'
+
+CLAUDE_HOME="$TMP/claude-home"
+mkdir -p "$CLAUDE_HOME/.claude/plugins/cache/karlorz-agent-skills/dev-loop/9.8.8/skills/dev-loop"
+cat > "$CLAUDE_HOME/.claude/plugins/cache/karlorz-agent-skills/dev-loop/9.8.8/skills/dev-loop/SKILL.md" <<'EOF'
+---
+name: dev-loop
+---
+# stale Claude payload
+EOF
+OUT_CLAUDE="$(run_blocking_status "$CLAUDE_HOME" "$NESTED_REPO" claude "drifted Claude cache")"
+echo "$OUT_CLAUDE" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const cache = j.health.skill_cache;
+if (cache.state !== "drifted_stale" || cache.host !== "claude") throw new Error(`Claude drift missing: ${JSON.stringify(cache)}`);
+if (cache.install_command !== "claude plugin update dev-loop@karlorz-agent-skills") {
+  throw new Error(`Claude supported refresh missing: ${JSON.stringify(cache)}`);
+}
+if (cache.restart_required !== true) throw new Error("Claude update requires restart");
+const rendered = JSON.stringify(j);
+if (rendered.includes("codex plugin add")) throw new Error("Claude output contains Codex remediation");
+process.stdout.write("ok-claude-remediation\n");
+'
+
+OUT_UNKNOWN="$(run_blocking_status "$NESTED_HOME" "$NESTED_REPO" unknown "unknown host")"
+echo "$OUT_UNKNOWN" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const cache = j.health.skill_cache;
+if (cache.state !== "unknown_host") throw new Error(`unknown host did not fail closed: ${JSON.stringify(cache)}`);
+if (cache.install_command !== null) throw new Error("unknown host suggested a write");
+process.stdout.write("ok-unknown-host-remediation\n");
+'
+
+cat > "$NESTED_REPO/skills/dev-loop/.claude-plugin/plugin.json" <<'EOF'
+{"name":"dev-loop","version":"9.8.7"}
+EOF
+cat > "$NESTED_REPO/skills/dev-loop/.codex-plugin/plugin.json" <<'EOF'
+{"name":"dev-loop","version":"9.8.7"}
+EOF
+cat > "$NESTED_REPO/.claude-plugin/marketplace.json" <<'EOF'
+{"plugins":[{"name":"dev-loop","version":"9.8.7","source":"./skills/dev-loop"}]}
+EOF
 
 cat > "$NESTED_REPO/skills/dev-loop/dependencies.yaml" <<'EOF'
 optional:

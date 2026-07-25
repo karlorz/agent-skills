@@ -12,6 +12,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
+const { compareSupportedSemver, parseSupportedSemver } = require("./dev-loop-version.js");
 
 const SCHEMA_VERSION = "dev-loop-status.v1";
 
@@ -23,6 +24,7 @@ function usage() {
     "  --format <markdown|json|both>   Output format (default: both)",
     "  --project <slug>                Project slug (default: from config or dirname)",
     "  --vault <path>                  Vault path override",
+    "  --host <auto|codex|claude|unknown>  Runtime host for plugin-cache diagnosis (default: auto)",
     "  --intensity <normal|high>       Intensity hint (default: normal)",
     "  --preview-mode <core|prep|investigate|status>  Simulated next mode (default: core)",
     "  --orchestration <attended|goal> Unattended /goal simulation (default: attended)",
@@ -35,6 +37,7 @@ function parseArgs(argv) {
   const opts = {
     errors: [],
     format: "both",
+    host: "auto",
     intensity: "normal",
     noWrite: false,
     orchestration: "attended",
@@ -59,6 +62,7 @@ function parseArgs(argv) {
       "--format",
       "--project",
       "--vault",
+      "--host",
       "--intensity",
       "--preview-mode",
       "--orchestration",
@@ -74,6 +78,7 @@ function parseArgs(argv) {
       else if (arg === "--format") opts.format = value;
       else if (arg === "--project") opts.project = value;
       else if (arg === "--vault") opts.vault = value;
+      else if (arg === "--host") opts.host = value;
       else if (arg === "--intensity") opts.intensity = value;
       else if (arg === "--preview-mode") opts.previewMode = value;
       else if (arg === "--orchestration") opts.orchestration = value;
@@ -82,6 +87,9 @@ function parseArgs(argv) {
 
   if (!opts.repo && !opts.help) {
     opts.repo = process.cwd();
+  }
+  if (!["auto", "codex", "claude", "unknown"].includes(opts.host)) {
+    opts.errors.push(`--host must be auto, codex, claude, or unknown (got ${opts.host})`);
   }
   return opts;
 }
@@ -512,76 +520,231 @@ function readLastDoctor() {
   }
 }
 
-function readPluginVersion(repo) {
-  const manifest = path.join(repo, "skills", "dev-loop", ".claude-plugin", "plugin.json");
-  if (!fileExists(manifest)) return "";
+function readJsonVersion(filePath) {
+  if (!fileExists(filePath)) return "";
   try {
-    const j = JSON.parse(readText(manifest));
-    return typeof j.version === "string" ? j.version : "";
+    const parsed = JSON.parse(readText(filePath));
+    return typeof parsed.version === "string" ? parsed.version : "";
   } catch {
     return "";
   }
+}
+
+function readPluginVersions(repo) {
+  const pluginRoot = path.join(repo, "skills", "dev-loop");
+  let marketplace = "";
+  const marketplacePath = path.join(repo, ".claude-plugin", "marketplace.json");
+  if (fileExists(marketplacePath)) {
+    try {
+      const manifest = JSON.parse(readText(marketplacePath));
+      const entries = Array.isArray(manifest.plugins)
+        ? manifest.plugins.filter((plugin) => plugin?.name === "dev-loop")
+        : [];
+      if (entries.length === 1 && typeof entries[0].version === "string") {
+        marketplace = entries[0].version;
+      }
+    } catch {
+      marketplace = "";
+    }
+  }
+  return {
+    claude: readJsonVersion(path.join(pluginRoot, ".claude-plugin", "plugin.json")),
+    codex: readJsonVersion(path.join(pluginRoot, ".codex-plugin", "plugin.json")),
+    marketplace,
+  };
 }
 
 function hashFileShort(filePath) {
   return createHash("sha256").update(readText(filePath)).digest("hex").slice(0, 16);
 }
 
-function resolveCachedDevLoopSkill(repo) {
-  const version = readPluginVersion(repo);
-  const home = os.homedir();
-  const candidates = [];
-  if (version) {
-    candidates.push(
-      path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "skills", "dev-loop", "SKILL.md"),
-      path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "SKILL.md"),
-      path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "skills", "dev-loop", "SKILL.md"),
-      path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop", version, "SKILL.md"),
-    );
+function resolveDiagnosticHost(requested) {
+  if (requested && requested !== "auto") return requested;
+  if (
+    process.env.CODEX_THREAD_ID ||
+    process.env.CODEX_CI ||
+    process.env.CODEX_MANAGED_PACKAGE_ROOT ||
+    process.env.CODEX_HOME
+  ) {
+    return "codex";
   }
-  const versionRoots = [
-    path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop"),
-    path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop"),
-  ];
-  for (const root of versionRoots) {
-    if (!fileExists(root)) continue;
-    for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
-      if (!ent.isDirectory()) continue;
-      candidates.push(path.join(root, ent.name, "skills", "dev-loop", "SKILL.md"));
-      candidates.push(path.join(root, ent.name, "SKILL.md"));
-    }
+  if (
+    process.env.CLAUDE_CODE_ENTRYPOINT ||
+    process.env.CLAUDE_CODE_SSE_PORT ||
+    process.env.CLAUDE_PROJECT_DIR ||
+    process.env.CLAUDE_SESSION_ID
+  ) {
+    return "claude";
   }
-  let best = null;
-  for (const p of candidates) {
-    if (!fileExists(p)) continue;
-    const mtime = fs.statSync(p).mtimeMs;
-    if (!best || mtime > best.mtime) best = { path: p, mtime };
-  }
-  return best ? best.path : null;
+  return "unknown";
 }
 
-function skillCacheDrift(repo) {
+function hostCacheRoot(host) {
+  const home = os.homedir();
+  if (host === "codex") {
+    return path.join(home, ".codex", "plugins", "cache", "karlorz-agent-skills", "dev-loop");
+  }
+  if (host === "claude") {
+    return path.join(home, ".claude", "plugins", "cache", "karlorz-agent-skills", "dev-loop");
+  }
+  return null;
+}
+
+function skillPathForVersion(cacheRoot, version) {
+  const candidates = [
+    path.join(cacheRoot, version, "skills", "dev-loop", "SKILL.md"),
+    path.join(cacheRoot, version, "SKILL.md"),
+  ];
+  return candidates.find(fileExists) || null;
+}
+
+function installedCacheVersions(cacheRoot) {
+  if (!cacheRoot || !fileExists(cacheRoot)) return [];
+  let entries;
+  try {
+    entries = fs.readdirSync(cacheRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => parseSupportedSemver(entry.name))
+    .filter(Boolean)
+    .filter((version) => skillPathForVersion(cacheRoot, version.raw))
+    .sort((left, right) => compareSupportedSemver(right, left));
+}
+
+function remediationForHost(host, state, sourceVersion) {
+  const selector = "dev-loop@karlorz-agent-skills";
+  if (host === "codex") {
+    return {
+      plugin_selector: selector,
+      install_command: `codex plugin add ${selector} --json`,
+      restart_required: state !== "in_sync",
+      remediation:
+        state === "in_sync"
+          ? []
+          : [
+              `Advance the plugin version first only if ${sourceVersion} is already released and the source payload changed.`,
+              `Run \`codex plugin add ${selector} --json\`.`,
+              `Verify the installer reports version ${sourceVersion} and a versioned installed path.`,
+              "Compare the source and installed hashes.",
+              "Stop the stale current session and start a new Codex chat or CLI session.",
+            ],
+    };
+  }
+  if (host === "claude") {
+    return {
+      plugin_selector: selector,
+      install_command: `claude plugin update ${selector}`,
+      restart_required: state !== "in_sync",
+      remediation:
+        state === "in_sync"
+          ? []
+          : [
+              `Advance the plugin version first only if ${sourceVersion} is already released and the source payload changed.`,
+              `Run \`claude plugin update ${selector}\`.`,
+              "Restart Claude Code to load the updated plugin.",
+              "Compare the source and installed hashes after restart.",
+            ],
+    };
+  }
+  return {
+    plugin_selector: selector,
+    install_command: null,
+    restart_required: null,
+    remediation: ["Runtime host is unknown; choose a verified platform-specific installer before making changes."],
+  };
+}
+
+function skillCacheDrift(repo, requestedHost) {
   const sourceCandidates = [
     path.join(repo, "skills", "dev-loop", "skills", "dev-loop", "SKILL.md"),
     path.join(repo, "skills", "dev-loop", "SKILL.md"),
   ];
   const source = sourceCandidates.find(fileExists);
   if (!source) return { state: "unknown", detail: "source SKILL.md not in repo" };
+  const versions = readPluginVersions(repo);
+  if (
+    !versions.claude ||
+    !versions.codex ||
+    !versions.marketplace ||
+    new Set([versions.claude, versions.codex, versions.marketplace]).size !== 1
+  ) {
+    return {
+      state: "manifest_version_mismatch",
+      detail:
+        `dev-loop manifest versions disagree: Claude=${versions.claude || "<missing>"} ` +
+        `Codex=${versions.codex || "<missing>"} marketplace=${versions.marketplace || "<missing>"}`,
+      source_version: versions.claude || versions.codex || null,
+      installed_version: null,
+      source_hash: hashFileShort(source),
+      installed_hash: null,
+      cache_path: null,
+      host: resolveDiagnosticHost(requestedHost),
+      ...remediationForHost("unknown", "manifest_version_mismatch", versions.claude || versions.codex || "unknown"),
+    };
+  }
+  const sourceVersion = versions.claude;
+  const host = resolveDiagnosticHost(requestedHost);
   const sourceHash = hashFileShort(source);
-  const cachePath = resolveCachedDevLoopSkill(repo);
-  if (!cachePath) {
-    return { state: "unknown", detail: "no cached dev-loop SKILL.md found", source_hash: sourceHash };
+  if (host === "unknown") {
+    return {
+      state: "unknown_host",
+      detail: "runtime host is unknown; plugin cache diagnosis is fail-closed",
+      source_version: sourceVersion,
+      installed_version: null,
+      source_hash: sourceHash,
+      installed_hash: null,
+      cache_path: null,
+      inactive_versions: [],
+      host,
+      ...remediationForHost(host, "unknown_host", sourceVersion),
+    };
   }
-  const cacheHash = hashFileShort(cachePath);
-  if (cacheHash === sourceHash) {
-    return { state: "in_sync", source_hash: sourceHash, cache_hash: cacheHash, cache_path: cachePath };
+  const cacheRoot = hostCacheRoot(host);
+  const installedVersions = installedCacheVersions(cacheRoot);
+  const inactiveVersions = installedVersions
+    .map((version) => version.raw)
+    .filter((version) => version !== sourceVersion);
+  const exactPath = skillPathForVersion(cacheRoot, sourceVersion);
+  if (!exactPath) {
+    const latestInactive = installedVersions[0] || null;
+    const inactivePath = latestInactive ? skillPathForVersion(cacheRoot, latestInactive.raw) : null;
+    const state = latestInactive ? "installed_version_stale" : "not_installed";
+    const detail = latestInactive
+      ? `${host} has dev-loop ${latestInactive.raw}, but source requires exact version ${sourceVersion}`
+      : `${host} does not have dev-loop ${sourceVersion} installed`;
+    return {
+      state,
+      detail,
+      source_version: sourceVersion,
+      installed_version: latestInactive?.raw || null,
+      source_hash: sourceHash,
+      installed_hash: inactivePath ? hashFileShort(inactivePath) : null,
+      cache_path: null,
+      inactive_cache_path: inactivePath,
+      inactive_versions: inactiveVersions,
+      host,
+      ...remediationForHost(host, state, sourceVersion),
+    };
   }
+  const cacheHash = hashFileShort(exactPath);
+  const state = cacheHash === sourceHash ? "in_sync" : "drifted_stale";
   return {
-    state: "drifted_stale",
-    detail: "source SKILL.md differs from plugin cache — run sync-plugin-cache.sh and /reload-plugins",
+    state,
+    detail:
+      state === "in_sync"
+        ? `${host} exact-version cache matches source`
+        : `${host} dev-loop ${sourceVersion} cache payload differs from source`,
+    source_version: sourceVersion,
+    installed_version: sourceVersion,
     source_hash: sourceHash,
-    cache_hash: cacheHash,
-    cache_path: cachePath,
+    installed_hash: cacheHash,
+    cache_path: exactPath,
+    inactive_versions: inactiveVersions,
+    host,
+    ...remediationForHost(host, state, sourceVersion),
   };
 }
 
@@ -708,7 +871,7 @@ function buildReport(opts) {
       ? lastDoctor.data.compact_count
       : null;
   const depStatus = lastDoctor.data?.dep_status || depsInline.dep_status;
-  const drift = skillCacheDrift(repo);
+  const drift = skillCacheDrift(repo, opts.host);
 
   const blockers = [];
   if (!cfg.missing && (cfg.parser?.errors || []).length > 0) {
@@ -725,7 +888,15 @@ function buildReport(opts) {
   if (depStatus === "broken") {
     blockers.push({ code: "dep_status_broken", detail: "dependency probe classified broken" });
   }
-  if (drift.state === "drifted_stale") {
+  if (
+    [
+      "drifted_stale",
+      "installed_version_stale",
+      "not_installed",
+      "unknown_host",
+      "manifest_version_mismatch",
+    ].includes(drift.state)
+  ) {
     blockers.push({ code: "skill_cache_drift", detail: drift.detail });
   }
   if (compactCount !== null && compactCount >= 4) {
@@ -832,7 +1003,7 @@ function buildReport(opts) {
   };
 
   const recommendations = [];
-  if (drift.state === "drifted_stale") recommendations.push("Run `/reload-plugins` then re-run `/dev-loop status`.");
+  recommendations.push(...(drift.remediation || []));
   if (readinessSkips.length > 0 && opts.orchestration === "goal") {
     recommendations.push(`Run \`/dev-loop prep --limit 5\` for project ${slug} to resolve unattended readiness skips.`);
   }
@@ -864,6 +1035,7 @@ function buildReport(opts) {
       intensity: opts.intensity,
       preview_mode: opts.previewMode,
       orchestration: opts.orchestration,
+      host: drift.host,
       args: [],
     },
     caps: {
@@ -965,6 +1137,7 @@ function renderMarkdown(json) {
   lines.push(`- Effective intensity: ${json.mode.intensity}`);
   lines.push(`- Preview mode: ${json.mode.preview_mode}`);
   lines.push(`- Orchestration simulation: ${json.mode.orchestration}`);
+  lines.push(`- Runtime host: ${json.mode.host}`);
   lines.push("");
   lines.push("## Config Resolution");
   lines.push(`- Config path: ${json.config_path || "(missing)"}`);
@@ -981,6 +1154,18 @@ function renderMarkdown(json) {
   lines.push(`- compact_count: ${json.health.compact_count === null ? "unknown" : json.health.compact_count}`);
   lines.push(`- skill cache: ${json.health.skill_cache.state}`);
   if (json.health.skill_cache.detail) lines.push(`  - ${json.health.skill_cache.detail}`);
+  if (json.health.skill_cache.source_version) {
+    lines.push(`  - source version: ${json.health.skill_cache.source_version}`);
+  }
+  if (json.health.skill_cache.installed_version) {
+    lines.push(`  - installed version: ${json.health.skill_cache.installed_version}`);
+  }
+  if (json.health.skill_cache.cache_path) {
+    lines.push(`  - cache path: ${json.health.skill_cache.cache_path}`);
+  }
+  if (typeof json.health.skill_cache.restart_required === "boolean") {
+    lines.push(`  - restart/new session required: ${json.health.skill_cache.restart_required}`);
+  }
   lines.push(`- vault resolved: ${json.health.vault.resolved} (${json.health.vault.path || "n/a"})`);
   if (json.health.vault.warning) lines.push(`- vault warning: ${json.health.vault.warning}`);
   lines.push("");
