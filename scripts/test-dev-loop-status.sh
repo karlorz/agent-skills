@@ -358,7 +358,7 @@ optional:
     used_by: ["IDLE step 4"]
 EOF
 
-OUT_RELEVANT="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)" || fail "relevant optional status failed"
+OUT_RELEVANT="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --host codex --format json --no-write 2>/dev/null)" || fail "relevant optional status failed"
 echo "$OUT_RELEVANT" | node -e '
 const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (j.health.state !== "degraded") throw new Error(`relevant optional miss must degrade: ${JSON.stringify(j.health)}`);
@@ -375,7 +375,7 @@ if (j.lifecycle?.state !== "idle" || j.lifecycle?.next_action !== "idle") {
 process.stdout.write("ok-relevant-optional\n");
 '
 
-OUT_STATUS_MODE="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --preview-mode status --format json --no-write 2>/dev/null)" || fail "explicit status preview failed"
+OUT_STATUS_MODE="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --host codex --preview-mode status --format json --no-write 2>/dev/null)" || fail "explicit status preview failed"
 echo "$OUT_STATUS_MODE" | node -e '
 const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (j.lifecycle?.state !== "active" || j.lifecycle?.next_action !== "status") {
@@ -385,7 +385,7 @@ if (!j.lifecycle.reason.includes("status")) throw new Error(`lifecycle reason mu
 process.stdout.write("ok-explicit-lifecycle\n");
 '
 
-OUT_MARKDOWN="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format markdown --no-write 2>/dev/null)" || fail "markdown status failed"
+OUT_MARKDOWN="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --host codex --format markdown --no-write 2>/dev/null)" || fail "markdown status failed"
 grep -q -- "- Health state: \*\*degraded\*\*" <<<"$OUT_MARKDOWN" || fail "markdown missing independent health state"
 grep -q -- "- Lifecycle state: \*\*idle\*\*" <<<"$OUT_MARKDOWN" || fail "markdown missing independent lifecycle state"
 
@@ -399,7 +399,7 @@ optional: []
 EOF
 
 set +e
-OUT_BLOCKED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --format json --no-write 2>/dev/null)"
+OUT_BLOCKED="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$NESTED_REPO" --project test-none --host codex --format json --no-write 2>/dev/null)"
 BLOCKED_EXIT=$?
 set -e
 [[ "$BLOCKED_EXIT" -eq 1 ]] || fail "blocked status must exit 1, got $BLOCKED_EXIT"
