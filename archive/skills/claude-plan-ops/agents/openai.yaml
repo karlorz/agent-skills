@@ -1,0 +1,7 @@
+version: 1
+interface:
+  display_name: Claude PlanOps
+  short_description: Triage and archive ~/.claude/plans safely
+  default_prompt: >-
+    Scan, index, and safely archive Claude plan files using claude-planctl with
+    dry-run first and 7-day cooldown rules.
