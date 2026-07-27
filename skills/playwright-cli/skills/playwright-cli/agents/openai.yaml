@@ -1,0 +1,4 @@
+interface:
+  display_name: "Playwright CLI"
+  short_description: "Set up Playwright CLI and Chrome debug workflows"
+  default_prompt: "Use $playwright-cli to initialize this project, launch the user-level Chrome debug profile, attach, and automate the requested browser workflow."

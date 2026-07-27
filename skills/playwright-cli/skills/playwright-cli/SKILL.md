@@ -1,11 +1,12 @@
 ---
 name: playwright-cli
 description: >
-  Automate browser interactions, test web pages, and work with Playwright tests.
-  Prefer attach to a headed Chrome debug profile (global default-user clone via
-  scripts/chrome-debug.sh) for logged-in sessions; fall back to playwright-cli open
-  for disposable browsers. Includes browser-worker for mechanical Chrome lifecycle.
-allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(bash\ scripts/chrome-debug.sh:*) Bash(make\ chrome-debug:*)
+  Automate browser interactions, test web pages, initialize Playwright CLI project
+  config, and install a user-level chrome-debug launcher. Prefer attaching to a
+  headed Chrome debug profile (global default-user clone) for logged-in sessions;
+  fall back to playwright-cli open for disposable browsers. Includes browser-worker
+  for mechanical Chrome lifecycle.
+allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(chrome-debug:*) Bash(bash\ scripts/chrome-debug.sh:*) Bash(bash\ scripts/setup-playwright-cli.sh:*) Bash(make\ chrome-debug:*)
 ---
 
 # Browser Automation with playwright-cli
@@ -13,17 +14,48 @@ allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(bash\ scripts
 Karlorz fork of the Microsoft playwright-cli skill: **preserve MS command surface**,
 layer **attach-first + global Chrome profile** via `scripts/chrome-debug.sh`.
 
-Requires `@playwright/cli` **≥ 0.1.17** (`npm install -g @playwright/cli@latest`).
+Requires `@playwright/cli` **≥ 0.1.17**. Use the setup workflow below to
+install or verify it without `sudo`.
+
+## One-time setup / init
+
+When the user asks to install, initialize, configure, or set up Playwright CLI:
+
+1. Resolve the plugin root from this loaded `SKILL.md` path (two directories above
+   `skills/playwright-cli/SKILL.md`). Assign that absolute path to
+   `PLAYWRIGHT_CLI_PLUGIN_ROOT`; do not assume the variable already exists.
+2. Run the bundled setup script against the user's current project:
+
+```bash
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" --project "$PWD"
+```
+
+The script is idempotent. It:
+
+- installs or verifies user-accessible `@playwright/cli` ≥ 0.1.17;
+- installs `chrome-debug` under `${XDG_BIN_HOME:-$HOME/.local/bin}` with its
+  payload in `${XDG_DATA_HOME:-$HOME/.local/share}/playwright-cli`;
+- creates `.playwright/cli.config.json` when absent;
+- preserves an existing config that already targets `http://localhost:9222`;
+- refuses to overwrite divergent config or an unmanaged launcher unless the user
+  explicitly approves the corresponding `--force-*` flag.
+
+Use `--dry-run` to preview, `--skip-cli` when npm installation is out of scope,
+or `--skip-project-config` for launcher-only setup. Do not run setup merely because
+the skill activated; run it when the user asks for setup/init or a required command
+is missing and the user authorizes installation.
 
 ## Karlorz defaults (read first)
 
 ### Preferred runtime: attach to chrome-debug
 
 ```bash
-# 1) Launch headed Chrome with CDP on 9222 using the GLOBAL default-user profile clone
-bash scripts/chrome-debug.sh
-# equivalent when the consumer repo has a Makefile:
+# 1) Preferred after one-time setup: works from any repository
+chrome-debug
+
+# Consumer-repo fallbacks:
 make chrome-debug
+bash scripts/chrome-debug.sh
 
 # 2) Attach (uses .playwright/cli.config.json cdpEndpoint when present)
 playwright-cli attach
@@ -46,12 +78,12 @@ playwright-cli snapshot
 ### Phase 0 sequence (ALWAYS before attach)
 
 ```bash
-bash scripts/chrome-debug.sh --check-port
+chrome-debug --check-port
 # If free:
-bash scripts/chrome-debug.sh
+chrome-debug
 # If stale / attach fails:
 playwright-cli kill-all
-bash scripts/chrome-debug.sh --restart
+chrome-debug --restart
 playwright-cli attach
 ```
 
@@ -93,6 +125,7 @@ Details: [references/chrome-debug.md](references/chrome-debug.md)
 - **`--repo-local-profile` by default** — creates empty profile; only on explicit request
 - **Skipping attach** after launch — interaction commands need an attached session
 - **Assuming `make chrome-debug` is invalid** — use it when the consumer Makefile provides it
+- **Assuming the consumer repo vendors the launcher** — prefer the installed `chrome-debug` command
 - Forgetting snapshot before click/fill (need element refs)
 
 ### Fallback: disposable browser (Microsoft default)

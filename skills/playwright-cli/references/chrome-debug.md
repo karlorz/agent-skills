@@ -4,15 +4,30 @@ Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
 Contract stamp: **`chrome-debug-contract: v2`** (see `scripts/chrome-debug.sh` header).
 
-The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, and detached launch. It is the recommended way to start Chrome before using `playwright-cli attach`.
+The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, and detached launch. The one-time setup script installs it as a stable user-level `chrome-debug` command so it works outside repositories that vendor the script.
 
 Prefer:
 
 ```bash
-bash scripts/chrome-debug.sh
-# or, when the consumer repo has a Makefile target:
+chrome-debug
+# or, when the consumer repo has a Makefile target or vendored script:
 make chrome-debug
+bash scripts/chrome-debug.sh
 ```
+
+## One-time user setup
+
+Resolve the installed plugin root from the active skill path, then run:
+
+```bash
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" --project "$PWD"
+```
+
+This verifies or installs `@playwright/cli` ≥ 0.1.17, installs the `chrome-debug`
+command in `${XDG_BIN_HOME:-$HOME/.local/bin}`, copies the launcher into stable
+user data storage, and initializes the current project's `.playwright/cli.config.json`.
+It preserves richer existing configs that already target `http://localhost:9222`.
+Use `--dry-run` to preview all actions.
 
 ## Default profile (global)
 
@@ -29,7 +44,7 @@ Do **not** use `--repo-local-profile` unless the user explicitly wants an empty 
 
 ```bash
 # Start Chrome with debug port 9222 (default-user profile)
-bash scripts/chrome-debug.sh
+chrome-debug
 
 # Attach playwright-cli (reads cdpEndpoint from .playwright/cli.config.json when present)
 playwright-cli attach
@@ -40,15 +55,15 @@ playwright-cli attach --cdp=http://localhost:9222
 ## Common flags
 
 ```bash
-bash scripts/chrome-debug.sh --check-port
-bash scripts/chrome-debug.sh --explain
-bash scripts/chrome-debug.sh --dry-run --print-config
-bash scripts/chrome-debug.sh --dry-run --json
-bash scripts/chrome-debug.sh https://example.com
-bash scripts/chrome-debug.sh --launch-and-explain
+chrome-debug --check-port
+chrome-debug --explain
+chrome-debug --dry-run --print-config
+chrome-debug --dry-run --json
+chrome-debug https://example.com
+chrome-debug --launch-and-explain
 
 # Kill existing debug Chrome + stale playwright-cli daemons, same profile mode
-bash scripts/chrome-debug.sh --restart
+chrome-debug --restart
 ```
 
 ## Profile modes
@@ -61,10 +76,10 @@ bash scripts/chrome-debug.sh --restart
 
 ```bash
 # Re-sync clone from real Chrome (close personal Chrome first)
-bash scripts/chrome-debug.sh --refresh-from-default
+chrome-debug --refresh-from-default
 
 # Isolated clean profile (only when requested)
-bash scripts/chrome-debug.sh --repo-local-profile
+chrome-debug --repo-local-profile
 ```
 
 ## Headless / container (Linux LXC)
@@ -96,12 +111,15 @@ ssh -L 9222:127.0.0.1:9222 user@remote-host
 | `CHROME_DEBUG_PROFILE_DIRECTORY` | `Default` | Chrome profile subdirectory |
 | `CHROME_DEBUG_REFRESH_FROM_DEFAULT` | `0` | Re-sync clone on launch |
 | `CHROME_DEBUG_HEADLESS` | *(auto)* | empty=auto, `0`=headed, `1`=headless |
+| `CHROME_DEBUG_PROJECT_ROOT` | launcher cwd | Project root used by explicit repo-local mode |
+| `CHROME_DEBUG_LOG` | user state or bundled log | Chrome launcher log path |
+| `CHROME_DEBUG_COMMAND_NAME` | bundled path / `chrome-debug` | Command name shown in help and diagnostics |
 | `CHROME` | *(auto-detect)* | Chrome/Chromium binary |
 
 ## Typical workflow
 
 ```bash
-bash scripts/chrome-debug.sh          # or make chrome-debug
+chrome-debug                          # or make chrome-debug / bundled script
 playwright-cli attach
 playwright-cli goto https://example.com
 playwright-cli snapshot
@@ -115,7 +133,7 @@ If `playwright-cli attach` times out while port 9222 is healthy:
 
 ```bash
 playwright-cli kill-all
-bash scripts/chrome-debug.sh --restart
+chrome-debug --restart
 playwright-cli attach
 ```
 

@@ -24,7 +24,8 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 
 ## Responsibilities
 
-- Phase 0: Launch Chrome via `bash scripts/chrome-debug.sh` (default-user profile; optional `--check-port`, `--restart`)
+- Phase 0: Launch Chrome via the installed `chrome-debug` command (default-user profile; optional `--check-port`, `--restart`)
+- Phase 0 fallback: use `make chrome-debug` or the consumer's vendored `scripts/chrome-debug.sh` only when the global command is unavailable
 - Phase 0: Kill stale sessions with `playwright-cli kill-all` when attach is stale
 - Phase 1: Attach via `playwright-cli attach` (or `attach --cdp=http://localhost:9222`)
 - Navigate: `playwright-cli goto <url>`
@@ -53,7 +54,7 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 The orchestrator spawns this agent for mechanical browser tasks:
 
 ```
-Agent(description: "Launch Chrome", model: "haiku", prompt: "Launch Chrome with CDP on port 9222 using default-user profile. Run bash scripts/chrome-debug.sh --check-port; if free run bash scripts/chrome-debug.sh (no profile flags); then playwright-cli attach. Do not use --repo-local-profile.")
+Agent(description: "Launch Chrome", model: "haiku", prompt: "Launch Chrome with CDP on port 9222 using default-user profile. Prefer chrome-debug --check-port; if free run chrome-debug (no profile flags); then playwright-cli attach. Fall back to make chrome-debug or a vendored script only if the global command is unavailable. Do not use --repo-local-profile.")
 Agent(description: "Navigate and snapshot", model: "sonnet", prompt: "Go to <url>, wait for load, take a snapshot. Report element refs.")
 Agent(description: "Screenshot page", model: "sonnet", prompt: "Take a full-page screenshot. Save as <filename>.")
 ```
@@ -61,12 +62,12 @@ Agent(description: "Screenshot page", model: "sonnet", prompt: "Take a full-page
 Stale session recovery prompt:
 
 ```
-Agent(description: "Restart Chrome CDP", model: "haiku", prompt: "playwright-cli kill-all; bash scripts/chrome-debug.sh --restart; playwright-cli attach. Keep default-user profile.")
+Agent(description: "Restart Chrome CDP", model: "haiku", prompt: "playwright-cli kill-all; chrome-debug --restart; playwright-cli attach. Keep default-user profile.")
 ```
 
 ## Error Handling
 
 - Chrome launch failure: report port status (`--check-port` / `--explain`); suggest close personal Chrome if default-user clone is blocked; suggest `--restart` if port owned by debug profile
-- Attach timeout: `playwright-cli kill-all` + `bash scripts/chrome-debug.sh --restart` + attach
+- Attach timeout: `playwright-cli kill-all` + `chrome-debug --restart` + attach
 - Navigation timeout: report current URL, try reload
 - Stale element refs: re-snapshot before retry

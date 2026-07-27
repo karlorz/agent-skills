@@ -23,10 +23,12 @@ REFRESH_FROM_DEFAULT="${CHROME_DEBUG_REFRESH_FROM_DEFAULT:-0}"
 HEADLESS_MODE="${CHROME_DEBUG_HEADLESS:-}"
 TARGET_URL="${CHROME_DEBUG_URL:-about:blank}"
 TARGET_URL_SET=0
+COMMAND_NAME="${CHROME_DEBUG_COMMAND_NAME:-./scripts/chrome-debug.sh}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-LOG_FILE="${ROOT_DIR}/logs/chrome-debug.log"
+PROJECT_ROOT="${CHROME_DEBUG_PROJECT_ROOT:-$ROOT_DIR}"
+LOG_FILE="${CHROME_DEBUG_LOG:-${ROOT_DIR}/logs/chrome-debug.log}"
 PROFILE_DIR="${CHROME_DEBUG_PROFILE:-}"
 PROFILE_MARKER=""
 PROFILE_LABEL=""
@@ -34,7 +36,7 @@ PROFILE_SOURCE_DIR=""
 CHROME_ARGS=()
 
 get_repo_local_profile_dir() {
-  printf '%s\n' "${ROOT_DIR}/.chrome-debug-profile"
+  printf '%s\n' "${PROJECT_ROOT}/.chrome-debug-profile"
 }
 
 get_dedicated_profile_dir() {
@@ -69,7 +71,7 @@ log_error() {
 
 print_usage() {
   cat <<EOF_USAGE
-Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [URL]
+Usage: ${COMMAND_NAME} [--dry-run] [--print-config] [--json] [URL]
 
 Options:
   --dry-run       Print the resolved launch configuration without starting Chrome
@@ -85,7 +87,7 @@ Options:
   --refresh-from-default
                    Re-sync the cloned default-user debug profile from your real Chrome profile before launch
   --repo-local-profile
-                   Use ${ROOT_DIR}/.chrome-debug-profile (explicit isolation only; not the default)
+                   Use ${PROJECT_ROOT}/.chrome-debug-profile (explicit isolation only; not the default)
   --dedicated-profile
                    Use the persistent cmux-only OS-native debug profile
   --profile-directory NAME
@@ -98,6 +100,9 @@ Environment:
   CHROME_DEBUG_HEADLESS       empty=auto (Linux: headless when DISPLAY unset), 0=headed, 1=headless
   CHROME_DEBUG_PORT           remote debugging port (default: 9222)
   CHROME_DEBUG_PROFILE        override user-data-dir path
+  CHROME_DEBUG_PROJECT_ROOT   project root used only by --repo-local-profile
+  CHROME_DEBUG_LOG            launcher log path
+  CHROME_DEBUG_COMMAND_NAME   command name shown in help and diagnostics
   CHROME                       Chrome/Chromium binary path
 EOF_USAGE
 }
@@ -497,11 +502,11 @@ emit_explanation() {
         if clone_sync_requested; then
           next_action="Close Chrome first so the script can refresh your cloned Chrome profile, or rerun without --refresh-from-default to reuse the last clone."
         else
-          next_action="Close the personal Chrome window so the script can create the initial default-user clone, then rerun ./scripts/chrome-debug.sh (prefer reuse of an existing clone over --repo-local-profile)."
+          next_action="Close the personal Chrome window so the script can create the initial default-user clone, then rerun ${COMMAND_NAME} (prefer reuse of an existing clone over --repo-local-profile)."
         fi
       else
         summary="Port ${DEBUG_PORT} is free; Chrome is not currently serving DevTools there."
-        next_action="Run ./scripts/chrome-debug.sh (default-user profile) to start the debug browser."
+        next_action="Run ${COMMAND_NAME} (default-user profile) to start the debug browser."
       fi
       ;;
     owned_by_profile)
@@ -519,6 +524,7 @@ emit_explanation() {
     DEBUG_PORT_JSON="${DEBUG_PORT}" \
     PROFILE_DIR_JSON="${PROFILE_DIR}" \
     PROFILE_SOURCE_DIR_JSON="${PROFILE_SOURCE_DIR}" \
+    PROJECT_ROOT_JSON="${PROJECT_ROOT}" \
     PROFILE_MODE_JSON="${PROFILE_MODE}" \
     PORT_STATUS_JSON="${port_status}" \
     PROFILE_EXISTS_JSON="${profile_exists}" \
@@ -536,6 +542,7 @@ print(
             "debugPort": int(os.environ["DEBUG_PORT_JSON"]),
             "profileDir": os.environ["PROFILE_DIR_JSON"],
             "profileSourceDir": os.environ["PROFILE_SOURCE_DIR_JSON"],
+            "projectRoot": os.environ["PROJECT_ROOT_JSON"],
             "profileMode": os.environ["PROFILE_MODE_JSON"],
             "portStatus": os.environ["PORT_STATUS_JSON"],
             "profileExists": os.environ["PROFILE_EXISTS_JSON"] == "yes",
@@ -622,6 +629,7 @@ print_config() {
     PROFILE_MODE_JSON="${PROFILE_MODE}" \
     PROFILE_DIRECTORY_JSON="${PROFILE_DIRECTORY_NAME}" \
     PROFILE_SOURCE_DIR_JSON="${PROFILE_SOURCE_DIR}" \
+    PROJECT_ROOT_JSON="${PROJECT_ROOT}" \
     REFRESH_FROM_DEFAULT_JSON="${REFRESH_FROM_DEFAULT}" \
     HEADLESS_JSON="$(should_use_headless && echo true || echo false)" \
     HEADLESS_LABEL_JSON="$(resolve_headless_label)" \
@@ -644,6 +652,7 @@ print(
             "profileMode": os.environ["PROFILE_MODE_JSON"],
             "profileDirectory": os.environ["PROFILE_DIRECTORY_JSON"],
             "profileSourceDir": os.environ["PROFILE_SOURCE_DIR_JSON"],
+            "projectRoot": os.environ["PROJECT_ROOT_JSON"],
             "refreshFromDefault": os.environ["REFRESH_FROM_DEFAULT_JSON"] == "1",
             "headless": os.environ["HEADLESS_JSON"] == "true",
             "headlessLabel": os.environ["HEADLESS_LABEL_JSON"],

@@ -127,8 +127,8 @@
     {
       "name": "playwright-cli",
       "source": "./skills/playwright-cli",
-      "description": "Browser automation via playwright-cli (MS ≥0.1.17 surface) with attach-first global Chrome default-user profile, browser-worker, and Linux/LXC chrome-debug support",
-      "version": "1.2.0",
+      "description": "Playwright CLI setup and browser automation with a user-level chrome-debug command, project config initialization, attach-first global Chrome default-user profile, browser-worker, and Linux/LXC support",
+      "version": "1.3.0",
       "category": "automation",
       "keywords": [
         "playwright",
