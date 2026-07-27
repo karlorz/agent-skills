@@ -2,94 +2,127 @@
 
 Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
-The bundled `scripts/chrome-debug.sh` script handles Chrome detection, profile management, port health checks, and detached launch. It is the recommended way to start Chrome before using `playwright-cli attach`.
+Contract stamp: **`chrome-debug-contract: v2`** (see `scripts/chrome-debug.sh` header).
 
-**Always run this script via `bash scripts/chrome-debug.sh` (not `make`, not `./scripts/` which may lack execute permission).**
+The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, and detached launch. It is the recommended way to start Chrome before using `playwright-cli attach`.
 
-## Quick Start
+Prefer:
 
 ```bash
-# Start Chrome with debug port 9222 (default)
 bash scripts/chrome-debug.sh
-
-# Then attach playwright-cli
-playwright-cli attach
+# or, when the consumer repo has a Makefile target:
+make chrome-debug
 ```
 
-## Common Flags
+## Default profile (global)
+
+**Default mode is `default-user`:** a debug-safe **clone** of your real Chrome user-data directory.
+
+| Host | Clone path |
+|------|------------|
+| macOS | `~/Library/Application Support/Google/chrome-debug-profile-from-default` |
+| Linux | `${XDG_CONFIG_HOME:-$HOME/.config}/Google/chrome-debug-profile-from-default` |
+
+Do **not** use `--repo-local-profile` unless the user explicitly wants an empty isolated profile. Repo-local creates `<repo>/.chrome-debug-profile/` and loses logged-in sessions.
+
+## Quick start
 
 ```bash
-# Check if debug port is already in use
+# Start Chrome with debug port 9222 (default-user profile)
+bash scripts/chrome-debug.sh
+
+# Attach playwright-cli (reads cdpEndpoint from .playwright/cli.config.json when present)
+playwright-cli attach
+# or explicit:
+playwright-cli attach --cdp=http://localhost:9222
+```
+
+## Common flags
+
+```bash
 bash scripts/chrome-debug.sh --check-port
-
-# Diagnose issues without launching
 bash scripts/chrome-debug.sh --explain
-
-# Print resolved config as JSON
+bash scripts/chrome-debug.sh --dry-run --print-config
 bash scripts/chrome-debug.sh --dry-run --json
-
-# Start with a specific URL
 bash scripts/chrome-debug.sh https://example.com
-
-# Launch with diagnosis first
 bash scripts/chrome-debug.sh --launch-and-explain
 
-# Kill existing Chrome + stale playwright-cli daemons and launch fresh
+# Kill existing debug Chrome + stale playwright-cli daemons, same profile mode
 bash scripts/chrome-debug.sh --restart
 ```
 
-## Profile Modes
+## Profile modes
 
-The script supports three profile modes, controlled by flags or `CHROME_DEBUG_PROFILE_MODE`:
-
-| Mode | Flag | Description |
-|------|------|-------------|
-| `default-user` | `--default-user-profile` | Clones your real Chrome profile (cookies, bookmarks, extensions). **Default mode.** |
-| `repo-local` | `--repo-local-profile` | Uses `<repo>/.chrome-debug-profile/`. Clean slate per project. |
-| `dedicated` | `--dedicated-profile` | Persistent OS-native profile for cmux/debug-only use. |
+| Mode | Flag / env | Description |
+|------|------------|-------------|
+| `default-user` | `--default-user-profile` (default) | Clone of real Chrome profile (cookies, logins). **Preferred.** |
+| `dedicated` | `--dedicated-profile` | Persistent OS-native debug-only profile |
+| `repo-local` | `--repo-local-profile` | Empty per-repo profile — **explicit isolation only** |
 
 ```bash
-# Use a clean profile (no cookies/history from personal Chrome)
-bash scripts/chrome-debug.sh --repo-local-profile
-
-# Refresh cloned profile from real Chrome (must close Chrome first)
+# Re-sync clone from real Chrome (close personal Chrome first)
 bash scripts/chrome-debug.sh --refresh-from-default
+
+# Isolated clean profile (only when requested)
+bash scripts/chrome-debug.sh --repo-local-profile
 ```
 
-## Environment Variables
+## Headless / container (Linux LXC)
+
+| Condition | Behavior |
+|-----------|----------|
+| macOS | headed by default |
+| Linux with `DISPLAY` set | headed |
+| Linux with no `DISPLAY` | **auto headless** (`--headless=new`) |
+| `CHROME_DEBUG_HEADLESS=1` | force headless (any OS) |
+| `CHROME_DEBUG_HEADLESS=0` | force headed |
+
+Non-darwin always adds container-friendly flags: `--no-sandbox`, `--disable-dev-shm-usage`, etc.
+
+CDP binds to `127.0.0.1`. For remote LXC/hosts, tunnel:
+
+```bash
+ssh -L 9222:127.0.0.1:9222 user@remote-host
+```
+
+## Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CHROME_DEBUG_PORT` | `9222` | Remote debugging port |
 | `CHROME_DEBUG_PROFILE_MODE` | `default-user` | Profile mode |
-| `CHROME_DEBUG_PROFILE` | *(auto)* | Custom user-data directory path |
+| `CHROME_DEBUG_PROFILE` | *(auto)* | Custom user-data directory |
 | `CHROME_DEBUG_URL` | `about:blank` | Starting URL |
-| `CHROME_DEBUG_PROFILE_DIRECTORY` | `Default` | Chrome profile subdirectory name |
-| `CHROME_DEBUG_REFRESH_FROM_DEFAULT` | `0` | Re-sync cloned profile on launch |
-| `CHROME` | *(auto-detect)* | Path to Chrome/Chromium binary |
+| `CHROME_DEBUG_PROFILE_DIRECTORY` | `Default` | Chrome profile subdirectory |
+| `CHROME_DEBUG_REFRESH_FROM_DEFAULT` | `0` | Re-sync clone on launch |
+| `CHROME_DEBUG_HEADLESS` | *(auto)* | empty=auto, `0`=headed, `1`=headless |
+| `CHROME` | *(auto-detect)* | Chrome/Chromium binary |
 
-## Typical Workflow with playwright-cli
+## Typical workflow
 
 ```bash
-# 1. Ensure Chrome is running with debugging
-bash scripts/chrome-debug.sh
-
-# 2. Attach playwright-cli to the running Chrome
+bash scripts/chrome-debug.sh          # or make chrome-debug
 playwright-cli attach
-
-# 3. Interact with pages
 playwright-cli goto https://example.com
 playwright-cli snapshot
-
-# 4. Chrome stays running — re-attach anytime
-# Only use close to shut Chrome down
-playwright-cli close
+# Leave Chrome running; detach CLI without killing Chrome when supported:
+playwright-cli detach
 ```
 
-## Sync Note
+## Stale attach sessions
 
-This script is bundled from `cmux/scripts/chrome-debug.sh`. When the upstream script is updated, re-copy it:
+If `playwright-cli attach` times out while port 9222 is healthy:
 
 ```bash
-cp /path/to/cmux/scripts/chrome-debug.sh scripts/chrome-debug.sh
+playwright-cli kill-all
+bash scripts/chrome-debug.sh --restart
+playwright-cli attach
+```
+
+## Sync note
+
+This script is the **SSOT** in `karlorz/agent-skills` (`skills/playwright-cli/scripts/chrome-debug.sh`). Consumer repos (trends, cmux, portfolio-lab, …) should re-copy when the contract version bumps:
+
+```bash
+cp path/to/agent-skills/skills/playwright-cli/scripts/chrome-debug.sh scripts/chrome-debug.sh
 ```

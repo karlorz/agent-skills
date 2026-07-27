@@ -1,7 +1,7 @@
 {
   "name": "playwright-cli",
-  "version": "1.1.4",
-  "description": "Automate browser interactions via playwright-cli for web scraping, testing, and browser automation. Includes browser-worker agent (model: sonnet) for mechanical Chrome lifecycle and interaction tasks.",
+  "version": "1.2.0",
+  "description": "Automate browser interactions via playwright-cli (MS command surface ≥0.1.17) with attach-first global Chrome profile (chrome-debug default-user), browser-worker, and Linux/LXC container support.",
   "author": {
     "name": "karlorz"
   },

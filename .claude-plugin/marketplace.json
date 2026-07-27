@@ -127,8 +127,8 @@
     {
       "name": "playwright-cli",
       "source": "./skills/playwright-cli",
-      "description": "Browser automation via playwright-cli with browser-worker agent (model: sonnet) for mechanical Chrome lifecycle and interaction tasks — fork of microsoft/playwright-cli with attach+headed defaults and project config overrides",
-      "version": "1.1.4",
+      "description": "Browser automation via playwright-cli (MS ≥0.1.17 surface) with attach-first global Chrome default-user profile, browser-worker, and Linux/LXC chrome-debug support",
+      "version": "1.2.0",
       "category": "automation",
       "keywords": [
         "playwright",

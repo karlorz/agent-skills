@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
+# chrome-debug-contract: v2
 # Start Chrome with remote debugging in detached mode.
 # Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [--check-port] [--explain] [--launch-and-explain] [URL]
+#
+# Profile default: default-user (global clone of real Chrome). Do not use
+# --repo-local-profile unless isolation was requested explicitly.
+# Linux headless: auto when DISPLAY is unset; override with CHROME_DEBUG_HEADLESS=0|1.
 set -euo pipefail
 
 DEBUG_PORT="${CHROME_DEBUG_PORT:-9222}"
@@ -14,6 +19,8 @@ FORCE_RESTART=0
 PROFILE_MODE="${CHROME_DEBUG_PROFILE_MODE:-default-user}"
 PROFILE_DIRECTORY_NAME="${CHROME_DEBUG_PROFILE_DIRECTORY:-Default}"
 REFRESH_FROM_DEFAULT="${CHROME_DEBUG_REFRESH_FROM_DEFAULT:-0}"
+# empty = auto (Linux: headless when DISPLAY unset); 0 = force headed; 1 = force headless
+HEADLESS_MODE="${CHROME_DEBUG_HEADLESS:-}"
 TARGET_URL="${CHROME_DEBUG_URL:-about:blank}"
 TARGET_URL_SET=0
 
@@ -78,14 +85,54 @@ Options:
   --refresh-from-default
                    Re-sync the cloned default-user debug profile from your real Chrome profile before launch
   --repo-local-profile
-                   Use ${ROOT_DIR}/.chrome-debug-profile instead of the normal Chrome user data
+                   Use ${ROOT_DIR}/.chrome-debug-profile (explicit isolation only; not the default)
   --dedicated-profile
                    Use the persistent cmux-only OS-native debug profile
   --profile-directory NAME
                    Pick a Chrome profile subdirectory (Default, Profile 1, etc.) when using
                    --default-user-profile
   -h, --help      Show this help message
+
+Environment:
+  CHROME_DEBUG_PROFILE_MODE   default-user | repo-local | dedicated (default: default-user)
+  CHROME_DEBUG_HEADLESS       empty=auto (Linux: headless when DISPLAY unset), 0=headed, 1=headless
+  CHROME_DEBUG_PORT           remote debugging port (default: 9222)
+  CHROME_DEBUG_PROFILE        override user-data-dir path
+  CHROME                       Chrome/Chromium binary path
 EOF_USAGE
+}
+
+# Returns 0 if Chrome should launch with --headless=new.
+should_use_headless() {
+  if [[ "${HEADLESS_MODE}" == "1" ]]; then
+    return 0
+  fi
+  if [[ "${HEADLESS_MODE}" == "0" ]]; then
+    return 1
+  fi
+  # Auto: never headless on macOS; on Linux/container headless when no DISPLAY.
+  if [[ "${OSTYPE:-}" == "darwin"* ]]; then
+    return 1
+  fi
+  [[ -z "${DISPLAY:-}" ]]
+}
+
+resolve_headless_label() {
+  if should_use_headless; then
+    if [[ "${HEADLESS_MODE}" == "1" ]]; then
+      printf '%s\n' "forced (CHROME_DEBUG_HEADLESS=1)"
+    else
+      printf '%s\n' "auto (no DISPLAY)"
+    fi
+  else
+    if [[ "${HEADLESS_MODE}" == "0" ]]; then
+      printf '%s\n' "forced headed (CHROME_DEBUG_HEADLESS=0)"
+    elif [[ "${OSTYPE:-}" == "darwin"* ]]; then
+      printf '%s\n' "headed (darwin)"
+    else
+      printf '%s\n' "headed (DISPLAY set)"
+    fi
+  fi
 }
 
 detect_chrome() {
@@ -450,16 +497,16 @@ emit_explanation() {
         if clone_sync_requested; then
           next_action="Close Chrome first so the script can refresh your cloned Chrome profile, or rerun without --refresh-from-default to reuse the last clone."
         else
-          next_action="Close Chrome first so the script can create the initial cloned Chrome profile, or rerun with --repo-local-profile / --dedicated-profile."
+          next_action="Close the personal Chrome window so the script can create the initial default-user clone, then rerun ./scripts/chrome-debug.sh (prefer reuse of an existing clone over --repo-local-profile)."
         fi
       else
         summary="Port ${DEBUG_PORT} is free; Chrome is not currently serving DevTools there."
-        next_action="Run ./scripts/chrome-debug.sh to start the debug browser."
+        next_action="Run ./scripts/chrome-debug.sh (default-user profile) to start the debug browser."
       fi
       ;;
     owned_by_profile)
       summary="Port ${DEBUG_PORT} is already owned by the configured ${PROFILE_LABEL}."
-      next_action="Reuse the existing browser, or stop only that profile-specific Chrome if you need a clean restart."
+      next_action="Reuse the existing browser (playwright-cli attach), or run with --restart for a clean start of the same profile."
       ;;
     occupied_by_other)
       summary="Port ${DEBUG_PORT} is occupied by a different DevTools-enabled Chrome instance."
@@ -544,6 +591,14 @@ build_chrome_args() {
     )
   fi
 
+  if should_use_headless; then
+    CHROME_ARGS=(
+      --headless=new
+      "${CHROME_ARGS[@]}"
+    )
+  fi
+
+  # Linux / LXC / container: sandbox and shm defaults often fail without privileges.
   if [[ "${OSTYPE:-}" != "darwin"* ]]; then
     CHROME_ARGS=(
       --no-sandbox
@@ -568,6 +623,8 @@ print_config() {
     PROFILE_DIRECTORY_JSON="${PROFILE_DIRECTORY_NAME}" \
     PROFILE_SOURCE_DIR_JSON="${PROFILE_SOURCE_DIR}" \
     REFRESH_FROM_DEFAULT_JSON="${REFRESH_FROM_DEFAULT}" \
+    HEADLESS_JSON="$(should_use_headless && echo true || echo false)" \
+    HEADLESS_LABEL_JSON="$(resolve_headless_label)" \
     LOG_FILE_JSON="${LOG_FILE}" \
     TARGET_URL_JSON="${TARGET_URL}" \
     LAUNCH_ARGS_JSON_SOURCE="${launch_args_payload}" \
@@ -588,9 +645,12 @@ print(
             "profileDirectory": os.environ["PROFILE_DIRECTORY_JSON"],
             "profileSourceDir": os.environ["PROFILE_SOURCE_DIR_JSON"],
             "refreshFromDefault": os.environ["REFRESH_FROM_DEFAULT_JSON"] == "1",
+            "headless": os.environ["HEADLESS_JSON"] == "true",
+            "headlessLabel": os.environ["HEADLESS_LABEL_JSON"],
             "logFile": os.environ["LOG_FILE_JSON"],
             "targetUrl": os.environ["TARGET_URL_JSON"],
             "launchArgs": launch_args,
+            "chromeDebugContract": "v2",
         }
     )
 )
@@ -606,9 +666,12 @@ PROFILE_LABEL=${PROFILE_LABEL}
 PROFILE_DIRECTORY_NAME=${PROFILE_DIRECTORY_NAME}
 PROFILE_SOURCE_DIR=${PROFILE_SOURCE_DIR}
 REFRESH_FROM_DEFAULT=${REFRESH_FROM_DEFAULT}
+HEADLESS=$(should_use_headless && echo yes || echo no)
+HEADLESS_LABEL=$(resolve_headless_label)
 PROFILE_DIR=${PROFILE_DIR}
 LOG_FILE=${LOG_FILE}
 TARGET_URL=${TARGET_URL}
+CHROME_DEBUG_CONTRACT=v2
 EOF_CONFIG
 }
 
@@ -777,7 +840,9 @@ if profile_is_default_user_mode && chrome_any_process_running && (clone_sync_req
     log_error "Close Chrome first, or rerun without --refresh-from-default to reuse the last cloned profile."
   else
     log_error "Chrome is already running, so the script cannot create the initial cloned Chrome profile for remote debugging."
-    log_error "Close Chrome first, or rerun with --repo-local-profile / --dedicated-profile."
+    log_error "Close Chrome first, then rerun to create the default-user clone."
+    log_error "If a previous clone already exists, rerun without --refresh-from-default to reuse it."
+    log_error "Only use --repo-local-profile when you explicitly need an empty isolated profile."
   fi
   exit 1
 fi
@@ -805,6 +870,7 @@ if [[ -n "${PROFILE_SOURCE_DIR}" ]]; then
   log_info "Profile source: ${PROFILE_SOURCE_DIR}"
 fi
 log_info "Profile: ${PROFILE_DIR}"
+log_info "Headless: $(resolve_headless_label)"
 log_info "URL: ${TARGET_URL}"
 log_info "Log file: ${LOG_FILE}"
 
