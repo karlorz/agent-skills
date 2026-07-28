@@ -23,6 +23,18 @@ assert_not_contains() {
     fail "$label: did not expect '$needle', got: $haystack"
 }
 
+assert_command_fails() {
+  local label="$1" needle="$2"
+  shift 2
+  local output status
+  set +e
+  output="$("$@" 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "$label: expected command to fail"
+  assert_contains "$label" "$output" "$needle"
+}
+
 assert_json() {
   local label="$1" json="$2" expression="$3"
   node -e '
@@ -137,12 +149,8 @@ assert_contains "human entry" "$LOG_BODY" "### 2026-07-28 — new component"
 assert_contains "machine marker" "$LOG_BODY" "<!-- design-guide-usage/v1 "
 
 AFTER_FIRST="$(sha256_file "$VAULT/$WORK_REL/log.md")"
-set +e
-DUP_OUT="$(node "$CLI" record --input "$INPUT_1" --vault "$VAULT" 2>&1)"
-DUP_EXIT=$?
-set -e
-[[ "$DUP_EXIT" -ne 0 ]] || fail "duplicate evidence should fail"
-assert_contains "duplicate reason" "$DUP_OUT" "duplicate evidence id"
+assert_command_fails "duplicate evidence" "duplicate evidence id" \
+  node "$CLI" record --input "$INPUT_1" --vault "$VAULT"
 [[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$AFTER_FIRST" ]] ||
   fail "duplicate failure modified the log"
 
@@ -160,12 +168,8 @@ const value = JSON.parse(fs.readFileSync(file, "utf8"));
 value.friction = "Authorization: Bearer sk-live-1234567890abcdefghijklmnop";
 fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 NODE
-set +e
-SECRET_OUT="$(node "$CLI" record --input "$SECRET_INPUT" --vault "$VAULT" 2>&1)"
-SECRET_EXIT=$?
-set -e
-[[ "$SECRET_EXIT" -ne 0 ]] || fail "likely secret should fail"
-assert_contains "secret rejection" "$SECRET_OUT" "likely secret"
+assert_command_fails "secret rejection" "likely secret" \
+  node "$CLI" record --input "$SECRET_INPUT" --vault "$VAULT"
 
 INVALID_INPUT="$TMP/invalid.json"
 write_input "$INVALID_INPUT" "2026-07-30" "React dashboard" "styling revision" false false
@@ -176,12 +180,8 @@ const value = JSON.parse(fs.readFileSync(file, "utf8"));
 value.trigger = "sometimes";
 fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 NODE
-set +e
-INVALID_OUT="$(node "$CLI" record --input "$INVALID_INPUT" --vault "$VAULT" 2>&1)"
-INVALID_EXIT=$?
-set -e
-[[ "$INVALID_EXIT" -ne 0 ]] || fail "invalid trigger should fail"
-assert_contains "invalid enum" "$INVALID_OUT" "trigger must be one of"
+assert_command_fails "invalid enum" "trigger must be one of" \
+  node "$CLI" record --input "$INVALID_INPUT" --vault "$VAULT"
 
 MISSING_INPUT="$TMP/missing-field.json"
 write_input "$MISSING_INPUT" "2026-07-30" "React dashboard" "styling revision" false false
@@ -192,62 +192,40 @@ const value = JSON.parse(fs.readFileSync(file, "utf8"));
 delete value.helpful_result;
 fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 NODE
-set +e
-MISSING_OUT="$(node "$CLI" record --input "$MISSING_INPUT" --vault "$VAULT" 2>&1)"
-MISSING_EXIT=$?
-set -e
-[[ "$MISSING_EXIT" -ne 0 ]] || fail "missing field should fail"
-assert_contains "missing field reason" "$MISSING_OUT" "helpful_result must be a string"
+assert_command_fails "missing field reason" "helpful_result must be a string" \
+  node "$CLI" record --input "$MISSING_INPUT" --vault "$VAULT"
 
 MALFORMED_INPUT="$TMP/malformed-input.json"
 printf '{not-json}\n' > "$MALFORMED_INPUT"
-set +e
-MALFORMED_INPUT_OUT="$(node "$CLI" record --input "$MALFORMED_INPUT" --vault "$VAULT" 2>&1)"
-MALFORMED_INPUT_EXIT=$?
-set -e
-[[ "$MALFORMED_INPUT_EXIT" -ne 0 ]] || fail "malformed JSON input should fail"
-assert_contains "malformed JSON reason" "$MALFORMED_INPUT_OUT" "cannot parse input JSON"
+assert_command_fails "malformed JSON reason" "cannot parse input JSON" \
+  node "$CLI" record --input "$MALFORMED_INPUT" --vault "$VAULT"
 
 OVERSIZED_INPUT="$TMP/oversized-input.json"
 dd if=/dev/zero of="$OVERSIZED_INPUT" bs=1024 count=65 status=none
-set +e
-OVERSIZED_OUT="$(node "$CLI" record --input "$OVERSIZED_INPUT" --vault "$VAULT" 2>&1)"
-OVERSIZED_EXIT=$?
-set -e
-[[ "$OVERSIZED_EXIT" -ne 0 ]] || fail "oversized input should fail"
-assert_contains "oversized input reason" "$OVERSIZED_OUT" "input exceeds 65536 bytes"
+assert_command_fails "oversized input reason" "input exceeds 65536 bytes" \
+  node "$CLI" record --input "$OVERSIZED_INPUT" --vault "$VAULT"
 
 LOCK_PATH="$VAULT/$WORK_REL/log.md.lock"
 printf 'held\n' > "$LOCK_PATH"
 BEFORE_LOCK="$(sha256_file "$VAULT/$WORK_REL/log.md")"
 INPUT_3="$TMP/use-3.json"
 write_input "$INPUT_3" "2026-07-30" "Admin console" "styling revision" false false
-set +e
-LOCK_OUT="$(node "$CLI" record --input "$INPUT_3" --vault "$VAULT" 2>&1)"
-LOCK_EXIT=$?
-set -e
+assert_command_fails "lock reason" "lock is already held" \
+  node "$CLI" record --input "$INPUT_3" --vault "$VAULT"
 rm "$LOCK_PATH"
-[[ "$LOCK_EXIT" -ne 0 ]] || fail "contended lock should fail"
-assert_contains "lock reason" "$LOCK_OUT" "lock is already held"
 [[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$BEFORE_LOCK" ]] ||
   fail "lock failure modified the log"
 
 BEFORE_FAIL="$(sha256_file "$VAULT/$WORK_REL/log.md")"
-set +e
-FAIL_OUT="$(DESIGN_GUIDE_USAGE_TESTING=1 DESIGN_GUIDE_USAGE_TEST_FAIL_STAGE=before-rename node "$CLI" record --input "$INPUT_3" --vault "$VAULT" 2>&1)"
-FAIL_EXIT=$?
-set -e
-[[ "$FAIL_EXIT" -ne 0 ]] || fail "simulated atomic failure should fail"
-assert_contains "atomic failure reason" "$FAIL_OUT" "simulated failure before rename"
+assert_command_fails "atomic failure reason" "simulated failure before rename" \
+  env DESIGN_GUIDE_USAGE_TESTING=1 DESIGN_GUIDE_USAGE_TEST_FAIL_STAGE=before-rename \
+  node "$CLI" record --input "$INPUT_3" --vault "$VAULT"
 [[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$BEFORE_FAIL" ]] ||
   fail "simulated atomic failure modified the log"
 
-set +e
-CHANGED_OUT="$(DESIGN_GUIDE_USAGE_TESTING=1 DESIGN_GUIDE_USAGE_TEST_FAIL_STAGE=mutate-target node "$CLI" record --input "$INPUT_3" --vault "$VAULT" 2>&1)"
-CHANGED_EXIT=$?
-set -e
-[[ "$CHANGED_EXIT" -ne 0 ]] || fail "changed target should fail"
-assert_contains "changed target reason" "$CHANGED_OUT" "evidence log changed after validation"
+assert_command_fails "changed target reason" "evidence log changed after validation" \
+  env DESIGN_GUIDE_USAGE_TESTING=1 DESIGN_GUIDE_USAGE_TEST_FAIL_STAGE=mutate-target \
+  node "$CLI" record --input "$INPUT_3" --vault "$VAULT"
 CHANGED_BODY="$(cat "$VAULT/$WORK_REL/log.md")"
 assert_contains "external change preserved" "$CHANGED_BODY" "external concurrent change"
 if [[ "$CHANGED_BODY" == *"### 2026-07-30 — styling revision"* ]]; then
@@ -268,12 +246,8 @@ assert_json "ready thresholds" "$READY_STATUS" 'value.counts.uses === 5 && value
 
 REVISION_GAP_INPUT="$TMP/revision-gap.json"
 write_input "$REVISION_GAP_INPUT" "2026-08-02" "Marketing site" "styling revision" false false true ""
-set +e
-REVISION_GAP_OUT="$(node "$CLI" record --input "$REVISION_GAP_INPUT" --vault "$VAULT" 2>&1)"
-REVISION_GAP_EXIT=$?
-set -e
-[[ "$REVISION_GAP_EXIT" -ne 0 ]] || fail "accepted revision without validation should fail"
-assert_contains "revision validation requirement" "$REVISION_GAP_OUT" "revision_validation must describe verification"
+assert_command_fails "revision validation requirement" "revision_validation must describe verification" \
+  node "$CLI" record --input "$REVISION_GAP_INPUT" --vault "$VAULT"
 
 SIGNAL_VAULT="$TMP/signal-vault"
 write_log "$SIGNAL_VAULT"
@@ -333,21 +307,13 @@ assert_json "resolved vault status" "$RESOLVED_STATUS" 'value.eligible === true 
 MALFORMED_VAULT="$TMP/malformed-vault"
 write_log "$MALFORMED_VAULT"
 printf '\n<!-- design-guide-usage/v1 {not-json} -->\n' >> "$MALFORMED_VAULT/$WORK_REL/log.md"
-set +e
-MALFORMED_OUT="$(node "$CLI" status --vault "$MALFORMED_VAULT" --json 2>&1)"
-MALFORMED_EXIT=$?
-set -e
-[[ "$MALFORMED_EXIT" -ne 0 ]] || fail "malformed marker should fail status"
-assert_contains "malformed marker reason" "$MALFORMED_OUT" "malformed evidence marker"
+assert_command_fails "malformed marker reason" "malformed evidence marker" \
+  node "$CLI" status --vault "$MALFORMED_VAULT" --json
 
 INVALID_MARKER_VAULT="$TMP/invalid-marker-vault"
 write_log "$INVALID_MARKER_VAULT"
 printf '%s\n' '<!-- design-guide-usage/v1 {"schema":"design-guide-usage/v1","id":"invalid-marker","date":"2026-08-10","host":"macos-dev","project_class":"Admin console","task_type":"page layout","trigger":"explicit","trigger_context_cost_reviewed":"yes","component_structure_compared":false,"accepted_revision":false,"revision_validation":""} -->' >> "$INVALID_MARKER_VAULT/$WORK_REL/log.md"
-set +e
-INVALID_MARKER_OUT="$(node "$CLI" status --vault "$INVALID_MARKER_VAULT" --json 2>&1)"
-INVALID_MARKER_EXIT=$?
-set -e
-[[ "$INVALID_MARKER_EXIT" -ne 0 ]] || fail "invalid marker shape should fail status"
-assert_contains "invalid marker shape reason" "$INVALID_MARKER_OUT" "trigger_context_cost_reviewed must be a boolean"
+assert_command_fails "invalid marker shape reason" "trigger_context_cost_reviewed must be a boolean" \
+  node "$CLI" status --vault "$INVALID_MARKER_VAULT" --json
 
 printf 'test-design-guide-usage: all checks passed\n'

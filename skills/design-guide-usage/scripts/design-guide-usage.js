@@ -245,7 +245,7 @@ function readInput(inputPath) {
 }
 
 function normalizedString(value) {
-  return value.replace(/\r\n?/g, "\n").split(/\s+/).filter(Boolean).join(" ").trim();
+  return value.trim().split(/\s+/).join(" ");
 }
 
 function isRedactionMarker(value) {
@@ -416,11 +416,10 @@ function validateMarker(record, markerIndex) {
 function readiness(target, records) {
   const projectClasses = new Set(records.map((record) => record.project_class));
   const taskTypes = new Set(records.map((record) => record.task_type));
-  const triggerReviewed = records.some((record) => record.trigger_context_cost_reviewed === true);
-  const structureCompared = records.some((record) => record.component_structure_compared === true);
+  const triggerReviewed = records.some((record) => record.trigger_context_cost_reviewed);
+  const structureCompared = records.some((record) => record.component_structure_compared);
   const unvalidatedRevisions = records.filter(
-    (record) => record.accepted_revision === true &&
-      (typeof record.revision_validation !== "string" || !record.revision_validation.trim()),
+    (record) => record.accepted_revision && !record.revision_validation.trim(),
   ).length;
 
   const unmet = [
