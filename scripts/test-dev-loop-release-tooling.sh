@@ -852,5 +852,6 @@ bash "$ROOT/scripts/test-dev-loop-config-lint.sh"
 bash "$ROOT/scripts/test-dev-loop-status.sh"
 bash "$ROOT/scripts/test-dev-loop-config-migrate.sh"
 bash "$ROOT/scripts/test-dev-loop-dashboard.sh"
+bash "$ROOT/scripts/test-design-guide-usage.sh"
 
 printf 'test-dev-loop-release-tooling: ok\n'

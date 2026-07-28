@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLI="$ROOT/scripts/design-guide-usage.js"
+WORK_REL="projects/agent-skills/work/2026-07-28-design-guide-usage-tracking"
+
+fail() {
+  printf 'test-design-guide-usage: %s\n' "$1" >&2
+  exit 1
+}
+
+assert_contains() {
+  local label="$1" haystack="$2" needle="$3"
+  [[ "$haystack" == *"$needle"* ]] ||
+    fail "$label: expected '$needle', got: $haystack"
+}
+
+assert_json() {
+  local label="$1" json="$2" expression="$3"
+  node -e '
+    const value = JSON.parse(process.argv[1]);
+    const expression = process.argv[2];
+    if (!Function("value", `return (${expression})`)(value)) {
+      process.stderr.write(`assertion failed: ${expression}\n${JSON.stringify(value, null, 2)}\n`);
+      process.exit(1);
+    }
+  ' "$json" "$expression" || fail "$label"
+}
+
+sha256_file() {
+  node -e '
+    const crypto = require("node:crypto");
+    const fs = require("node:fs");
+    process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+  ' "$1"
+}
+
+write_log() {
+  local vault="$1"
+  mkdir -p "$vault/$WORK_REL"
+  printf '# `design-guide` Usage Log\n\n## 2026-07-28 — baseline established\n\n- Follow-up: record the first real frontend task\n' > "$vault/$WORK_REL/log.md"
+}
+
+write_input() {
+  local file="$1" date="$2" project_class="$3" task_type="$4"
+  local trigger_reviewed="$5" structure_compared="$6" accepted_revision="${7:-false}"
+  local revision_validation="${8:-}"
+  node - "$file" "$date" "$project_class" "$task_type" "$trigger_reviewed" "$structure_compared" "$accepted_revision" "$revision_validation" <<'NODE'
+const fs = require("node:fs");
+const [file, date, projectClass, taskType, triggerReviewed, structureCompared, acceptedRevision, revisionValidation] = process.argv.slice(2);
+fs.writeFileSync(file, `${JSON.stringify({
+  date,
+  host: "macos-dev",
+  project_class: projectClass,
+  task_type: taskType,
+  trigger: "explicit",
+  sections_used: ["Design Tokens", "Component Hierarchy"],
+  helpful_result: `Applied semantic tokens and reusable component boundaries for ${taskType}.`,
+  friction: "The fixed upstream paths required deliberate translation to the target repository.",
+  repeated: false,
+  proposed_change: "no change",
+  verification: `Focused tests and browser smoke passed for ${projectClass}.`,
+  follow_up: "Record the next meaningful frontend use.",
+  trigger_context_cost_reviewed: triggerReviewed === "true",
+  component_structure_compared: structureCompared === "true",
+  accepted_revision: acceptedRevision === "true",
+  revision_validation: revisionValidation,
+}, null, 2)}\n`);
+NODE
+}
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+VAULT="$TMP/vault"
+write_log "$VAULT"
+
+EMPTY_STATUS="$(node "$CLI" status --vault "$VAULT" --json)" ||
+  fail "empty status should succeed"
+assert_json "empty status contract" "$EMPTY_STATUS" 'value.schema === "design-guide-usage-status/v1" && value.counts.uses === 0 && value.eligible === false && value.next_action === "record_first_meaningful_use"'
+EMPTY_HASH="$(sha256_file "$VAULT/$WORK_REL/log.md")"
+node "$CLI" status --vault "$VAULT" >/dev/null || fail "human status should succeed"
+[[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$EMPTY_HASH" ]] ||
+  fail "status modified the log"
+
+INPUT_1="$TMP/use-1.json"
+write_input "$INPUT_1" "2026-07-28" "React dashboard" "new component" true false
+BEFORE_DRY="$(sha256_file "$VAULT/$WORK_REL/log.md")"
+DRY_OUT="$(node "$CLI" record --input "$INPUT_1" --vault "$VAULT" --dry-run)" ||
+  fail "dry-run should succeed"
+assert_contains "dry-run label" "$DRY_OUT" "dry_run: true"
+assert_contains "dry-run target" "$DRY_OUT" "$WORK_REL/log.md"
+assert_contains "dry-run preview" "$DRY_OUT" "entry_preview:"
+assert_contains "dry-run human entry" "$DRY_OUT" "### 2026-07-28 — new component"
+[[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$BEFORE_DRY" ]] ||
+  fail "dry-run modified the log"
+
+RECORD_OUT="$(node "$CLI" record --input "$INPUT_1" --vault "$VAULT")" ||
+  fail "record should succeed"
+assert_contains "record summary" "$RECORD_OUT" "recorded: true"
+LOG_BODY="$(cat "$VAULT/$WORK_REL/log.md")"
+assert_contains "human entry" "$LOG_BODY" "### 2026-07-28 — new component"
+assert_contains "machine marker" "$LOG_BODY" "<!-- design-guide-usage/v1 "
+
+AFTER_FIRST="$(sha256_file "$VAULT/$WORK_REL/log.md")"
+set +e
+DUP_OUT="$(node "$CLI" record --input "$INPUT_1" --vault "$VAULT" 2>&1)"
+DUP_EXIT=$?
+set -e
+[[ "$DUP_EXIT" -ne 0 ]] || fail "duplicate evidence should fail"
+assert_contains "duplicate reason" "$DUP_OUT" "duplicate evidence id"
+[[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$AFTER_FIRST" ]] ||
+  fail "duplicate failure modified the log"
+
+INPUT_2="$TMP/use-2.json"
+write_input "$INPUT_2" "2026-07-29" "React dashboard" "page layout" false true
+cat "$INPUT_2" | node "$CLI" record --input - --vault "$VAULT" >/dev/null ||
+  fail "stdin record should succeed"
+
+SECRET_INPUT="$TMP/secret.json"
+write_input "$SECRET_INPUT" "2026-07-30" "React dashboard" "styling revision" false false
+node - "$SECRET_INPUT" <<'NODE'
+const fs = require("node:fs");
+const file = process.argv[2];
+const value = JSON.parse(fs.readFileSync(file, "utf8"));
+value.friction = "Authorization: Bearer sk-live-1234567890abcdefghijklmnop";
+fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+set +e
+SECRET_OUT="$(node "$CLI" record --input "$SECRET_INPUT" --vault "$VAULT" 2>&1)"
+SECRET_EXIT=$?
+set -e
+[[ "$SECRET_EXIT" -ne 0 ]] || fail "likely secret should fail"
+assert_contains "secret rejection" "$SECRET_OUT" "likely secret"
+
+INVALID_INPUT="$TMP/invalid.json"
+write_input "$INVALID_INPUT" "2026-07-30" "React dashboard" "styling revision" false false
+node - "$INVALID_INPUT" <<'NODE'
+const fs = require("node:fs");
+const file = process.argv[2];
+const value = JSON.parse(fs.readFileSync(file, "utf8"));
+value.trigger = "sometimes";
+fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+set +e
+INVALID_OUT="$(node "$CLI" record --input "$INVALID_INPUT" --vault "$VAULT" 2>&1)"
+INVALID_EXIT=$?
+set -e
+[[ "$INVALID_EXIT" -ne 0 ]] || fail "invalid trigger should fail"
+assert_contains "invalid enum" "$INVALID_OUT" "trigger must be one of"
+
+MISSING_INPUT="$TMP/missing-field.json"
+write_input "$MISSING_INPUT" "2026-07-30" "React dashboard" "styling revision" false false
+node - "$MISSING_INPUT" <<'NODE'
+const fs = require("node:fs");
+const file = process.argv[2];
+const value = JSON.parse(fs.readFileSync(file, "utf8"));
+delete value.helpful_result;
+fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+set +e
+MISSING_OUT="$(node "$CLI" record --input "$MISSING_INPUT" --vault "$VAULT" 2>&1)"
+MISSING_EXIT=$?
+set -e
+[[ "$MISSING_EXIT" -ne 0 ]] || fail "missing field should fail"
+assert_contains "missing field reason" "$MISSING_OUT" "helpful_result must be a string"
+
+MALFORMED_INPUT="$TMP/malformed-input.json"
+printf '{not-json}\n' > "$MALFORMED_INPUT"
+set +e
+MALFORMED_INPUT_OUT="$(node "$CLI" record --input "$MALFORMED_INPUT" --vault "$VAULT" 2>&1)"
+MALFORMED_INPUT_EXIT=$?
+set -e
+[[ "$MALFORMED_INPUT_EXIT" -ne 0 ]] || fail "malformed JSON input should fail"
+assert_contains "malformed JSON reason" "$MALFORMED_INPUT_OUT" "cannot parse input JSON"
+
+OVERSIZED_INPUT="$TMP/oversized-input.json"
+dd if=/dev/zero of="$OVERSIZED_INPUT" bs=1024 count=65 status=none
+set +e
+OVERSIZED_OUT="$(node "$CLI" record --input "$OVERSIZED_INPUT" --vault "$VAULT" 2>&1)"
+OVERSIZED_EXIT=$?
+set -e
+[[ "$OVERSIZED_EXIT" -ne 0 ]] || fail "oversized input should fail"
+assert_contains "oversized input reason" "$OVERSIZED_OUT" "input exceeds 65536 bytes"
+
+LOCK_PATH="$VAULT/$WORK_REL/log.md.lock"
+printf 'held\n' > "$LOCK_PATH"
+BEFORE_LOCK="$(sha256_file "$VAULT/$WORK_REL/log.md")"
+INPUT_3="$TMP/use-3.json"
+write_input "$INPUT_3" "2026-07-30" "Admin console" "styling revision" false false
+set +e
+LOCK_OUT="$(node "$CLI" record --input "$INPUT_3" --vault "$VAULT" 2>&1)"
+LOCK_EXIT=$?
+set -e
+rm "$LOCK_PATH"
+[[ "$LOCK_EXIT" -ne 0 ]] || fail "contended lock should fail"
+assert_contains "lock reason" "$LOCK_OUT" "lock is already held"
+[[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$BEFORE_LOCK" ]] ||
+  fail "lock failure modified the log"
+
+BEFORE_FAIL="$(sha256_file "$VAULT/$WORK_REL/log.md")"
+set +e
+FAIL_OUT="$(DESIGN_GUIDE_USAGE_TESTING=1 DESIGN_GUIDE_USAGE_TEST_FAIL_STAGE=before-rename node "$CLI" record --input "$INPUT_3" --vault "$VAULT" 2>&1)"
+FAIL_EXIT=$?
+set -e
+[[ "$FAIL_EXIT" -ne 0 ]] || fail "simulated atomic failure should fail"
+assert_contains "atomic failure reason" "$FAIL_OUT" "simulated failure before rename"
+[[ "$(sha256_file "$VAULT/$WORK_REL/log.md")" == "$BEFORE_FAIL" ]] ||
+  fail "simulated atomic failure modified the log"
+
+set +e
+CHANGED_OUT="$(DESIGN_GUIDE_USAGE_TESTING=1 DESIGN_GUIDE_USAGE_TEST_FAIL_STAGE=mutate-target node "$CLI" record --input "$INPUT_3" --vault "$VAULT" 2>&1)"
+CHANGED_EXIT=$?
+set -e
+[[ "$CHANGED_EXIT" -ne 0 ]] || fail "changed target should fail"
+assert_contains "changed target reason" "$CHANGED_OUT" "evidence log changed after validation"
+CHANGED_BODY="$(cat "$VAULT/$WORK_REL/log.md")"
+assert_contains "external change preserved" "$CHANGED_BODY" "external concurrent change"
+if [[ "$CHANGED_BODY" == *"### 2026-07-30 — styling revision"* ]]; then
+  fail "changed-target failure wrote recorder input unexpectedly"
+fi
+
+node "$CLI" record --input "$INPUT_3" --vault "$VAULT" >/dev/null
+INPUT_4="$TMP/use-4.json"
+INPUT_5="$TMP/use-5.json"
+write_input "$INPUT_4" "2026-07-31" "Admin console" "component-index review" false false true "Agent Skills validation and link checks passed."
+write_input "$INPUT_5" "2026-08-01" "Marketing site" "new component" false false
+node "$CLI" record --input "$INPUT_4" --vault "$VAULT" >/dev/null
+node "$CLI" record --input "$INPUT_5" --vault "$VAULT" >/dev/null
+
+READY_STATUS="$(node "$CLI" status --vault "$VAULT" --json)" ||
+  fail "ready status should succeed"
+assert_json "ready thresholds" "$READY_STATUS" 'value.counts.uses === 5 && value.counts.project_classes === 3 && value.counts.task_types === 4 && value.signals.trigger_context_cost_reviewed === true && value.signals.component_structure_compared === true && value.signals.unvalidated_accepted_revisions === 0 && value.eligible === true && value.next_action === "begin_human_promotion_review"'
+
+REVISION_GAP_INPUT="$TMP/revision-gap.json"
+write_input "$REVISION_GAP_INPUT" "2026-08-02" "Marketing site" "styling revision" false false true ""
+set +e
+REVISION_GAP_OUT="$(node "$CLI" record --input "$REVISION_GAP_INPUT" --vault "$VAULT" 2>&1)"
+REVISION_GAP_EXIT=$?
+set -e
+[[ "$REVISION_GAP_EXIT" -ne 0 ]] || fail "accepted revision without validation should fail"
+assert_contains "revision validation requirement" "$REVISION_GAP_OUT" "revision_validation must describe verification"
+
+SIGNAL_VAULT="$TMP/signal-vault"
+write_log "$SIGNAL_VAULT"
+for index in 1 2 3 4 5; do
+  SIGNAL_INPUT="$TMP/signal-$index.json"
+  write_input "$SIGNAL_INPUT" "2026-08-0$index" "React dashboard" "new component" false false
+  node "$CLI" record --input "$SIGNAL_INPUT" --vault "$SIGNAL_VAULT" >/dev/null
+done
+MISSING_PROJECT_STATUS="$(node "$CLI" status --vault "$SIGNAL_VAULT" --json)"
+assert_json "project-class threshold below" "$MISSING_PROJECT_STATUS" 'value.counts.uses === 5 && value.counts.project_classes === 1 && value.eligible === false && value.next_action === "record_second_project_class"'
+
+SECOND_PROJECT_INPUT="$TMP/signal-second-project.json"
+write_input "$SECOND_PROJECT_INPUT" "2026-08-06" "Admin console" "new component" false false
+node "$CLI" record --input "$SECOND_PROJECT_INPUT" --vault "$SIGNAL_VAULT" >/dev/null
+MISSING_TASK_STATUS="$(node "$CLI" status --vault "$SIGNAL_VAULT" --json)"
+assert_json "task-type threshold below" "$MISSING_TASK_STATUS" 'value.counts.project_classes === 2 && value.counts.task_types === 1 && value.eligible === false && value.next_action === "record_second_task_type"'
+
+SECOND_TASK_INPUT="$TMP/signal-second-task.json"
+write_input "$SECOND_TASK_INPUT" "2026-08-07" "Admin console" "page layout" false false
+node "$CLI" record --input "$SECOND_TASK_INPUT" --vault "$SIGNAL_VAULT" >/dev/null
+MISSING_TRIGGER_STATUS="$(node "$CLI" status --vault "$SIGNAL_VAULT" --json)"
+assert_json "trigger threshold below" "$MISSING_TRIGGER_STATUS" 'value.counts.task_types === 2 && value.signals.trigger_context_cost_reviewed === false && value.eligible === false && value.next_action === "review_trigger_and_context_cost"'
+
+TRIGGER_INPUT="$TMP/signal-trigger.json"
+write_input "$TRIGGER_INPUT" "2026-08-08" "Admin console" "page layout" true false
+node "$CLI" record --input "$TRIGGER_INPUT" --vault "$SIGNAL_VAULT" >/dev/null
+MISSING_STRUCTURE_STATUS="$(node "$CLI" status --vault "$SIGNAL_VAULT" --json)"
+assert_json "structure threshold below" "$MISSING_STRUCTURE_STATUS" 'value.signals.trigger_context_cost_reviewed === true && value.signals.component_structure_compared === false && value.eligible === false && value.next_action === "compare_component_structure"'
+
+STRUCTURE_INPUT="$TMP/signal-structure.json"
+write_input "$STRUCTURE_INPUT" "2026-08-09" "Admin console" "page layout" false true
+node "$CLI" record --input "$STRUCTURE_INPUT" --vault "$SIGNAL_VAULT" >/dev/null
+SIGNAL_READY_STATUS="$(node "$CLI" status --vault "$SIGNAL_VAULT" --json)"
+assert_json "signal thresholds at" "$SIGNAL_READY_STATUS" 'value.signals.trigger_context_cost_reviewed === true && value.signals.component_structure_compared === true && value.eligible === true'
+
+REVISION_STATUS_VAULT="$TMP/revision-status-vault"
+cp -R "$SIGNAL_VAULT" "$REVISION_STATUS_VAULT"
+printf '%s\n' '<!-- design-guide-usage/v1 {"schema":"design-guide-usage/v1","id":"manual-validated-revision","date":"2026-08-10","host":"macos-dev","project_class":"Admin console","task_type":"page layout","trigger":"explicit","trigger_context_cost_reviewed":false,"component_structure_compared":false,"accepted_revision":true,"revision_validation":"Focused validation passed."} -->' >> "$REVISION_STATUS_VAULT/$WORK_REL/log.md"
+REVISION_STATUS="$(node "$CLI" status --vault "$REVISION_STATUS_VAULT" --json)"
+assert_json "validated revision remains eligible" "$REVISION_STATUS" 'value.signals.unvalidated_accepted_revisions === 0 && value.eligible === true && value.next_action === "begin_human_promotion_review"'
+
+MOCK_BIN="$TMP/bin"
+mkdir -p "$MOCK_BIN"
+cat > "$MOCK_BIN/skillwiki" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "path" ]; then
+  printf '%s\n' '{"ok":true,"data":{"path":"$VAULT"}}'
+  exit 0
+fi
+exit 1
+EOF
+chmod +x "$MOCK_BIN/skillwiki"
+RESOLVED_STATUS="$(PATH="$MOCK_BIN:$PATH" node "$CLI" status --json)" ||
+  fail "skillwiki path resolution should succeed"
+assert_json "resolved vault status" "$RESOLVED_STATUS" 'value.eligible === true && value.target.endsWith("projects/agent-skills/work/2026-07-28-design-guide-usage-tracking/log.md")'
+
+MALFORMED_VAULT="$TMP/malformed-vault"
+write_log "$MALFORMED_VAULT"
+printf '\n<!-- design-guide-usage/v1 {not-json} -->\n' >> "$MALFORMED_VAULT/$WORK_REL/log.md"
+set +e
+MALFORMED_OUT="$(node "$CLI" status --vault "$MALFORMED_VAULT" --json 2>&1)"
+MALFORMED_EXIT=$?
+set -e
+[[ "$MALFORMED_EXIT" -ne 0 ]] || fail "malformed marker should fail status"
+assert_contains "malformed marker reason" "$MALFORMED_OUT" "malformed evidence marker"
+
+INVALID_MARKER_VAULT="$TMP/invalid-marker-vault"
+write_log "$INVALID_MARKER_VAULT"
+printf '%s\n' '<!-- design-guide-usage/v1 {"schema":"design-guide-usage/v1","id":"invalid-marker","date":"2026-08-10","host":"macos-dev","project_class":"Admin console","task_type":"page layout","trigger":"explicit","trigger_context_cost_reviewed":"yes","component_structure_compared":false,"accepted_revision":false,"revision_validation":""} -->' >> "$INVALID_MARKER_VAULT/$WORK_REL/log.md"
+set +e
+INVALID_MARKER_OUT="$(node "$CLI" status --vault "$INVALID_MARKER_VAULT" --json 2>&1)"
+INVALID_MARKER_EXIT=$?
+set -e
+[[ "$INVALID_MARKER_EXIT" -ne 0 ]] || fail "invalid marker shape should fail status"
+assert_contains "invalid marker shape reason" "$INVALID_MARKER_OUT" "trigger_context_cost_reviewed must be a boolean"
+
+printf 'test-design-guide-usage: all checks passed\n'
