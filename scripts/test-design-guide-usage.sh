@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="$ROOT/scripts/design-guide-usage.js"
+SKILL_ROOT="$ROOT/skills/design-guide-usage"
+CLI="$SKILL_ROOT/scripts/design-guide-usage.js"
 WORK_REL="projects/agent-skills/work/2026-07-28-design-guide-usage-tracking"
 
 fail() {
@@ -14,6 +15,12 @@ assert_contains() {
   local label="$1" haystack="$2" needle="$3"
   [[ "$haystack" == *"$needle"* ]] ||
     fail "$label: expected '$needle', got: $haystack"
+}
+
+assert_not_contains() {
+  local label="$1" haystack="$2" needle="$3"
+  [[ "$haystack" != *"$needle"* ]] ||
+    fail "$label: did not expect '$needle', got: $haystack"
 }
 
 assert_json() {
@@ -73,8 +80,34 @@ NODE
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+[[ -f "$SKILL_ROOT/SKILL.md" ]] || fail "missing companion SKILL.md"
+[[ -f "$SKILL_ROOT/agents/openai.yaml" ]] || fail "missing companion agents/openai.yaml"
+[[ -x "$CLI" ]] || fail "missing executable bundled recorder"
+[[ ! -e "$ROOT/scripts/design-guide-usage.js" ]] || fail "recorder must not remain repository-root-only"
+[[ ! -e "$SKILL_ROOT/INSTALLATION_GUIDE.md" ]] || fail "skill must not contain INSTALLATION_GUIDE.md"
+[[ ! -e "$SKILL_ROOT/README.md" ]] || fail "skill must not contain README.md"
+[[ ! -e "$SKILL_ROOT/scripts/install.sh" ]] || fail "skill must not install a global command"
+[[ ! -e "$SKILL_ROOT/.codex-plugin/plugin.json" ]] || fail "personal skill must not contain a Codex plugin manifest"
+[[ ! -e "$SKILL_ROOT/.claude-plugin/plugin.json" ]] || fail "personal skill must not contain a Claude plugin manifest"
+
+SKILL_BODY="$(cat "$SKILL_ROOT/SKILL.md")"
+assert_contains "skill trigger status" "$SKILL_BODY" 'design-guide usage status'
+assert_contains "skill relative script" "$SKILL_BODY" 'scripts/design-guide-usage.js'
+assert_contains "skill explicit write authority" "$SKILL_BODY" 'explicitly authorizes'
+assert_not_contains "skill avoids source checkout" "$SKILL_BODY" '/Users/karlchow/Desktop/code/agent-skills'
+assert_not_contains "skill avoids global PATH" "$SKILL_BODY" '~/.local/bin'
+
 VAULT="$TMP/vault"
 write_log "$VAULT"
+
+INSTALLED_ROOT="$TMP/installed/design-guide-usage"
+mkdir -p "$TMP/installed"
+cp -R "$SKILL_ROOT" "$INSTALLED_ROOT"
+OUTSIDE_CWD="$TMP/outside"
+mkdir -p "$OUTSIDE_CWD"
+INSTALLED_STATUS="$(cd "$OUTSIDE_CWD" && node "$INSTALLED_ROOT/scripts/design-guide-usage.js" status --vault "$VAULT" --json)" ||
+  fail "installed-skill status should succeed outside the repository"
+assert_json "installed-skill status" "$INSTALLED_STATUS" 'value.counts.uses === 0 && value.next_action === "record_first_meaningful_use"'
 
 EMPTY_STATUS="$(node "$CLI" status --vault "$VAULT" --json)" ||
   fail "empty status should succeed"
@@ -293,7 +326,7 @@ fi
 exit 1
 EOF
 chmod +x "$MOCK_BIN/skillwiki"
-RESOLVED_STATUS="$(PATH="$MOCK_BIN:$PATH" node "$CLI" status --json)" ||
+RESOLVED_STATUS="$(cd "$OUTSIDE_CWD" && PATH="$MOCK_BIN:$PATH" node "$INSTALLED_ROOT/scripts/design-guide-usage.js" status --json)" ||
   fail "skillwiki path resolution should succeed"
 assert_json "resolved vault status" "$RESOLVED_STATUS" 'value.eligible === true && value.target.endsWith("projects/agent-skills/work/2026-07-28-design-guide-usage-tracking/log.md")'
 

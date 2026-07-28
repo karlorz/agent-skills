@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Guide Usage"
+  short_description: "Record and review design-guide usage evidence"
+  default_prompt: "Use $design-guide-usage to show my current design-guide promotion-review status."

@@ -71,6 +71,16 @@ const MARKER_STRING_LIMITS = {
   trigger: 9,
   revision_validation: STRING_FIELDS.revision_validation,
 };
+const SECRET_PATTERNS = [
+  ["private key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/i],
+  ["bearer token", /(?:authorization\s*:\s*)?bearer\s+[a-z0-9._~+/=-]{16,}/i],
+  ["OpenAI-style key", /\bsk-[a-z0-9_-]{20,}\b/i],
+  ["GitHub token", /\bgh[pousr]_[a-z0-9]{20,}\b/i],
+  ["Slack token", /\bxox[baprs]-[a-z0-9-]{20,}\b/i],
+  ["AWS access key", /\bAKIA[0-9A-Z]{16}\b/],
+  ["password assignment", /\bpassword\s*[:=]\s*[^\s,;]{8,}/i],
+  ["cookie header", /\bcookie\s*:\s*[^\s;=]+=[^\s;]{8,}/i],
+];
 
 function usage() {
   return [
@@ -245,17 +255,7 @@ function isRedactionMarker(value) {
 function secretFinding(value) {
   if (isRedactionMarker(value)) return "";
   const withoutRedactions = value.replace(/\[REDACTED:[^\]]+\]/gi, "[redacted]");
-  const patterns = [
-    ["private key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/i],
-    ["bearer token", /(?:authorization\s*:\s*)?bearer\s+[a-z0-9._~+/=-]{16,}/i],
-    ["OpenAI-style key", /\bsk-[a-z0-9_-]{20,}\b/i],
-    ["GitHub token", /\bgh[pousr]_[a-z0-9]{20,}\b/i],
-    ["Slack token", /\bxox[baprs]-[a-z0-9-]{20,}\b/i],
-    ["AWS access key", /\bAKIA[0-9A-Z]{16}\b/],
-    ["password assignment", /\bpassword\s*[:=]\s*[^\s,;]{8,}/i],
-    ["cookie header", /\bcookie\s*:\s*[^\s;=]+=[^\s;]{8,}/i],
-  ];
-  const match = patterns.find(([, pattern]) => pattern.test(withoutRedactions));
+  const match = SECRET_PATTERNS.find(([, pattern]) => pattern.test(withoutRedactions));
   return match ? match[0] : "";
 }
 
