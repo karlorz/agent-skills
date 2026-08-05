@@ -767,6 +767,85 @@ run_plugin_version_sync_contract_checks() {
   )
 }
 
+assert_release_markers() {
+  local label="$1" description="$2" expected_version="$3" marker
+
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    assert_eq "$label release marker" "$marker" "$expected_version"
+  done < <(
+    python3 - "$description" <<'PY'
+import re
+import sys
+
+description = sys.argv[1]
+markers = sorted(set(re.findall(r"\bv([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?):", description)))
+for marker in markers:
+    print(marker)
+PY
+  )
+}
+
+run_plugin_metadata_contract_checks() {
+  local marketplace="$ROOT/.claude-plugin/marketplace.json"
+  local duplicate_names duplicate_sources
+  local name version source root claude_manifest codex_manifest
+  local marketplace_description claude_description codex_description
+  local config_example
+
+  duplicate_names="$(jq -r '.plugins[] | .name' "$marketplace" | sort | uniq -d)"
+  [ -z "$duplicate_names" ] || fail "duplicate marketplace name: $duplicate_names"
+
+  duplicate_sources="$(jq -r '.plugins[] | .source' "$marketplace" | sort | uniq -d)"
+  [ -z "$duplicate_sources" ] || fail "duplicate marketplace source: $duplicate_sources"
+
+  while IFS=$'\t' read -r name version source marketplace_description; do
+    root="$ROOT/${source#./}"
+    claude_manifest="$root/.claude-plugin/plugin.json"
+    codex_manifest="$root/.codex-plugin/plugin.json"
+
+    [ -d "$root" ] || fail "marketplace source directory missing: $source"
+    [ -f "$claude_manifest" ] || fail "$name marketplace source missing Claude manifest"
+
+    assert_eq "$name marketplace/Claude name" "$(jq -r '.name' "$claude_manifest")" "$name"
+    assert_eq "$name marketplace/Claude version" "$(read_json_version "$claude_manifest")" "$version"
+    claude_description="$(jq -r '.description // empty' "$claude_manifest")"
+    assert_release_markers "$name marketplace" "$marketplace_description" "$version"
+    assert_release_markers "$name Claude manifest" "$claude_description" "$version"
+
+    if [ -f "$codex_manifest" ]; then
+      assert_eq "$name Codex/Claude name" "$(jq -r '.name' "$codex_manifest")" "$name"
+      assert_eq "$name Codex/Claude version" "$(read_json_version "$codex_manifest")" "$version"
+      codex_description="$(jq -r '.description // empty' "$codex_manifest")"
+      assert_release_markers "$name Codex manifest" "$codex_description" "$version"
+    fi
+  done < <(
+    jq -r '.plugins[] | [.name, .version, .source, (.description // "")] | @tsv' "$marketplace" | sort
+  )
+
+  while IFS= read -r root; do
+    name="$(jq -r '.name' "$root/.claude-plugin/plugin.json")"
+    version="$(read_json_version "$root/.claude-plugin/plugin.json")"
+    claude_description="$(jq -r '.description // empty' "$root/.claude-plugin/plugin.json")"
+    assert_release_markers "$name Claude manifest" "$claude_description" "$version"
+    if [ -f "$root/.codex-plugin/plugin.json" ]; then
+      codex_description="$(jq -r '.description // empty' "$root/.codex-plugin/plugin.json")"
+      assert_release_markers "$name Codex manifest" "$codex_description" "$version"
+    fi
+  done < <(
+    find "$ROOT/skills" -mindepth 3 -maxdepth 3 -type f \
+      -path '*/.claude-plugin/plugin.json' -print0 |
+      xargs -0 -n1 dirname |
+      xargs -n1 dirname |
+      sort
+  )
+
+  config_example="$ROOT/.claude/dev-loop.config.example.md"
+  assert_contains "example nested skill source glob" "$(cat "$config_example")" "skills/*/skills/*/SKILL.md"
+  assert_contains "example per-plugin manifest count" "$(cat "$config_example")" "manifests_count: 3"
+  assert_not_contains "example does not version SKILL.md" "$(cat "$config_example")" "version bump touches SKILL.md"
+}
+
 run_marketplace_inventory_contract_checks() {
   local root name source count version marketplace_version
 
@@ -853,6 +932,7 @@ run_model_routing_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
 run_deep_research_freshness_contract_checks
 run_skill_frontmatter_contract_checks
+run_plugin_metadata_contract_checks
 run_marketplace_inventory_contract_checks
 run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks

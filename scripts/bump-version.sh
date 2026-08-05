@@ -2,7 +2,13 @@
 #
 # bump-version.sh — bump a skill's version across its manifests.
 #
-# A plugin version lives in two or three manifests that must stay in sync:
+# A plugin's release identity lives in two or three manifests that must stay in
+# sync. The Claude manifest is the release metadata anchor; the Codex manifest
+# and marketplace entry must agree on name and version. Descriptions may vary
+# by install surface, but any explicit v<semver>: release marker must match the
+# manifest version.
+#
+# The version lives in:
 #   1. skills/<skill>/.claude-plugin/plugin.json              "version": "X.Y.Z"
 #   2. skills/<skill>/.codex-plugin/plugin.json               "version": "X.Y.Z" (if present)
 #   3. .claude-plugin/marketplace.json          matching plugin entry's "version"

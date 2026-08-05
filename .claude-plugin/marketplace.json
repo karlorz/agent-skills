@@ -11,7 +11,7 @@
     {
       "name": "deep-research",
       "source": "./skills/deep-research",
-      "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7/API verification, tiered model pinning (sonnet/haiku agents for external research, parent model for synthesis), deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration with schema-compatible follow-up queueing. Spawnable as a subagent (model: sonnet) via deep-research:deep-research. v2.4.2: latest-by-default source triage, grok-search freshness, and Freshness & Verification Status reporting.",
+      "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7/API verification, tiered model pinning (sonnet/haiku agents for external research, parent model for synthesis), deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration with schema-compatible follow-up queueing. Spawnable as a subagent (model: sonnet) via deep-research:deep-research. v2.4.3: latest-by-default source triage, grok-search freshness, and Freshness & Verification Status reporting.",
       "version": "2.4.3",
       "category": "research",
       "keywords": [
@@ -163,7 +163,7 @@
     {
       "name": "host-backup-restore",
       "source": "./skills/host-backup-restore",
-      "description": "Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker), post-discovery research, and skillwiki infrastructure capture. v3.6.3: explicit SSH/Tailscale identity restore for post-reinstall hosts, with safety snapshots, ca-certificates handling, and SSH validation. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
+      "description": "Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker), post-discovery research, and skillwiki infrastructure capture. v3.6.4: explicit SSH/Tailscale identity restore for post-reinstall hosts, with safety snapshots, ca-certificates handling, and SSH validation. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
       "version": "3.6.4",
       "category": "operations",
       "keywords": [

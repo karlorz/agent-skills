@@ -62,8 +62,8 @@ interview:
 ## Code Layout
 
 ```yaml
-cli_src: skills/*/SKILL.md
-skills_glob: skills/*/SKILL.md
+cli_src: skills/*/skills/*/SKILL.md
+skills_glob: skills/*/skills/*/SKILL.md
 cli_entry_override:
 ```
 
@@ -105,7 +105,7 @@ merge_policy:
 ```yaml
 bump_script: ./scripts/bump-version.sh
 publish_via: ci-tag-trigger
-manifests_count: 4
+manifests_count: 3
 remote_hosts: []
 release_policy:
   auto_bump: false
@@ -148,7 +148,7 @@ vault_sync:
 
 ```yaml
 notes:
-  conventions: "6 skills; version bump touches SKILL.md, marketplace.json, Claude plugin.json, and optional Codex plugin.json."
+  conventions: "Each plugin bump updates its Claude manifest, optional Codex manifest, and matching marketplace entry; SKILL.md has no release version field."
   merge_readiness: "Local tests pass, then push main. PR is fallback only."
   release_readiness: "After main CI passes, tag using {skill}-{version}; CI tag trigger publishes."
 ```
