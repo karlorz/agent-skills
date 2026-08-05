@@ -258,9 +258,9 @@ if [ "$HAS_CODEX_PLUGIN" -eq 1 ] && [ "$C_NEW" != "$NEW" ]; then
   die "post-edit mismatch: .codex-plugin/plugin.json=$C_NEW (wanted $NEW)"
 fi
 
-UPDATED_COUNT=3
+UPDATED_COUNT=2
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
-  UPDATED_COUNT=4
+  UPDATED_COUNT=3
 fi
 printf '\nbumped %s to %s (%s files updated, in sync).\n' "$SKILL" "$NEW" "$UPDATED_COUNT"
 printf 'next: git add -A && git commit && git tag %s\n' "$TAG"

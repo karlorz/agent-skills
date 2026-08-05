@@ -200,12 +200,15 @@ EOF
   dry_run="$(cd "$tmp" && ./scripts/bump-version.sh demo-codex --set 1.2.4 --dry-run)"
   assert_contains "dry-run file list" "$dry_run" "skills/demo-codex/.codex-plugin/plugin.json"
 
-  (cd "$tmp" && ./scripts/bump-version.sh demo-codex --set 1.2.4 >/dev/null)
+  local codex_bump basic_bump
+  codex_bump="$(cd "$tmp" && ./scripts/bump-version.sh demo-codex --set 1.2.4)"
+  assert_contains "demo-codex updated file count" "$codex_bump" "3 files updated"
   assert_eq "demo-codex Claude manifest" "$(read_json_version "$tmp/skills/demo-codex/.claude-plugin/plugin.json")" "1.2.4"
   assert_eq "demo-codex Codex manifest" "$(read_json_version "$tmp/skills/demo-codex/.codex-plugin/plugin.json")" "1.2.4"
   assert_eq "demo-codex marketplace" "$(read_market_version "$tmp/.claude-plugin/marketplace.json" demo-codex)" "1.2.4"
 
-  (cd "$tmp" && ./scripts/bump-version.sh demo-basic --set 0.4.1 >/dev/null)
+  basic_bump="$(cd "$tmp" && ./scripts/bump-version.sh demo-basic --set 0.4.1)"
+  assert_contains "demo-basic updated file count" "$basic_bump" "2 files updated"
   assert_eq "demo-basic Claude manifest" "$(read_json_version "$tmp/skills/demo-basic/.claude-plugin/plugin.json")" "0.4.1"
   assert_eq "demo-basic marketplace" "$(read_market_version "$tmp/.claude-plugin/marketplace.json" demo-basic)" "0.4.1"
 }
