@@ -44,8 +44,8 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.26.23: immutable plugin payload/version enforcement, exact host-aware cache diagnostics, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. Includes preflight prep mode, investigate, SkillWiki vault workflows, simplify review, CI health gates, and main-first release verification.",
-      "version": "1.26.23",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet; immutable plugin payload/version enforcement, exact host-aware cache diagnostics, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. Includes preflight prep mode, investigate, SkillWiki vault workflows, simplify review, CI health gates, and main-first release verification.",
+      "version": "1.26.24",
       "category": "automation",
       "keywords": [
         "dev-loop",

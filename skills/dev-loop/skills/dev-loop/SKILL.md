@@ -7,7 +7,7 @@ description: >
   "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.23: immutable plugin-payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet; immutable plugin payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -444,24 +444,27 @@ claimable work regardless of P-score. Specifically:
 
 ## Model Strategy
 
-Dev-loop spawns agents for implementation, code review, and research. To balance cost and quality, each agent-eligible step pins to a model tier matched to its complexity:
+Dev-loop spawns agents for implementation, code review, research, and knowledge maintenance. To balance cost and quality, each agent-eligible step uses the model tier matched to its complexity. Planning and decision agents inherit the invoking parent model. Research and mechanical maintenance remain on Sonnet:
 
 | Step | Agent | Model | Rationale |
 |------|-------|-------|-----------|
 | 1. QUERY | wiki-query / git search | `sonnet` (complex queries only) | Vault search and codebase exploration — mechanical lookup |
 | 3. SPEC (brainstorm) | Parent session | inherit | Creative exploration, requirements gathering — benefits from parent model |
 | 4. PLAN | Parent session | inherit | Architecture design, dependency mapping — benefits from parent model |
+| IDLE: decision | `skillwiki:proj-decide` | inherit | ADRs encode architectural decisions and must use the invoking model's judgment |
 | 5. EXECUTE (subagents) | Implementation subagents | `sonnet` | Mechanical coding from plan — following spec, no architectural judgment |
 | 6. REVIEW (simplify) | `simplify:simplify` skill, preferably via `dev-loop:simplify-worker` | `sonnet` subagent when available; inline fallback otherwise | Code review: reuse, simplification, efficiency, altitude - must run as an explicit skill invocation, not an informal manual scan |
 | 6a. BROWSER-VERIFY | playwright-cli:browser-worker | `sonnet` | Browser health check — smoke routes, console errors, a11y violations |
 | 6b. MERGE | gh CLI (inline) + ci-health-worker | inline + `sonnet` | PR creation (inline) + CI health gate (ci-health-worker agent) |
 | IDLE: research | Research agent | `sonnet` | Code health scanning, vault coverage analysis — mechanical analysis |
 | IDLE: CI health | ci-health-worker | `sonnet` | GitHub Actions run inspection, required-check verification — mechanical API queries |
-| IDLE: maintenance | skillwiki skills (lint, audit, etc.) | `sonnet` (Agent spawns) | Vault maintenance: search, validate, write — mechanical, no architectural judgment |
+| IDLE: mechanical maintenance | wiki-lint / wiki-audit / wiki-crystallize / proj-distill | `sonnet` | Vault maintenance: search, validate, extract, and distill — mechanical, no architectural judgment |
 
-**Steps that stay inline (not agent-eligible):** WORK, MERGE (commit + push + PR creation only), SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume. MERGE's CI health gate spawns ci-health-worker (sonnet). IDLE maintenance skills (lint, audit, crystallize, distill, decide) are now agent-eligible and run on sonnet.
+The mechanical maintenance agents wiki-lint, wiki-audit, wiki-crystallize, and proj-distill remain on `sonnet`; `proj-decide` inherits the parent model because ADRs require architectural judgment.
 
-**Cost impact**: ~80% of agent-eligible work (EXECUTE subagents + SIMPLIFY + MERGE CI gate + research + IDLE maintenance) runs on Sonnet. Only SPEC and PLAN benefit from parent model capability.
+**Steps that stay inline (not agent-eligible):** WORK, MERGE (commit + push + PR creation only), SAVE, DISTILL, AUDIT, VERIFY, RETRO, E2E, DEPLOY, PUSH — these are CLI commands, file writes, or skill invocations with low token volume. MERGE's CI health gate spawns ci-health-worker (sonnet). IDLE mechanical maintenance skills (lint, audit, crystallize, distill) are agent-eligible and run on sonnet; `proj-decide` is agent-eligible and inherits the invoking parent model.
+
+**Cost impact**: ~80% of agent-eligible work (EXECUTE subagents + SIMPLIFY + MERGE CI gate + research + mechanical maintenance) runs on Sonnet. SPEC, PLAN, and architectural decision work inherit the parent model's capability.
 
 ### Interview Capability Matrix
 
@@ -1980,7 +1983,7 @@ instead:
 
    **If `lint_vault` in BACKEND_CAPS (skillwiki maintenance):**
 
-   Vault maintenance skills are dispatched as **Agent spawns with `model: "sonnet"`** — these are mechanical tasks (search, validate, write) that sonnet handles at ~5x lower cost than inheriting the parent model. Each agent gets a self-contained prompt with vault path and project context.
+   Mechanical maintenance skills are dispatched as **Agent spawns with `model: "sonnet"`** — search, validation, extraction, and distillation are routine work that Sonnet handles at lower cost. Architectural decision work is the exception: `skillwiki:proj-decide` inherits the invoking parent model because ADRs require architectural judgment. Each agent gets a self-contained prompt with vault path and project context.
 
    ```
    Agent(description: "Vault lint", subagent_type: "skillwiki:wiki-lint", model: "sonnet",
@@ -2003,7 +2006,7 @@ instead:
    ```
 
    ```
-   Agent(description: "Project decide", subagent_type: "skillwiki:proj-decide", model: "sonnet",
+   Agent(description: "Project decide", subagent_type: "skillwiki:proj-decide", model: "inherit",
      prompt: "Record any pending ADRs for project {slug} in the skillwiki vault. Report any decisions recorded.")
    ```
 

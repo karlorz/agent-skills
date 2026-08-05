@@ -629,6 +629,20 @@ assert_json_array_contains() {
   fi
 }
 
+run_model_routing_contract_checks() {
+  local prompt
+  prompt="$(cat "$ROOT/skills/dev-loop/skills/dev-loop/SKILL.md")"
+
+  assert_contains "proj-decide inherits parent model at dispatch" "$prompt" \
+    'subagent_type: "skillwiki:proj-decide", model: "inherit"'
+  assert_not_contains "proj-decide is not pinned to sonnet" "$prompt" \
+    'subagent_type: "skillwiki:proj-decide", model: "sonnet"'
+  assert_contains "decision routing policy is explicit" "$prompt" \
+    'Planning and decision agents inherit the invoking parent model'
+  assert_contains "mechanical maintenance stays on sonnet" "$prompt" \
+    'wiki-lint, wiki-audit, wiki-crystallize, and proj-distill remain on `sonnet`'
+}
+
 run_dev_loop_metadata_contract_checks() {
   local skill_root skill_version claude_manifest codex_manifest marketplace
   local claude_description codex_description marketplace_description
@@ -835,6 +849,7 @@ run_dev_loop_office_hours_contract_checks
 run_dev_loop_investigate_queue_contract_checks
 run_codex_dispatch_contract_checks
 run_dev_loop_metadata_contract_checks
+run_model_routing_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
 run_deep_research_freshness_contract_checks
 run_skill_frontmatter_contract_checks
