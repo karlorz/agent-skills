@@ -50,5 +50,8 @@ jobs:
       - name: Run dev-loop release tooling checks
         run: bash scripts/test-dev-loop-release-tooling.sh
 
+      - name: Run plugin metadata regression fixtures
+        run: bash scripts/test-plugin-metadata.sh
+
       - name: Run dev-loop preflight inventory checks
         run: bash scripts/test-dev-loop-preflight-inventory.sh
