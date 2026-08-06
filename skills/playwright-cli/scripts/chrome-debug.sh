@@ -883,8 +883,38 @@ log_info "Headless: $(resolve_headless_label)"
 log_info "URL: ${TARGET_URL}"
 log_info "Log file: ${LOG_FILE}"
 
+# Detach Chrome into its own session/process-group so it survives the
+# short-lived Bash tool shell that agents invoke this script from.
+#
+# - setsid (Linux): the obvious choice, but it is absent on stock macOS.
+# - macOS: Python3's os.setsid() creates a new session exactly like setsid.
+#   python3 is already a hard dependency of this script (JSON output), so this
+#   adds no new dependency. nohup alone is NOT enough on macOS: it only
+#   ignores SIGHUP, so Chrome stays in the Bash tool's process group and gets
+#   SIGTERM/SIGKILL when that group is torn down -> crash. A new session
+#   fully detaches Chrome.
 if command -v setsid >/dev/null 2>&1; then
   setsid nohup "${CHROME_BIN}" "${CHROME_ARGS[@]}" < /dev/null > "${LOG_FILE}" 2>&1 &
+elif command -v python3 >/dev/null 2>&1; then
+  CHROME_BIN_DETACH="${CHROME_BIN}" \
+  CHROME_ARGS_DETACH="$(printf '%s\x1f' "${CHROME_ARGS[@]}")" \
+  python3 - <<'PY' > "${LOG_FILE}" 2>&1 &
+import os
+
+binary = os.environ["CHROME_BIN_DETACH"]
+# Drop the trailing \x1f so the split yields exactly CHROME_ARGS.
+args_raw = os.environ.get("CHROME_ARGS_DETACH", "")
+argv = [a for a in args_raw.split("\x1f") if a]
+
+os.setsid()  # new session + new process group (equivalent to `setsid`)
+
+# Give Chrome /dev/null on stdin so it never blocks on terminal input.
+devnull_fd = os.open(os.devnull, os.O_RDONLY)
+os.dup2(devnull_fd, 0)
+os.close(devnull_fd)
+
+os.execvp(binary, [binary, *argv])
+PY
 else
   nohup "${CHROME_BIN}" "${CHROME_ARGS[@]}" < /dev/null > "${LOG_FILE}" 2>&1 &
 fi
