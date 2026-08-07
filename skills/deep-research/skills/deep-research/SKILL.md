@@ -71,6 +71,7 @@ handling for vault writes. Discovery on Codex is via `~/.agents/skills/`.
 - Topic involves libraries, frameworks, GitHub repos, or general concepts
 - User mentions "research", "investigate", "compare", "analyze", or "deep dive"
 - Topic involves "latest", current behavior, versions, releases, changelogs, marketplace state, package metadata, GitHub issues/PRs, or other externally mutable facts
+- **Periodic coverage sweep**: an automated collector (e.g., nightly GitHub Search pipeline) has gone quiet or missed a major release. Use deep-research's grok-search MCP to find blog-first announcements, org-launched repos with short names, and non-English ecosystems that keyword search structurally misses. See `references/vault-pipeline.md` "Worked Example: Coverage-Sweep Pattern" for the prompt template and expected artifacts.
 
 Do NOT use for:
 - Quick factual lookups (use direct web search or docs lookup)
@@ -327,7 +328,7 @@ Warnings: <any>
 - **Web fetch**: Deep-fetch top sources for richer content extraction (used inside deep-fetch agents)
 - **Context7 MCP**: Library/framework documentation (used inside Context7 agent)
 - **DeepWiki MCP**: GitHub repository insights (used inside DeepWiki agent)
-- **skillwiki CLI**: `skillwiki path` (auto-detect vault), `skillwiki lang` (output language), `skillwiki hash`, `skillwiki validate`, `skillwiki page publish`
+- **skillwiki CLI**: `skillwiki path` (auto-detect vault), `skillwiki lang` (output language), `skillwiki hash`, `skillwiki validate`, `skillwiki page publish`. **Enum note**: raw articles produced by this skill use `ingested_by: "deep-research"` per the vault-pipeline contract. This value requires skillwiki CLI v0.10.35+ (enum extended in `packages/shared/src/schemas.ts`). If `skillwiki validate` rejects the value, upgrade the CLI rather than downgrading to `manual` - the provenance value distinguishes agent-captured evidence from human-imported material.
 
 ## Related Reference
 

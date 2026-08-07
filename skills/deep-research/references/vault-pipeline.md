@@ -34,6 +34,12 @@ For each source, follow the raw-capture pattern below:
 1. **URL sources**: Write to `raw/articles/<slug>.md`
    - Frontmatter per `RawSourceSchema`: title, source_url, ingested, ingested_by: "deep-research", sha256
    - Compute sha256 via `skillwiki hash <raw-file>`
+   - **Enum requirement**: `ingested_by: "deep-research"` requires skillwiki CLI
+     v0.10.35+ (the enum was extended in `packages/shared/src/schemas.ts` to
+     include `deep-research` and `export-wiki`). If the active CLI is older,
+     validation will fail with `Invalid enum value`. Upgrade the CLI rather than
+     downgrading to `manual` - the provenance value is how vault consumers
+     distinguish agent-captured evidence from human-imported material.
 
 2. **Context7 results**: Write extract to `raw/articles/<library-id>-docs.md`
    - Frontmatter: source_url: null (or Context7 library URL), ingested, sha256
@@ -147,3 +153,66 @@ schema-compatible follow-up queue entries.
 3. Source failures keep other sources; note in report.
 4. Respect `--no-raw` for quick lookups (no provenance chain).
 5. Log all vault resolution and routing decisions in the research report.
+
+## Worked Example: Coverage-Sweep Pattern
+
+Deep-research can complement an automated collector (e.g., a nightly GitHub
+Search pipeline) by finding sources the collector structurally misses:
+blog-first announcements, org-launched repos with short names, non-English
+ecosystems, and industry news. The pattern:
+
+### When to use
+
+- An automated collector has returned zero candidates for multiple consecutive
+  runs (dedupe saturation or query-portfolio exhaustion).
+- A major release is announced on X/Twitter, HN, or a company blog and the
+  collector's keyword queries would not match it.
+- A quarterly or weekly attended review of the research landscape.
+
+### Prompt template
+
+```
+Research the current <domain> landscape for <time period>, focusing on
+sources the nightly GitHub-Search-only collector missed. This is a vault-aware
+research run - the vault is at <vault path>.
+
+## Research Topics
+
+1. <specific repo/announcement> - Research <URL>: What is it? Architecture,
+   purpose, tech stack. Relevance to <your system>.
+2. Major <domain> releases <time period> - Search for:
+   - "<org> open source agent 2026"
+   - "<domain> framework release <month> 2026"
+   - Any major releases from <org list> in the <domain> space
+3. Coverage gap analysis - The current collector uses these queries:
+   <list of queries>. What types of repos or announcements would these
+   queries MISS?
+
+## Output
+
+Save the research as a vault query page. Include a "Recommendations for
+Collector Query Portfolio" section with specific new queries or org-watchlist
+entries that would close the coverage gap.
+```
+
+### Expected artifacts
+
+A single deep-research run produces:
+
+| Artifact | Path | Purpose |
+|----------|------|---------|
+| Raw evidence | `raw/articles/<date>-<slug>.md` | sha256-tagged provenance (`ingested_by: deep-research`) |
+| Query page | `queries/<date>-<slug>.md` | Full research report with TL;DR, findings, freshness table |
+| Concept page (optional) | `concepts/<slug>.md` | Reusable pattern or taxonomy distilled from the research |
+| Work item (optional) | `projects/<project>/work/<date>-<slug>/spec.md` | Proposed config/code changes to close the gap |
+
+### Post-run validation checklist
+
+1. `skillwiki validate` passes on all new pages.
+2. If the raw article uses `ingested_by: deep-research`, confirm the active CLI
+   is v0.10.35+ (see Enum requirement above).
+3. If a proposed work item was created, confirm `status` and `kind` match the
+   vault's SCHEMA.md work-item schema (common fix: `kind: task` → `kind: feature`,
+   `status: proposed` → `status: in-progress`, add `started: <date>`).
+4. The query page's `sources:` frontmatter links to the raw article.
+5. Git commit includes all artifacts in a single atomic commit.
