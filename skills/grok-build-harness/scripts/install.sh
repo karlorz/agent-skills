@@ -205,12 +205,13 @@ find_grok() {
 }
 
 marketplace_add() {
-  local url="$1" name="$2"
+  local url="$1" name="$2" sources
   if [ "$DRY_RUN" -eq 1 ]; then
     log "marketplace: would add $name ($url)"
     return 0
   fi
-  if "$GROK" plugin marketplace list 2>/dev/null | grep -Fq "$url"; then
+  sources="$("$GROK" plugin marketplace list 2>/dev/null || true)"
+  if [[ "$sources" == *"$url"* ]]; then
     log "marketplace: $name already present, skipping"
     return 0
   fi
@@ -219,12 +220,15 @@ marketplace_add() {
 }
 
 install_plugin() {
-  local plugin="$1" source="$2"
+  local plugin="$1" source="$2" list
   if [ "$DRY_RUN" -eq 1 ]; then
     log "plugin: would install $plugin ($source) --trust"
     return 0
   fi
-  if "$GROK" plugin list 2>/dev/null | grep -Fq ": $plugin ["; then
+  # capture first, then match in-shell: grep -q on a live pipe closes it early
+  # and makes grok abort on SIGPIPE
+  list="$("$GROK" plugin list 2>/dev/null || true)"
+  if [[ "$list" == *": $plugin ["* ]]; then
     log "plugin: $plugin already installed, skipping"
     return 0
   fi
@@ -246,9 +250,13 @@ verify() {
       missing=1
     fi
   done
-  if [ -f "$GROK_HOME/config.toml" ] && grep -Eq '__[A-Z][A-Z0-9_]*__' "$GROK_HOME/config.toml"; then
-    warn "config.toml still contains unresolved key tokens"
-    missing=1
+  if [ -f "$GROK_HOME/config.toml" ]; then
+    # the template's comment header documents the token names; only
+    # non-comment lines may carry unresolved tokens
+    if grep -vE '^[[:space:]]*#' "$GROK_HOME/config.toml" | grep -Eq '__[A-Z][A-Z0-9_]*__'; then
+      warn "config.toml still contains unresolved key tokens"
+      missing=1
+    fi
   fi
   if [ "$SKIP_PLUGINS" -eq 0 ] && [ -n "$GROK" ]; then
     log "plugins:"
@@ -335,10 +343,6 @@ copy_if_changed "$ASSETS/agents/scout.md"          "$GROK_HOME/agents/scout.md" 
 copy_if_changed "$ASSETS/agentrules.md"            "$GROK_HOME/agentrules.md"            "agentrules"
 merge_agents_md
 
-if [ "$NO_CONFIG" -eq 0 ]; then
-  render_config
-fi
-
 # --- plugins -----------------------------------------------------------------
 if [ "$SKIP_PLUGINS" -eq 0 ]; then
   GROK="$(find_grok)"
@@ -357,6 +361,14 @@ if [ "$SKIP_PLUGINS" -eq 0 ]; then
   done
 else
   log "plugins skipped (--skip-plugins)"
+fi
+
+# --- config ------------------------------------------------------------------
+# Rendered after the marketplace/plugin steps: `grok plugin marketplace add`
+# rewrites config.toml with its own TOML serializer, so rendering last leaves
+# our format as the final state and keeps re-runs fully idempotent.
+if [ "$NO_CONFIG" -eq 0 ]; then
+  render_config
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
