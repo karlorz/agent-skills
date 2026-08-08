@@ -87,6 +87,15 @@ run_generate "$TEST_ROOT/default.toml" --enabled "a"
 assert_eq "default: permission_mode = always-approve" \
   "$(grep -c 'permission_mode = "always-approve"' "$TEST_ROOT/default.toml")" "1"
 
+# --- config generation: preserve marketplace sources -------------------------
+printf '[[marketplace.sources]]\nname = "my-team"\ngit = "https://github.com/me/team-plugins.git"\n' \
+  > "$TEST_ROOT/live-config.toml"
+run_generate "$TEST_ROOT/merged.toml" --preserve-sources "$TEST_ROOT/live-config.toml" --enabled "a"
+assert_contains "preserve-sources keeps live sources" \
+  "$(cat "$TEST_ROOT/merged.toml")" 'name = "my-team"'
+assert_contains "preserve-sources keeps template sources" \
+  "$(cat "$TEST_ROOT/merged.toml")" 'name = "karlorz-agent-skills"'
+
 # --- installer: dry-run plan --------------------------------------------------
 DRY_OUT="$("$INSTALL" --grok-home "$TEST_ROOT/never-created" --dry-run --skip-plugins 2>&1 || true)"
 assert_contains "dry-run: agent install plan listed" "$DRY_OUT" "agent grok-build-byok: would install"

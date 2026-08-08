@@ -24,6 +24,35 @@ API_KEY_TOKENS = ("__HUB_API_KEY__", "__NEW_API_KEY__", "__CONTEXT7_API_KEY__")
 TOKEN_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
 
 
+def preserved_sources(existing_path: str, rendered: str) -> list[tuple[str, str]]:
+    """Return [[marketplace.sources]] entries from an existing config that the
+    rendered config does not already declare.
+
+    grok CLI (marketplace add) and users can add sources to a live config;
+    re-rendering from the template must keep them or every re-run churns the
+    config (and re-adds the sources).
+    """
+    existing = Path(existing_path)
+    if not existing.is_file():
+        return []
+    parsed = try_load_toml(existing.read_text(encoding="utf-8"))
+    if parsed is None:
+        return []
+    rendered_names = set(re.findall(r'name = "([^"]+)"', rendered))
+    extra = []
+    for source in parsed.get("marketplace", {}).get("sources", []) or []:
+        if not isinstance(source, dict):
+            continue
+        name = source.get("name", "")
+        if not name or name in rendered_names:
+            continue
+        if "git" in source:
+            extra.append((name, f'git = "{source["git"]}"'))
+        elif "path" in source:
+            extra.append((name, f'path = "{source["path"]}"'))
+    return extra
+
+
 def try_load_toml(text: str) -> object:
     """Return the parsed TOML, or None when no parser is available."""
     try:
@@ -103,6 +132,9 @@ def main() -> int:
                         help="permission_mode for [ui] (default: always-approve; use 'plan' for shared hosts)")
     parser.add_argument("--enabled", default="",
                         help="comma-separated plugin names for [plugins].enabled")
+    parser.add_argument("--preserve-sources", default="",
+                        help="existing config.toml whose [[marketplace.sources]] "
+                             "entries are merged into the rendered output")
     args = parser.parse_args()
 
     template = args.template.read_text(encoding="utf-8")
@@ -116,6 +148,15 @@ def main() -> int:
     }
 
     rendered = render(template, values, enabled)
+
+    if args.preserve_sources:
+        extras = preserved_sources(args.preserve_sources, rendered)
+        if extras:
+            block = "\n".join(
+                f'[[marketplace.sources]]\nname = "{name}"\n{git_or_path}'
+                for name, git_or_path in extras
+            )
+            rendered = rendered.rstrip("\n") + "\n\n" + block + "\n"
 
     parsed = try_load_toml(rendered)
     if parsed is None:

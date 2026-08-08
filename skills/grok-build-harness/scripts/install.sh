@@ -205,6 +205,9 @@ render_config() {
   [ -n "$CONTEXT7_KEY" ] && args+=(--context7-key "$CONTEXT7_KEY")
   args+=(--permission-mode "$PERMISSION_MODE")
   args+=(--enabled "$(IFS=,; printf '%s' "${ENABLED[*]}")")
+  # keep marketplace sources grok/CLI added to a live config: re-rendering
+  # from the template alone would drop them and churn config on every re-run
+  [ -f "$out" ] && args+=(--preserve-sources "$out")
   python3 "$GENERATE" --template "$ASSETS/config.toml.template" "${args[@]}" >/dev/null
   copy_if_changed "$tmp" "$out" "config.toml"
 }
