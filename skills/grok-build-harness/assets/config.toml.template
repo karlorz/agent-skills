@@ -1,0 +1,206 @@
+# grok-build-harness config template — sanitized from the reference host.
+# Secrets are tokens substituted by scripts/generate-config.py (or install.sh):
+#   __HUB_API_KEY__     hub.karldigi.dev gateway key (5 models)
+#   __NEW_API_KEY__     new.karldigi.dev gateway key (gpt-5.6-luna, glm-5.2)
+#   __CONTEXT7_API_KEY__  context7 MCP key
+#   __ENABLED_PLUGINS__ comma-quoted plugin names (install.sh computes from flags)
+# Empty api_key lines are dropped at generation time; env_key keeps working.
+
+disabled_mcp_servers = ["image_mcp"]
+
+[cli]
+installer = "internal"
+
+[ui]
+max_thoughts_width = 120
+yolo = false
+compact_mode = false
+permission_mode = "always-approve"
+voice_stt_language = "auto"
+prompt_suggestions = true
+fork_secondary_model = ""
+remember_tool_approvals = true
+
+[features]
+remote_fetch = true
+telemetry = false
+
+[models]
+default = "deepseek-v4-flash"
+web_search = "no-such-model"
+default_reasoning_effort = "max"
+
+[marketplace]
+official_marketplace_auto_installed = true
+default_skills_installs_purged = true
+
+[[marketplace.sources]]
+name = "xAI Official"
+git = "https://github.com/xai-org/plugin-marketplace.git"
+
+[[marketplace.sources]]
+name = "karlorz-agent-skills"
+git = "https://github.com/karlorz/agent-skills.git"
+
+[model."grok-4.5-auto"]
+model = "hub-g45"
+base_url = "https://hub.karldigi.dev/v1"
+name = "Grok 4.5 Auto"
+description = "Hub Grok 4.5 via hub-g45 BYOK alias (chat_completions)"
+env_key = "HUB_API_KEY"
+api_key = "__HUB_API_KEY__"
+api_backend = "chat_completions"
+max_completion_tokens = 65536
+context_window = 500000
+supports_backend_search = false
+supports_reasoning_effort = true
+reasoning_effort = "max"
+reasoning_efforts = [
+    "max",
+    "high",
+    "medium",
+    "low",
+]
+stream_tool_calls = false
+
+[model.auto-sonnet]
+model = "auto-sonnet"
+base_url = "https://hub.karldigi.dev/v1"
+name = "auto-sonnet"
+description = "auto-sonnet (chat_completions)"
+api_key = "__HUB_API_KEY__"
+api_backend = "chat_completions"
+max_completion_tokens = 32768
+context_window = 200000
+supports_reasoning_effort = true
+reasoning_effort = "max"
+reasoning_efforts = [
+    "max",
+    "high",
+    "medium",
+]
+stream_tool_calls = false
+
+[model."gpt-5.6-luna"]
+model = "gpt-5.6-luna"
+base_url = "https://new.karldigi.dev/v1"
+name = "gpt-5.6-luna"
+description = "gpt-5.6-luna (chat_completions)"
+api_key = "__NEW_API_KEY__"
+api_backend = "chat_completions"
+max_completion_tokens = 65536
+context_window = 372000
+supports_backend_search = false
+supports_reasoning_effort = true
+reasoning_effort = "max"
+reasoning_efforts = [
+    "max",
+    "high",
+    "medium",
+    "low",
+]
+stream_tool_calls = false
+
+[model."glm-5.2"]
+model = "glm-5.2"
+base_url = "https://new.karldigi.dev/v1"
+name = "glm-5.2"
+description = "glm-5.2 (chat_completions)"
+api_key = "__NEW_API_KEY__"
+api_backend = "chat_completions"
+max_completion_tokens = 65536
+context_window = 372000
+supports_backend_search = false
+supports_reasoning_effort = true
+reasoning_effort = "max"
+reasoning_efforts = [
+    "max",
+    "high",
+    "medium",
+]
+stream_tool_calls = false
+
+[model.deepseek-v4-flash]
+model = "deepseek-v4-flash-max"
+base_url = "https://hub.karldigi.dev/v1"
+name = "deepseek-v4-flash"
+description = "deepseek-v4-flash (chat_completions)"
+api_key = "__HUB_API_KEY__"
+api_backend = "chat_completions"
+max_completion_tokens = 65536
+context_window = 500000
+supports_backend_search = false
+supports_reasoning_effort = true
+reasoning_effort = "max"
+reasoning_efforts = [
+    "max",
+    "high",
+    "medium",
+]
+stream_tool_calls = false
+
+[model.sonnet]
+model = "deepseek-v4-flash-max"
+base_url = "https://hub.karldigi.dev/v1"
+name = "Sonnet (flash scout via hub)"
+description = "Catalog alias for plugin model: sonnet → deepseek-v4-flash-max on hub.karldigi.dev"
+api_key = "__HUB_API_KEY__"
+api_backend = "chat_completions"
+max_completion_tokens = 65536
+context_window = 500000
+supports_backend_search = false
+supports_reasoning_effort = true
+reasoning_effort = "max"
+reasoning_efforts = [
+    "max",
+    "high",
+    "medium",
+]
+stream_tool_calls = false
+
+[model.haiku]
+model = "deepseek-v4-flash-max"
+base_url = "https://hub.karldigi.dev/v1"
+name = "Haiku (flash via hub)"
+description = "Catalog alias for plugin/skill model: haiku → same flash wire as sonnet (Claude Code compatibility)"
+api_key = "__HUB_API_KEY__"
+api_backend = "chat_completions"
+max_completion_tokens = 65536
+context_window = 500000
+supports_backend_search = false
+supports_reasoning_effort = true
+reasoning_effort = "max"
+reasoning_efforts = [
+    "max",
+    "high",
+    "medium",
+]
+stream_tool_calls = false
+
+[plugins]
+enabled = ["__ENABLED_PLUGINS__"]
+disabled = []
+
+[permission]
+deny = []
+
+[subagents]
+enabled = true
+
+[subagents.models]
+general-purpose = "sonnet"
+explore = "sonnet"
+browser-use = "sonnet"
+scout = "sonnet"
+
+[agent]
+name = "grok-build-byok"
+
+[mcp_servers.context7]
+command = "npx"
+args = [
+    "-y",
+    "@upstash/context7-mcp",
+    "--api-key",
+    "__CONTEXT7_API_KEY__",
+]
