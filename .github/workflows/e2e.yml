@@ -59,16 +59,7 @@ jobs:
           # simulate real-host state: a user section in AGENTS.md and a
           # deliberately disabled plugin in config.toml
           printf '\n## User preferences\n- e2e user note\n' >> /tmp/e2e-home/AGENTS.md
-          python3 - <<'EOF'
-from pathlib import Path
-p = Path('/tmp/e2e-home/config.toml')
-lines = p.read_text().splitlines()
-for i, line in enumerate(lines):
-    if line.strip().startswith('enabled = ['):
-        lines.insert(i + 1, 'disabled = ["e2e-disabled-plugin"]')
-        break
-p.write_text('\n'.join(lines) + '\n')
-EOF
+          awk '{ if ($0 ~ /^enabled = \[/) { print; print "disabled = [\"e2e-disabled-plugin\"]"; next } print }' /tmp/e2e-home/config.toml > /tmp/e2e-home/config.toml.next && mv /tmp/e2e-home/config.toml.next /tmp/e2e-home/config.toml
           bash skills/grok-build-harness/scripts/install.sh \
             --grok-home /tmp/e2e-home --verify -y >/dev/null
           grep -q '## User preferences' /tmp/e2e-home/AGENTS.md
