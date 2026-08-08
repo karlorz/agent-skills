@@ -11,7 +11,7 @@ one installable plugin for [grok-build](https://x.ai).
 | `assets/agents/grok-build-byok.md` | Custom user-scope parent agent (`promptMode: extend`) |
 | `assets/agents/scout.md` | Custom disposable read-only scout subagent (`model: sonnet`) |
 | `assets/agentrules.md` | Global subagent routing and workflow rules (frontier/sonnet split, goal-mode routing, delegation discipline, evidence rules) |
-| `assets/AGENTS.md` | Session-start subagent contract (skillwiki marker block excluded — the llm-wiki plugin owns it) |
+| `assets/AGENTS.md` | Session-start subagent contract, wrapped in a `<!-- grok-build-harness:begin/end -->` marker block so the merge can splice updates without touching user content (or the llm-wiki skillwiki block) |
 | `assets/config.toml.template` | Full sanitized config: BYOK model aliases, `[subagents.models]` pins, plugin enable list, marketplace sources, context7 MCP |
 | `docs/harness-design.md` | The design: model routing, workflow, plugin provenance, security notes |
 
@@ -33,12 +33,15 @@ The skill runs `scripts/install.sh`, which:
 
 1. Backs up existing `~/.grok` files to
    `~/.grok/backups/grok-build-harness-<timestamp>/`
-2. Installs the agents, `agentrules.md`, `AGENTS.md` (preserving any skillwiki
-   marker block), and a rendered `config.toml`
-3. Adds the companion marketplaces (karlorz-agent-skills, llm-wiki,
+2. Installs the agents, `agentrules.md`, and `AGENTS.md` — the contract is
+   spliced in: **all existing content is preserved** (user sections and the
+   llm-wiki skillwiki marker), only the harness marker block is replaced
+3. Renders `config.toml`, carrying over any host-set keys the template does
+   not emit (`[plugins].disabled`, extra marketplace sources, extra tables)
+4. Adds the companion marketplaces (karlorz-agent-skills, llm-wiki,
    openai-codex, claude-plugins-official) and installs the 13-plugin set with
    `--trust`
-4. Verifies with `grok plugin list --json` and `grok inspect --json`
+5. Verifies with `grok plugin list --json` and `grok inspect --json`
 
 ### Flags
 
@@ -47,6 +50,8 @@ The skill runs `scripts/install.sh`, which:
 --hub-key / --new-key / --context7-key   API keys (or HARNESS_* env vars)
 --require-keys         fail when hub/new gateway keys are missing (headless-safe)
 --restrictive          render permission_mode = "plan" instead of "always-approve"
+--force-render         rewrite an existing keyed config env-only when no keys
+                       are provided (overrides the downgrade guard)
 --skip-codex | --skip-vault-sync | --skip-playwright-cli   optional plugins
 --skip-plugins         files + config only
 --no-config            skip config.toml
@@ -59,6 +64,18 @@ Missing keys always produce a warning (env-only consequence spelled out);
 `--require-keys` upgrades that to a hard failure for unattended runs.
 Verification additionally asserts the sonnet/haiku/deepseek-v4-flash pin
 aliases via `grok models`.
+
+### Re-run safety
+
+- **Keyed-config guard**: if the existing `config.toml` has injected keys
+  (`api_key` lines / context7 `--api-key`) and a re-run provides no keys at
+  all, the config render is skipped with a warning — a working keyed config
+  is never silently downgraded to env-only. Pass the keys or
+  `--force-render` to override.
+- **User content**: anything you add to `~/.grok/AGENTS.md` outside the
+  `grok-build-harness` marker block survives every re-run.
+- **Host state**: `[plugins].disabled` / `paths` and other keys the template
+  does not emit are preserved from the existing config on every render.
 
 ## Testing without touching a host
 

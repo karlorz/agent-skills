@@ -112,7 +112,7 @@
     {
       "name": "hermes-cli",
       "source": "./skills/hermes-cli",
-      "description": "Hermes Agent CLI commands reference \u2014 full terminal command surface for hermes-agent by NousResearch",
+      "description": "Hermes Agent CLI commands reference — full terminal command surface for hermes-agent by NousResearch",
       "version": "1.0.1",
       "category": "reference",
       "keywords": [
@@ -244,8 +244,8 @@
     {
       "name": "grok-build-harness",
       "source": "./skills/grok-build-harness",
-      "description": "v0.2.0: Fresh-host bootstrap for the karlorz subagent harness \u2014 installs the custom grok-build-byok parent agent and scout subagent, agentrules.md routing rules, the subagent-contract AGENTS.md, and a sanitized BYOK config template, then adds the companion marketplaces and installs the plugin set with --trust. Idempotent, backup-first, GROK_HOME-aware for dry-run testing.",
-      "version": "0.2.0",
+      "description": "v0.3.0: Fresh-host bootstrap for the karlorz subagent harness — installs the custom grok-build-byok parent agent and scout subagent, agentrules.md routing rules, the spliced subagent-contract AGENTS.md (user content preserved), and a sanitized BYOK config template that preserves host-set keys, then adds the companion marketplaces and installs the plugin set with --trust. Idempotent, backup-first, GROK_HOME-aware; keyed configs are never silently downgraded on keyless re-runs.",
+      "version": "0.3.0",
       "category": "operations",
       "keywords": [
         "grok",

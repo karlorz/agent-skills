@@ -52,6 +52,40 @@ jobs:
           [ "$(grep -c 'identical, skipping' <<<"$OUT")" -eq 5 ] || { echo "$OUT"; exit 1; }
           echo "re-run: 5/5 identical"
 
+      - name: User edits survive a re-run
+        run: |
+          export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"
+          export HARNESS_HUB_KEY="e2e-hub" HARNESS_NEW_KEY="e2e-new" HARNESS_CONTEXT7_KEY="e2e-ctx"
+          # simulate real-host state: a user section in AGENTS.md and a
+          # deliberately disabled plugin in config.toml
+          printf '\n## User preferences\n- e2e user note\n' >> /tmp/e2e-home/AGENTS.md
+          python3 - <<'EOF'
+from pathlib import Path
+p = Path('/tmp/e2e-home/config.toml')
+lines = p.read_text().splitlines()
+for i, line in enumerate(lines):
+    if line.strip().startswith('enabled = ['):
+        lines.insert(i + 1, 'disabled = ["e2e-disabled-plugin"]')
+        break
+p.write_text('\n'.join(lines) + '\n')
+EOF
+          bash skills/grok-build-harness/scripts/install.sh \
+            --grok-home /tmp/e2e-home --verify -y >/dev/null
+          grep -q '## User preferences' /tmp/e2e-home/AGENTS.md
+          grep -q 'e2e user note' /tmp/e2e-home/AGENTS.md
+          grep -q 'e2e-disabled-plugin' /tmp/e2e-home/config.toml
+          echo "user edits: preserved after re-run"
+
+      - name: Keyless re-run over keyed config skips render
+        run: |
+          export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"
+          cp /tmp/e2e-home/config.toml /tmp/e2e-before.toml
+          OUT="$(bash skills/grok-build-harness/scripts/install.sh \
+            --grok-home /tmp/e2e-home --skip-plugins -y 2>&1)"
+          grep -q 'skipping config render' <<<"$OUT" || { echo "$OUT"; exit 1; }
+          cmp /tmp/e2e-home/config.toml /tmp/e2e-before.toml || { echo "config changed"; exit 1; }
+          echo "keyless re-run: render skipped, keyed config untouched"
+
       - name: --require-keys fails without keys
         run: |
           export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"

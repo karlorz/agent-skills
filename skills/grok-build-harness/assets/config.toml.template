@@ -181,7 +181,8 @@ stream_tool_calls = false
 
 [plugins]
 enabled = ["__ENABLED_PLUGINS__"]
-disabled = []
+# No `disabled` key here: it is host-set state and is preserved from the
+# existing config on re-runs (generate-config.py --preserve).
 
 [permission]
 deny = []

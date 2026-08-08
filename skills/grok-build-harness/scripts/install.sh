@@ -4,7 +4,7 @@
 # Installs into $GROK_HOME (default ~/.grok):
 #   agents/grok-build-byok.md, agents/scout.md   custom subagents (verbatim)
 #   agentrules.md                                 global routing rules (verbatim)
-#   AGENTS.md                                     subagent contract (skillwiki marker preserved)
+#   AGENTS.md                                     subagent contract (spliced: user content preserved)
 #   config.toml                                   rendered from the sanitized template
 #
 # Then adds the companion marketplaces and installs the plugin set with
@@ -16,7 +16,7 @@
 #   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
 #              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
 #              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
-#              [--require-keys] [--restrictive] [-y]
+#              [--require-keys] [--restrictive] [--force-render] [-y]
 #
 # Keys can also come from HARNESS_HUB_KEY / HARNESS_NEW_KEY / HARNESS_CONTEXT7_KEY.
 # Everything is testable against a scratch tree: GROK_HOME=/tmp/grok-home ./install.sh --dry-run
@@ -27,6 +27,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$HERE/.." && pwd)"
 ASSETS="$PLUGIN_ROOT/assets"
 GENERATE="$HERE/generate-config.py"
+MERGE="$HERE/merge-agents.py"
 
 # --- options -----------------------------------------------------------------
 GROK_HOME="${GROK_HOME:-$HOME/.grok}"
@@ -40,6 +41,7 @@ SKIP_PLUGINS=0
 NO_CONFIG=0
 DRY_RUN=0
 FORCE=0
+FORCE_RENDER=0
 VERIFY=0
 ASSUME_YES=0
 REQUIRE_KEYS=0
@@ -55,7 +57,7 @@ Usage:
   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
-             [--require-keys] [--restrictive] [-y]
+             [--require-keys] [--restrictive] [--force-render] [-y]
 
 Options:
   --grok-home DIR        target grok home (default: $GROK_HOME or ~/.grok)
@@ -64,6 +66,8 @@ Options:
   --context7-key K       context7 MCP API key (or HARNESS_CONTEXT7_KEY)
   --require-keys         fail when hub/new gateway keys are missing (headless-safe)
   --restrictive          render permission_mode = "plan" instead of "always-approve"
+  --force-render         rewrite an existing keyed config env-only when no keys
+                         are provided (overrides the downgrade guard)
   --skip-codex           do not install/enable the codex plugin
   --skip-vault-sync      do not install/enable the vault-sync plugin
   --skip-playwright-cli  do not install/enable the playwright-cli plugin
@@ -94,6 +98,7 @@ while [ $# -gt 0 ]; do
     --no-config) NO_CONFIG=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
+    --force-render) FORCE_RENDER=1; shift ;;
     --verify) VERIFY=1; shift ;;
     --require-keys) REQUIRE_KEYS=1; shift ;;
     --restrictive) RESTRICTIVE=1; shift ;;
@@ -171,24 +176,28 @@ copy_if_changed() {
 }
 
 merge_agents_md() {
-  # Keep any skillwiki:begin...end marker block the skillwiki plugin owns;
-  # replace the rest of ~/.grok/AGENTS.md with the bundled subagent contract.
-  # The merged result goes through copy_if_changed so identical/dry-run/
-  # prompt/backup behavior is identical to the plain copies.
-  local dst="$GROK_HOME/AGENTS.md"
-  local block="" merged tmp
-  if [ -f "$dst" ]; then
-    block="$(sed -n '/<!-- skillwiki:begin -->/,/<!-- skillwiki:end -->/p' "$dst")"
-  fi
-  if [ -n "$block" ]; then
-    merged="$(printf '%s\n\n%s\n' "$block" "$(cat "$ASSETS/AGENTS.md")")"
-  else
-    merged="$(cat "$ASSETS/AGENTS.md")"
-  fi
+  # Splice the harness-owned contract into ~/.grok/AGENTS.md while preserving
+  # everything else — user content and the llm-wiki skillwiki marker survive
+  # (ADR-1). The asset is a marked block; v0.2.0 files with an unmarked
+  # contract get a one-time block-match migration (ADR-2). The merged result
+  # goes through copy_if_changed so identical/dry-run/prompt/backup behavior
+  # is identical to the plain copies.
+  local dst="$GROK_HOME/AGENTS.md" tmp
   tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-agents.XXXXXX")"
   trap 'rm -f "$tmp"' RETURN
-  printf '%s\n' "$merged" > "$tmp"
+  if [ -f "$dst" ]; then
+    python3 "$MERGE" "$ASSETS/AGENTS.md" "$dst" > "$tmp"
+  else
+    cp "$ASSETS/AGENTS.md" "$tmp"
+  fi
   copy_if_changed "$tmp" "$dst" "AGENTS.md"
+}
+
+config_has_injected_keys() {
+  # true when the config carries inline secrets — [model.*] api_key lines or
+  # a context7 --api-key arg. Rewriting such a config env-only would silently
+  # degrade it, so keyless re-runs skip the render instead (ADR-4).
+  grep -Eq '^[[:space:]]*api_key[[:space:]]*=' "$1" || grep -Fq '"--api-key"' "$1"
 }
 
 render_config() {
@@ -199,15 +208,26 @@ render_config() {
   local tmp args
   tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-config.XXXXXX")"
   trap 'rm -f "$tmp"' RETURN
+  # keyed-config downgrade guard: never silently replace a config that has
+  # injected keys with an env-only render when this run provides no key at
+  # all — skip the render and keep the working config (ADR-4)
+  if [ "$FORCE_RENDER" -eq 0 ] && [ -f "$out" ] \
+     && [ -z "$HUB_KEY" ] && [ -z "$NEW_KEY" ] && [ -z "$CONTEXT7_KEY" ] \
+     && config_has_injected_keys "$out"; then
+    warn "existing $out has injected keys but this run provides none — skipping config render to avoid an env-only downgrade"
+    warn "re-run with --hub-key/--new-key/--context7-key (or HARNESS_* env), or pass --force-render to rewrite env-only"
+    return 0
+  fi
   args=(--out "$tmp")
   [ -n "$HUB_KEY" ] && args+=(--hub-key "$HUB_KEY")
   [ -n "$NEW_KEY" ] && args+=(--new-key "$NEW_KEY")
   [ -n "$CONTEXT7_KEY" ] && args+=(--context7-key "$CONTEXT7_KEY")
   args+=(--permission-mode "$PERMISSION_MODE")
   args+=(--enabled "$(IFS=,; printf '%s' "${ENABLED[*]}")")
-  # keep marketplace sources grok/CLI added to a live config: re-rendering
-  # from the template alone would drop them and churn config on every re-run
-  [ -f "$out" ] && args+=(--preserve-sources "$out")
+  # keep host-set config state the template does not emit (marketplace
+  # sources, [plugins].disabled, extra tables): re-rendering from the
+  # template alone would drop them and churn config on every re-run
+  [ -f "$out" ] && args+=(--preserve "$out")
   python3 "$GENERATE" --template "$ASSETS/config.toml.template" "${args[@]}" >/dev/null
   copy_if_changed "$tmp" "$out" "config.toml"
 }

@@ -51,10 +51,13 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
    (heavy or host-specific plugins); `--require-keys` (hard-fail when hub/new
    gateway keys are missing — use for unattended runs); `--restrictive`
    (render `permission_mode = "plan"` instead of `"always-approve"` for
-   shared hosts); `--dry-run` to preview without writing; `--no-config` to
-   skip config.toml. When keys are missing the installer always warns that
-   the config will be env-only (model aliases won't resolve until
-   `HARNESS_HUB_KEY` / `HARNESS_NEW_KEY` are exported).
+   shared hosts); `--force-render` (rewrite an existing keyed config env-only
+   when no keys are provided — the default is to skip the config render
+   instead, to avoid silently downgrading a working keyed config); `--dry-run`
+   to preview without writing; `--no-config` to skip config.toml. When keys
+   are missing the installer always warns that the config will be env-only
+   (model aliases won't resolve until `HARNESS_HUB_KEY` / `HARNESS_NEW_KEY`
+   are exported).
 3. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
    the 13 companion plugins, `grok inspect --json` reports agents discovered
    (expect the 2 user agents + plugin agents) and no unresolved key tokens in
@@ -71,12 +74,15 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
 |---|---|
 | `agents/grok-build-byok.md`, `agents/scout.md` | Custom parent agent + disposable read-only scout (verbatim) |
 | `agentrules.md` | Global subagent routing/workflow rules (verbatim) |
-| `AGENTS.md` | Subagent contract (skillwiki marker block preserved if present) |
+| `AGENTS.md` | Subagent contract in a `<!-- grok-build-harness:begin/end -->` block — spliced in: all other content (user sections, skillwiki marker) is preserved |
 | `config.toml` | Rendered from the sanitized template: model aliases (sonnet/haiku → deepseek-v4-flash-max via hub), `[subagents.models]` pins, `[agent] name`, plugin enable list, context7 MCP |
 
 Existing files are backed up to
 `~/.grok/backups/grok-build-harness-<timestamp>/` before overwrite; identical
-files are skipped.
+files are skipped. Re-runs preserve host-set config keys the template does
+not emit (`[plugins].disabled`, extra marketplace sources, extra tables),
+and a re-run with no keys over a keyed config skips the render (use
+`--force-render` to override).
 
 ## Troubleshooting
 

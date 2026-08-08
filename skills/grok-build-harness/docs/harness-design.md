@@ -13,7 +13,7 @@ This document records the design. The verbatim runtime artifacts live in
 | `assets/agents/grok-build-byok.md` | User-scope parent agent, `promptMode: extend` — installed to `~/.grok/agents/` |
 | `assets/agents/scout.md` | User-scope disposable read-only scout, `model: sonnet` — installed to `~/.grok/agents/` |
 | `assets/agentrules.md` | Global subagent routing and workflow rules — installed to `~/.grok/agentrules.md` |
-| `assets/AGENTS.md` | Session-start subagent contract (skillwiki marker block omitted; the skillwiki plugin manages it) — installed to `~/.grok/AGENTS.md` |
+| `assets/AGENTS.md` | Session-start subagent contract, wrapped in a `<!-- grok-build-harness:begin/end -->` marker block — installed to `~/.grok/AGENTS.md` by a splice merge that preserves all other content (user sections, the llm-wiki skillwiki block) |
 | `assets/config.toml.template` | Sanitized full config with secret tokens — rendered by `scripts/generate-config.py` |
 
 ## Goals
@@ -112,9 +112,34 @@ enables them via `[plugins].enabled`. `--skip-codex`, `--skip-vault-sync`, and
 - Unknown config keys warn but never fail startup; `[plugins].enabled` accepts
   bare names. The generated config is validated with `tomllib` before writing.
 - The skillwiki `skillwiki:begin` block in `~/.grok/AGENTS.md` is owned by the
-  llm-wiki plugin (`install:activation`), so the bundled `AGENTS.md` carries
-  only the subagent contract; install.sh preserves any existing marker block
-  when merging.
+  llm-wiki plugin (`install:activation`). The harness contract ships wrapped
+  in its own `grok-build-harness:begin/end` marker block, and the merge
+  (**ADR-1**, 2026-08-09) replaces only that block — everything else in
+  AGENTS.md (user sections like `## User preferences`, the skillwiki block)
+  survives every re-run. v0.2.0-format files (unmarked contract) get a
+  one-time block-match migration (**ADR-2**).
+
+## Re-run safety (v0.3.0)
+
+Field-testing v0.2.0 on the live host surfaced three silent-degradation
+paths; each is now guarded:
+
+- **AGENTS.md user content is preserved.** The old merge replaced everything
+  except the skillwiki marker with the bundled contract, silently dropping a
+  user-authored `## User preferences` section on re-run. Now the contract is
+  a marked block and the splice keeps all non-harness content (ADR-1/2).
+- **Host-set config keys are preserved.** The render previously rewrote
+  `[plugins].disabled`/`paths` from the template, re-enabling deliberately
+  disabled plugins. `generate-config.py --preserve` now carries over any key
+  the template does not emit (whitelist rule, ADR-3): `[plugins]` sub-keys
+  are injected inside the emitted section, extra tables (e.g. a user-added
+  `[model."custom"]`) and `[[marketplace.sources]]` entries are appended,
+  top-level scalars precede the first table header. Template-owned keys
+  still win by design.
+- **Keyed configs are never silently downgraded.** A re-run providing no
+  keys at all over a config with injected keys now skips the render with a
+  specific warning (ADR-4); `--force-render` overrides. A fresh host without
+  an existing config still renders env-only as before.
 
 ## Deliberate quirks kept from the reference host
 

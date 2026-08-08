@@ -90,11 +90,63 @@ assert_eq "default: permission_mode = always-approve" \
 # --- config generation: preserve marketplace sources -------------------------
 printf '[[marketplace.sources]]\nname = "my-team"\ngit = "https://github.com/me/team-plugins.git"\n' \
   > "$TEST_ROOT/live-config.toml"
-run_generate "$TEST_ROOT/merged.toml" --preserve-sources "$TEST_ROOT/live-config.toml" --enabled "a"
-assert_contains "preserve-sources keeps live sources" \
+run_generate "$TEST_ROOT/merged.toml" --preserve "$TEST_ROOT/live-config.toml" --enabled "a"
+assert_contains "preserve keeps live sources" \
   "$(cat "$TEST_ROOT/merged.toml")" 'name = "my-team"'
-assert_contains "preserve-sources keeps template sources" \
+assert_contains "preserve keeps template sources" \
   "$(cat "$TEST_ROOT/merged.toml")" 'name = "karlorz-agent-skills"'
+run_generate "$TEST_ROOT/merged-alias.toml" --preserve-sources "$TEST_ROOT/live-config.toml" --enabled "a"
+assert_contains "--preserve-sources alias still works" \
+  "$(cat "$TEST_ROOT/merged-alias.toml")" 'name = "my-team"'
+
+# --- config generation: host-set [plugins] keys survive re-renders -----------
+run_generate "$TEST_ROOT/keyed.toml" --hub-key h --new-key n --context7-key c --enabled "a"
+python3 - "$TEST_ROOT/keyed.toml" <<'EOF'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+lines = p.read_text().splitlines()
+for i, line in enumerate(lines):
+    if line.strip().startswith('enabled = ['):
+        lines.insert(i + 1, 'disabled = ["host-backup-restore"]')
+        break
+p.write_text('\n'.join(lines) + '\n')
+EOF
+run_generate "$TEST_ROOT/preserved.toml" --preserve "$TEST_ROOT/keyed.toml" \
+  --hub-key h --new-key n --context7-key c --enabled "a"
+assert_contains "preserve keeps host disabled list" \
+  "$(cat "$TEST_ROOT/preserved.toml")" 'disabled = ["host-backup-restore"]'
+assert_eq "preserve: enabled stays template-owned" \
+  "$(grep -c 'enabled = \["a"\]' "$TEST_ROOT/preserved.toml")" "1"
+
+# --- merge-agents.py: splice + migration + idempotency -----------------------
+MERGE_PY="$PLUGIN/scripts/merge-agents.py"
+ASSET_MD="$PLUGIN/assets/AGENTS.md"
+# migration: v0.2.0 shape (skillwiki marker + unmarked contract + user content)
+printf '<!-- skillwiki:begin -->\nmarker line\n<!-- skillwiki:end -->\n\n## Subagent contract\n- bullet one\n- Full rules: read `~/.grok/agentrules.md`.\n\n## User preferences\n- keep me\n' \
+  > "$TEST_ROOT/migrate.md"
+python3 "$MERGE_PY" "$ASSET_MD" "$TEST_ROOT/migrate.md" > "$TEST_ROOT/migrated.md"
+MIG="$(cat "$TEST_ROOT/migrated.md")"
+assert_contains "migration keeps skillwiki marker" "$MIG" "<!-- skillwiki:begin -->"
+assert_contains "migration wraps contract in harness marker" "$MIG" "<!-- grok-build-harness:begin -->"
+assert_contains "migration keeps user content after contract" "$MIG" "## User preferences"
+assert_contains "migration keeps user content text" "$MIG" "- keep me"
+assert_eq "migration: exactly one contract block" \
+  "$(grep -c '## Subagent contract' "$TEST_ROOT/migrated.md")" "1"
+# splice idempotency: merging the merged file again is byte-identical
+python3 "$MERGE_PY" "$ASSET_MD" "$TEST_ROOT/migrated.md" > "$TEST_ROOT/migrated2.md"
+if cmp -s "$TEST_ROOT/migrated.md" "$TEST_ROOT/migrated2.md"; then
+  ok "merge is idempotent (run twice, byte-identical)"
+else
+  fail "merge is NOT idempotent (run twice differs)"
+fi
+# insert fallback: user file without marker/contract keeps everything
+printf '# my own notes\n\nsome content\n' > "$TEST_ROOT/bare.md"
+python3 "$MERGE_PY" "$ASSET_MD" "$TEST_ROOT/bare.md" > "$TEST_ROOT/bare-merged.md"
+assert_contains "insert fallback keeps user file content" \
+  "$(cat "$TEST_ROOT/bare-merged.md")" "some content"
+assert_contains "insert fallback adds marked contract" \
+  "$(cat "$TEST_ROOT/bare-merged.md")" "<!-- grok-build-harness:begin -->"
 
 # --- installer: dry-run plan --------------------------------------------------
 DRY_OUT="$("$INSTALL" --grok-home "$TEST_ROOT/never-created" --dry-run --skip-plugins 2>&1 || true)"
@@ -114,15 +166,17 @@ assert_eq "--require-keys exits 1 without keys" "$?" "1"
   --dry-run --skip-plugins >/dev/null 2>&1
 assert_eq "--require-keys passes with keys" "$?" "0"
 
-# --- installer: AGENTS.md skillwiki-marker merge ------------------------------
+# --- installer: AGENTS.md splice merge (user content preserved) ---------------
 MERGE_HOME="$TEST_ROOT/merge-home"
 mkdir -p "$MERGE_HOME"
-printf '<!-- skillwiki:begin -->\nmarker line\n<!-- skillwiki:end -->\n\n## stale\n' > "$MERGE_HOME/AGENTS.md"
+printf '<!-- skillwiki:begin -->\nmarker line\n<!-- skillwiki:end -->\n\n## User preferences\n- keep me\n' > "$MERGE_HOME/AGENTS.md"
 "$INSTALL" --grok-home "$MERGE_HOME" --skip-plugins --no-config --force -y >/dev/null 2>&1
 MERGE_OUT="$(cat "$MERGE_HOME/AGENTS.md")"
 assert_contains "merge keeps skillwiki marker" "$MERGE_OUT" "<!-- skillwiki:begin -->"
 assert_contains "merge installs subagent contract" "$MERGE_OUT" "## Subagent contract"
-assert_not_contains "merge drops stale content" "$MERGE_OUT" "## stale"
+assert_contains "merge wraps contract in harness marker" "$MERGE_OUT" "<!-- grok-build-harness:begin -->"
+assert_contains "merge keeps user content" "$MERGE_OUT" "## User preferences"
+assert_contains "merge keeps user content text" "$MERGE_OUT" "- keep me"
 
 # --- installer: re-run idempotency (files + config) ---------------------------
 IDEM_HOME="$TEST_ROOT/idem-home"
@@ -135,6 +189,43 @@ assert_eq "re-run: no new backup dir" \
   "$(find "$IDEM_HOME/backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')" "0"
 assert_eq "re-run: config keeps injected keys" \
   "$(grep -c 'api_key = "idem' "$IDEM_HOME/config.toml")" "7"
+
+# --- installer: keyed config survives a keyless re-run (ADR-4) ----------------
+GUARD_HOME="$TEST_ROOT/guard-home"
+mkdir -p "$GUARD_HOME"
+run_generate "$GUARD_HOME/config.toml" --hub-key g --new-key g2 --context7-key g3 --enabled "a"
+GUARD_OUT="$(env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+  "$INSTALL" --grok-home "$GUARD_HOME" --skip-plugins --force -y 2>&1 || true)"
+assert_contains "keyless re-run warns about skipping config render" "$GUARD_OUT" "skipping config render"
+assert_contains "keyless re-run names --force-render" "$GUARD_OUT" "--force-render"
+assert_eq "keyless re-run keeps keyed config untouched" \
+  "$(grep -c 'api_key = "g' "$GUARD_HOME/config.toml")" "7"
+env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+  "$INSTALL" --grok-home "$GUARD_HOME" --skip-plugins --force -y --force-render >/dev/null 2>&1
+assert_eq "--force-render rewrites env-only" \
+  "$(grep -c '^api_key = ' "$GUARD_HOME/config.toml")" "0"
+
+# --- installer: host-set disabled list survives a full re-run -----------------
+PRES_HOME="$TEST_ROOT/pres-home"
+mkdir -p "$PRES_HOME"
+run_generate "$PRES_HOME/config.toml" --hub-key p --new-key p2 --context7-key p3 --enabled "superpowers"
+python3 - "$PRES_HOME/config.toml" <<'EOF'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+lines = p.read_text().splitlines()
+for i, line in enumerate(lines):
+    if line.strip().startswith('enabled = ['):
+        lines.insert(i + 1, 'disabled = ["host-backup-restore"]')
+        break
+p.write_text('\n'.join(lines) + '\n')
+EOF
+"$INSTALL" --grok-home "$PRES_HOME" --skip-plugins --force -y >/dev/null 2>&1
+assert_contains "re-render keeps host disabled list" \
+  "$(cat "$PRES_HOME/config.toml")" 'disabled = ["host-backup-restore"]'
+PRES_RUN2="$("$INSTALL" --grok-home "$PRES_HOME" --skip-plugins --force -y 2>&1)"
+assert_eq "re-render with preserved key stays idempotent" \
+  "$(grep -c 'identical, skipping' <<<"$PRES_RUN2")" "5"
 
 # --- installer: unknown option exits 1 ----------------------------------------
 "$INSTALL" --definitely-not-a-flag >/dev/null 2>&1
