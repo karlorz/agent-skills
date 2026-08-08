@@ -48,8 +48,13 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
    ```
 
    Optional flags: `--skip-codex`, `--skip-vault-sync`, `--skip-playwright-cli`
-   (heavy or host-specific plugins); `--dry-run` to preview without writing;
-   `--no-config` to skip config.toml.
+   (heavy or host-specific plugins); `--require-keys` (hard-fail when hub/new
+   gateway keys are missing — use for unattended runs); `--restrictive`
+   (render `permission_mode = "plan"` instead of `"always-approve"` for
+   shared hosts); `--dry-run` to preview without writing; `--no-config` to
+   skip config.toml. When keys are missing the installer always warns that
+   the config will be env-only (model aliases won't resolve until
+   `HARNESS_HUB_KEY` / `HARNESS_NEW_KEY` are exported).
 3. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
    the 13 companion plugins, `grok inspect --json` reports agents discovered
    (expect the 2 user agents + plugin agents) and no unresolved key tokens in

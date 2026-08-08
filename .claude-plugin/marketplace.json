@@ -244,8 +244,8 @@
     {
       "name": "grok-build-harness",
       "source": "./skills/grok-build-harness",
-      "description": "v0.1.2: Fresh-host bootstrap for the karlorz subagent harness \u2014 installs the custom grok-build-byok parent agent and scout subagent, agentrules.md routing rules, the subagent-contract AGENTS.md, and a sanitized BYOK config template, then adds the companion marketplaces and installs the plugin set with --trust. Idempotent, backup-first, GROK_HOME-aware for dry-run testing.",
-      "version": "0.1.2",
+      "description": "v0.2.0: Fresh-host bootstrap for the karlorz subagent harness \u2014 installs the custom grok-build-byok parent agent and scout subagent, agentrules.md routing rules, the subagent-contract AGENTS.md, and a sanitized BYOK config template, then adds the companion marketplaces and installs the plugin set with --trust. Idempotent, backup-first, GROK_HOME-aware for dry-run testing.",
+      "version": "0.2.0",
       "category": "operations",
       "keywords": [
         "grok",

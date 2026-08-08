@@ -83,13 +83,16 @@ if [ -f "$SKILL_DIR/skills/$SKILL/SKILL.md" ]; then
 elif [ -f "$SKILL_DIR/SKILL.md" ]; then
   SKILL_MD="$SKILL_DIR/SKILL.md"
 else
-  SKILL_MD=""
+  # Generic fallback: any nested skill dir — the plugin name may legitimately
+  # differ from its skill name (e.g. grok-build-harness -> grok-build-init).
+  # SKILL_MD is only an existence gate; edits touch the JSON manifests.
+  SKILL_MD="$(find "$SKILL_DIR/skills" -mindepth 2 -maxdepth 2 -type f -name SKILL.md 2>/dev/null | head -1)"
 fi
 PLUGIN_JSON="$SKILL_DIR/.claude-plugin/plugin.json"
 CODEX_PLUGIN_JSON="$SKILL_DIR/.codex-plugin/plugin.json"
 
 [ -d "$SKILL_DIR" ]    || die "skill not found: skills/$SKILL/"
-[ -n "$SKILL_MD" ] && [ -f "$SKILL_MD" ] || die "missing SKILL.md under skills/$SKILL/ (expected skills/$SKILL/skills/$SKILL/SKILL.md)"
+[ -n "$SKILL_MD" ] && [ -f "$SKILL_MD" ] || die "missing SKILL.md under skills/$SKILL/ (expected skills/$SKILL/skills/<skill>/SKILL.md)"
 [ -f "$PLUGIN_JSON" ]  || die "missing $PLUGIN_JSON"
 [ -f "$MARKETPLACE" ]  || die "missing $MARKETPLACE"
 

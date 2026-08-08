@@ -45,6 +45,8 @@ The skill runs `scripts/install.sh`, which:
 ```text
 --grok-home DIR        target grok home (default: $GROK_HOME or ~/.grok)
 --hub-key / --new-key / --context7-key   API keys (or HARNESS_* env vars)
+--require-keys         fail when hub/new gateway keys are missing (headless-safe)
+--restrictive          render permission_mode = "plan" instead of "always-approve"
 --skip-codex | --skip-vault-sync | --skip-playwright-cli   optional plugins
 --skip-plugins         files + config only
 --no-config            skip config.toml
@@ -52,6 +54,11 @@ The skill runs `scripts/install.sh`, which:
 --force / -y           overwrite without prompting
 --verify               run verification after install
 ```
+
+Missing keys always produce a warning (env-only consequence spelled out);
+`--require-keys` upgrades that to a hard failure for unattended runs.
+Verification additionally asserts the sonnet/haiku/deepseek-v4-flash pin
+aliases via `grok models`.
 
 ## Testing without touching a host
 

@@ -15,7 +15,8 @@ installer = "internal"
 max_thoughts_width = 120
 yolo = false
 compact_mode = false
-permission_mode = "always-approve"
+# "always-approve" for personal hosts; install.sh --restrictive renders "plan"
+permission_mode = "__PERMISSION_MODE__"
 voice_stt_language = "auto"
 prompt_suggestions = true
 fork_secondary_model = ""
@@ -27,6 +28,7 @@ telemetry = false
 
 [models]
 default = "deepseek-v4-flash"
+# deliberately disables the web-search model (no resolution attempt)
 web_search = "no-such-model"
 default_reasoning_effort = "max"
 

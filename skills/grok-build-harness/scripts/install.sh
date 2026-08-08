@@ -15,7 +15,8 @@
 # Usage:
 #   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
 #              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
-#              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify] [-y]
+#              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
+#              [--require-keys] [--restrictive] [-y]
 #
 # Keys can also come from HARNESS_HUB_KEY / HARNESS_NEW_KEY / HARNESS_CONTEXT7_KEY.
 # Everything is testable against a scratch tree: GROK_HOME=/tmp/grok-home ./install.sh --dry-run
@@ -41,6 +42,8 @@ DRY_RUN=0
 FORCE=0
 VERIFY=0
 ASSUME_YES=0
+REQUIRE_KEYS=0
+RESTRICTIVE=0
 
 usage() {
   cat <<'EOF'
@@ -51,13 +54,16 @@ then adds companion marketplaces and installs the plugin set with --trust.
 Usage:
   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
-             [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify] [-y]
+             [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
+             [--require-keys] [--restrictive] [-y]
 
 Options:
   --grok-home DIR        target grok home (default: $GROK_HOME or ~/.grok)
   --hub-key K            hub.karldigi.dev API key (or HARNESS_HUB_KEY)
   --new-key K            new.karldigi.dev API key (or HARNESS_NEW_KEY)
   --context7-key K       context7 MCP API key (or HARNESS_CONTEXT7_KEY)
+  --require-keys         fail when hub/new gateway keys are missing (headless-safe)
+  --restrictive          render permission_mode = "plan" instead of "always-approve"
   --skip-codex           do not install/enable the codex plugin
   --skip-vault-sync      do not install/enable the vault-sync plugin
   --skip-playwright-cli  do not install/enable the playwright-cli plugin
@@ -70,6 +76,10 @@ Options:
 EOF
   exit 0
 }
+
+log()  { printf 'grok-build-harness: %s\n' "$*"; }
+warn() { printf 'grok-build-harness: WARNING: %s\n' "$*" >&2; }
+die()  { printf 'grok-build-harness: ERROR: %s\n' "$*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -85,6 +95,8 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
     --verify) VERIFY=1; shift ;;
+    --require-keys) REQUIRE_KEYS=1; shift ;;
+    --restrictive) RESTRICTIVE=1; shift ;;
     -y) ASSUME_YES=1; shift ;;
     -h|--help) usage ;;
     *) die "unknown option: $1 (run with --help)" ;;
@@ -92,7 +104,13 @@ while [ $# -gt 0 ]; do
 done
 
 GROK_HOME="$(cd "$GROK_HOME" 2>/dev/null && pwd || printf '%s' "$GROK_HOME")"
+# export so grok CLI subprocesses (marketplace add, plugin install, verify)
+# target the same home as the files we install — --grok-home must behave
+# exactly like the GROK_HOME env var
+export GROK_HOME
 BACKUP_DIR="$GROK_HOME/backups/grok-build-harness-$(date +%Y%m%d%H%M%S)"
+PERMISSION_MODE="always-approve"
+[ "$RESTRICTIVE" -eq 1 ] && PERMISSION_MODE="plan"
 
 # name|source|skip-flag-name — one table drives both the enabled list and the
 # install loop, so the two can never drift apart. SKIP_NONE is always 0.
@@ -118,10 +136,6 @@ for spec in "${PLUGIN_SPECS[@]}"; do
   IFS='|' read -r name _source flag_name <<< "$spec"
   [ "${!flag_name}" -eq 1 ] || ENABLED+=("$name")
 done
-
-log()  { printf 'grok-build-harness: %s\n' "$*"; }
-warn() { printf 'grok-build-harness: WARNING: %s\n' "$*" >&2; }
-die()  { printf 'grok-build-harness: ERROR: %s\n' "$*" >&2; exit 1; }
 
 prompt_yes() {
   # $1 = question; returns 0 on yes
@@ -189,6 +203,7 @@ render_config() {
   [ -n "$HUB_KEY" ] && args+=(--hub-key "$HUB_KEY")
   [ -n "$NEW_KEY" ] && args+=(--new-key "$NEW_KEY")
   [ -n "$CONTEXT7_KEY" ] && args+=(--context7-key "$CONTEXT7_KEY")
+  args+=(--permission-mode "$PERMISSION_MODE")
   args+=(--enabled "$(IFS=,; printf '%s' "${ENABLED[*]}")")
   python3 "$GENERATE" --template "$ASSETS/config.toml.template" "${args[@]}" >/dev/null
   copy_if_changed "$tmp" "$out" "config.toml"
@@ -308,6 +323,24 @@ print("  config warnings: {}".format(len(warnings)))
 for w in warnings:
     print("    {}: {} {}".format(w.get("kind", "?"), w.get("path", ""), w.get("message", "")))
 ' || true
+    # the pin aliases are load-bearing: [subagents.models] resolves through
+    # them, so a missing alias breaks the whole routing economy
+    local models alias found
+    models="$("$GROK" models 2>/dev/null || true)"
+    for alias in sonnet haiku deepseek-v4-flash; do
+      found=0
+      while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*[-*][[:space:]]*"$alias"([[:space:]]|$) ]]; then
+          found=1
+        fi
+      done <<< "$models"
+      if [ "$found" -eq 1 ]; then
+        log "  model ok    $alias"
+      else
+        warn "  MODEL MISSING: $alias (pin aliases must resolve)"
+        missing=1
+      fi
+    done
   fi
   [ "$missing" -eq 1 ] && warn "verification found problems (see above)"
   log "done. Start a new grok-build session for the harness to take effect."
@@ -335,9 +368,22 @@ if [ -z "$CONTEXT7_KEY" ] && [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
   read -r -s -p "grok-build-harness: context7 MCP API key (leave empty to skip the MCP): " CONTEXT7_KEY; echo
 fi
 
+# warn loudly when gateway keys are missing; --require-keys hard-fails.
+# context7 stays optional (it only feeds the MCP server).
+if [ -z "$HUB_KEY" ] || [ -z "$NEW_KEY" ]; then
+  missing_keys=""
+  [ -z "$HUB_KEY" ] && missing_keys="$missing_keys HUB(hub.karldigi.dev)"
+  [ -z "$NEW_KEY" ] && missing_keys="$missing_keys NEW(new.karldigi.dev)"
+  warn "gateway keys missing:$missing_keys — config will be env-only and model aliases won't resolve until keys are provided"
+  warn "pass --hub-key/--new-key or export HARNESS_HUB_KEY/HARNESS_NEW_KEY; use --require-keys to fail instead of continuing"
+  [ "$REQUIRE_KEYS" -eq 1 ] && die "--require-keys: hub/new gateway keys are required"
+fi
+if [ -z "$CONTEXT7_KEY" ]; then
+  warn "context7 key missing — MCP server will launch without --api-key and may fail at runtime"
+fi
+
 # --- files -------------------------------------------------------------------
 log "installing harness files"
-mkdir -p "$GROK_HOME/agents"
 copy_if_changed "$ASSETS/agents/grok-build-byok.md" "$GROK_HOME/agents/grok-build-byok.md" "agent grok-build-byok"
 copy_if_changed "$ASSETS/agents/scout.md"          "$GROK_HOME/agents/scout.md"          "agent scout"
 copy_if_changed "$ASSETS/agentrules.md"            "$GROK_HOME/agentrules.md"            "agentrules"

@@ -102,12 +102,25 @@ enables them via `[plugins].enabled`. `--skip-codex`, `--skip-vault-sync`, and
   env-only (`HUB_API_KEY`) until inline keys are injected.
 - `grok mcp list` prints the context7 `--api-key` argument in plaintext —
   treat MCP key material as sensitive even on the host.
+- The template ships `[ui] permission_mode = "always-approve"` (personal-host
+  posture). `install.sh --restrictive` renders `"plan"` instead for
+  shared/non-personal hosts via the `__PERMISSION_MODE__` token.
+- Missing gateway keys never fail silently: install.sh always warns when
+  hub/new keys are absent (env-only consequence spelled out), and
+  `--require-keys` turns that into a hard failure for unattended runs.
+  context7 stays optional — it only feeds the MCP server.
 - Unknown config keys warn but never fail startup; `[plugins].enabled` accepts
   bare names. The generated config is validated with `tomllib` before writing.
 - The skillwiki `skillwiki:begin` block in `~/.grok/AGENTS.md` is owned by the
   llm-wiki plugin (`install:activation`), so the bundled `AGENTS.md` carries
   only the subagent contract; install.sh preserves any existing marker block
   when merging.
+
+## Deliberate quirks kept from the reference host
+
+- `[models] web_search = "no-such-model"` intentionally disables the
+  web-search model (no resolution attempt per search). Kept and documented
+  after review (ADR-7).
 
 ## Bootstrap flow (fresh host)
 

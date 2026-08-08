@@ -71,6 +71,11 @@ def render(template: str, values: dict[str, str], enabled: list[str]) -> str:
             r'[ \t]*"--api-key",\n[ \t]*"__CONTEXT7_API_KEY__",\n', "", rendered
         )
 
+    # permission_mode is a plain token in the [ui] section
+    rendered = rendered.replace(
+        '"__PERMISSION_MODE__"', f'"{values.get("__PERMISSION_MODE__", "always-approve")}"'
+    )
+
     # tokens may still appear in comment lines documenting the template;
     # only non-comment lines must be free of them
     code_lines = [line for line in rendered.splitlines() if not line.strip().startswith("#")]
@@ -93,6 +98,9 @@ def main() -> int:
                         help="new.karldigi.dev API key (or leave empty for env_key-only)")
     parser.add_argument("--context7-key", default="",
                         help="context7 MCP API key (required for the MCP server)")
+    parser.add_argument("--permission-mode", default="always-approve",
+                        choices=("always-approve", "plan"),
+                        help="permission_mode for [ui] (default: always-approve; use 'plan' for shared hosts)")
     parser.add_argument("--enabled", default="",
                         help="comma-separated plugin names for [plugins].enabled")
     args = parser.parse_args()
@@ -104,6 +112,7 @@ def main() -> int:
         "__HUB_API_KEY__": args.hub_key,
         "__NEW_API_KEY__": args.new_key,
         "__CONTEXT7_API_KEY__": args.context7_key,
+        "__PERMISSION_MODE__": args.permission_mode,
     }
 
     rendered = render(template, values, enabled)
@@ -120,6 +129,11 @@ def main() -> int:
         if args.enabled and set(enabled) != set(enabled_out):
             raise SystemExit(
                 f"generate-config: enabled mismatch: wanted {sorted(enabled)}, got {sorted(enabled_out)}"
+            )
+        permission = parsed.get("ui", {}).get("permission_mode")
+        if permission != args.permission_mode:
+            raise SystemExit(
+                f"generate-config: permission_mode mismatch: wanted {args.permission_mode!r}, got {permission!r}"
             )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

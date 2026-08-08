@@ -1,0 +1,69 @@
+name: E2E
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  bootstrap:
+    name: Full scratch bootstrap
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install grok stable
+        run: |
+          curl -fsSL https://x.ai/cli/install.sh | bash
+          export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"
+          grok --version
+
+      - name: Full scratch bootstrap with --verify
+        run: |
+          export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"
+          export HARNESS_HUB_KEY="e2e-hub" HARNESS_NEW_KEY="e2e-new" HARNESS_CONTEXT7_KEY="e2e-ctx"
+          bash skills/grok-build-harness/scripts/install.sh \
+            --grok-home /tmp/e2e-home --verify -y
+
+      - name: Re-run is fully idempotent
+        run: |
+          export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"
+          export HARNESS_HUB_KEY="e2e-hub" HARNESS_NEW_KEY="e2e-new" HARNESS_CONTEXT7_KEY="e2e-ctx"
+          OUT="$(bash skills/grok-build-harness/scripts/install.sh \
+            --grok-home /tmp/e2e-home --verify -y 2>&1)"
+          [ "$(grep -c 'identical, skipping' <<<"$OUT")" -eq 5 ] || { echo "$OUT"; exit 1; }
+          echo "re-run: 5/5 identical"
+
+      - name: --require-keys fails without keys
+        run: |
+          export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"
+          bash skills/grok-build-harness/scripts/install.sh \
+            --grok-home /tmp/e2e-rk --require-keys --dry-run --skip-plugins \
+            >/dev/null 2>&1 && { echo "expected failure"; exit 1; } || true
+          echo "--require-keys: fails as expected"
+
+      - name: --restrictive renders permission_mode plan
+        run: |
+          export PATH="$HOME/.grok/bin:$HOME/.local/bin:$PATH"
+          bash skills/grok-build-harness/scripts/install.sh \
+            --grok-home /tmp/e2e-restr --restrictive --skip-plugins -y
+          grep -q 'permission_mode = "plan"' /tmp/e2e-restr/config.toml
+          echo "--restrictive: permission_mode = plan"
