@@ -87,7 +87,7 @@ while [ $# -gt 0 ]; do
     --verify) VERIFY=1; shift ;;
     -y) ASSUME_YES=1; shift ;;
     -h|--help) usage ;;
-    *) echo "install.sh: unknown option: $1" >&2; usage ;;
+    *) die "unknown option: $1 (run with --help)" ;;
   esac
 done
 
@@ -178,20 +178,20 @@ merge_agents_md() {
 }
 
 render_config() {
+  # Render to a temp file, then reuse copy_if_changed: identical configs are
+  # skipped, user-modified configs are backed up before overwrite, and
+  # --dry-run prints without writing — same semantics as every other file.
   local out="$GROK_HOME/config.toml"
-  local args=(--out "$out")
+  local tmp args
+  tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-config.XXXXXX")"
+  trap 'rm -f "$tmp"' RETURN
+  args=(--out "$tmp")
   [ -n "$HUB_KEY" ] && args+=(--hub-key "$HUB_KEY")
   [ -n "$NEW_KEY" ] && args+=(--new-key "$NEW_KEY")
   [ -n "$CONTEXT7_KEY" ] && args+=(--context7-key "$CONTEXT7_KEY")
   args+=(--enabled "$(IFS=,; printf '%s' "${ENABLED[*]}")")
-
-  if [ "$DRY_RUN" -eq 1 ]; then
-    log "config.toml: would render from template -> $out (enabled: ${ENABLED[*]})"
-    return 0
-  fi
-  local rendered
-  rendered="$(python3 "$GENERATE" --template "$ASSETS/config.toml.template" "${args[@]}")"
-  log "config.toml: $rendered"
+  python3 "$GENERATE" --template "$ASSETS/config.toml.template" "${args[@]}" >/dev/null
+  copy_if_changed "$tmp" "$out" "config.toml"
 }
 
 find_grok() {
@@ -224,7 +224,7 @@ install_plugin() {
     log "plugin: would install $plugin ($source) --trust"
     return 0
   fi
-  if "$GROK" plugin list 2>/dev/null | grep -Fq "$plugin"; then
+  if "$GROK" plugin list 2>/dev/null | grep -Fq ": $plugin ["; then
     log "plugin: $plugin already installed, skipping"
     return 0
   fi
@@ -261,6 +261,33 @@ except Exception:
 for entry in data:
     print("  {:8s} {}  v{}".format(entry.get("status", "?"), entry.get("name", "?"), entry.get("version", "?")))
 ' || "$GROK" plugin list 2>/dev/null | sed 's/^/  /' || true
+    # assert every enabled plugin actually landed — a failed install must
+    # surface here, not just in a warning
+    local expected name _src flag_name
+    expected=()
+    for spec in "${PLUGIN_SPECS[@]}"; do
+      IFS='|' read -r name _src flag_name <<< "$spec"
+      [ "${!flag_name}" -eq 1 ] || expected+=("$name")
+    done
+    local missing_plugins
+    missing_plugins="$(
+      "$GROK" plugin list --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+installed = {entry.get("name") for entry in data}
+expected = sys.argv[1:]
+print("\n".join(sorted(name for name in expected if name not in installed)))
+' "${expected[@]}"
+    )"
+    if [ -n "$missing_plugins" ]; then
+      while IFS= read -r name; do
+        warn "  PLUGIN MISSING: $name"
+      done <<< "$missing_plugins"
+      missing=1
+    fi
     "$GROK" inspect --json 2>/dev/null | python3 -c '
 import json, sys
 try:
@@ -280,7 +307,7 @@ for w in warnings:
 }
 
 # --- plan --------------------------------------------------------------------
-log "grok-build-harness v0.1.0 bootstrap"
+log "grok-build-harness bootstrap"
 log "target: $GROK_HOME"
 log "plugins: ${ENABLED[*]}"
 [ "$DRY_RUN" -eq 1 ] && log "DRY RUN: no writes will be performed"
