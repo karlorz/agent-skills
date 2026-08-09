@@ -205,6 +205,97 @@ unresolved(
   { authorities: { project: { mode: "adaptive", risk: "critical" } } },
   "invalid_workflow_risk",
 );
+
+const malformedUserMode = unresolved(
+  {
+    authorities: {
+      user: { mode: 123 },
+      project: { mode: "fixed", profile: "full" },
+    },
+  },
+  "invalid_workflow_selection_type",
+);
+assert.equal(malformedUserMode.authority, "user");
+
+const malformedUserCapability = unresolved(
+  {
+    authorities: {
+      user: { mode: "adaptive", capability: false },
+      project: { mode: "fixed", profile: "full" },
+    },
+  },
+  "invalid_workflow_capability_type",
+);
+assert.equal(malformedUserCapability.authority, "user");
+
+const malformedWorkItemRisk = unresolved(
+  {
+    authorities: {
+      work_item: { mode: "adaptive", risk: ["elevated"] },
+      project: { mode: "fixed", profile: "full" },
+    },
+  },
+  "invalid_workflow_risk_type",
+);
+assert.equal(malformedWorkItemRisk.authority, "work_item");
+
+const malformedUserContainer = unresolved(
+  {
+    authorities: {
+      user: "full",
+      project: { mode: "fixed", profile: "full" },
+    },
+  },
+  "invalid_workflow_policy_type",
+);
+assert.equal(malformedUserContainer.authority, "user");
+
+const malformedWorkItemContainer = unresolved(
+  {
+    authorities: {
+      work_item: [],
+      project: { mode: "fixed", profile: "full" },
+    },
+  },
+  "invalid_workflow_policy_type",
+);
+assert.equal(malformedWorkItemContainer.authority, "work_item");
+
+assert.equal(
+  unresolved(
+    { authorities: { user_default: { mode: true } } },
+    "invalid_workflow_selection_type",
+  ).authority,
+  "user_default",
+);
+
+assert.equal(
+  unresolved(
+    { authorities: { project: { mode: "adaptive", profile: {} } } },
+    "invalid_workflow_profile_type",
+  ).authority,
+  "project",
+);
+
+resolved(
+  {
+    authorities: {
+      user: { mode: "  ", profile: null, capability: undefined, risk: "" },
+      project: { mode: "fixed", profile: "guided" },
+    },
+  },
+  { profile: "guided", authority: "project" },
+);
+
+resolved(
+  {
+    authorities: {
+      user_default: { mode: "", profile: null },
+    },
+  },
+  { profile: "native", authority: "builtin_adaptive" },
+);
+
 unresolved(
   { configurationErrors: [{ code: "malformed_yaml", message: "bad YAML" }] },
   "workflow_configuration_invalid",

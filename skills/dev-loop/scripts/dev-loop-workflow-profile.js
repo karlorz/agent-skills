@@ -28,19 +28,68 @@ const LEGACY_PIPELINE_PROFILES = Object.freeze({
   manual: "native",
 });
 
+const WORKFLOW_POLICY_FIELDS = Object.freeze([
+  Object.freeze({
+    key: "mode",
+    label: "workflow_selection",
+    code: "invalid_workflow_selection_type",
+  }),
+  Object.freeze({
+    key: "profile",
+    label: "workflow_profile",
+    code: "invalid_workflow_profile_type",
+  }),
+  Object.freeze({
+    key: "capability",
+    label: "workflow_capability",
+    code: "invalid_workflow_capability_type",
+  }),
+  Object.freeze({
+    key: "risk",
+    label: "workflow_risk",
+    code: "invalid_workflow_risk_type",
+  }),
+]);
+
 function normalized(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function isPlainObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function hasPolicy(policy) {
-  if (!policy || typeof policy !== "object") return false;
-  return [policy.mode, policy.profile, policy.capability, policy.risk].some(
-    (value) => normalized(value) !== "",
-  );
+  if (policy === undefined || policy === null) return false;
+  if (!isPlainObject(policy)) return true;
+  return WORKFLOW_POLICY_FIELDS.some(({ key }) => {
+    const value = policy[key];
+    if (value === undefined || value === null) return false;
+    return typeof value !== "string" || value.trim() !== "";
+  });
 }
 
 function diagnostic(code, message, authority = null) {
   return { code, message, ...(authority ? { authority } : {}) };
+}
+
+function policyTypeDiagnostics(policy, authority) {
+  if (!isPlainObject(policy)) {
+    return [
+      diagnostic(
+        "invalid_workflow_policy_type",
+        "workflow policy must be a plain object",
+        authority,
+      ),
+    ];
+  }
+  return WORKFLOW_POLICY_FIELDS.flatMap(({ key, label, code }) => {
+    const value = policy[key];
+    if (value === undefined || value === null || typeof value === "string") return [];
+    return [diagnostic(code, `${label} must be a string`, authority)];
+  });
 }
 
 function unresolvedResult(diagnostics, { authority = null, mode = null, sessionKind = "interactive" } = {}) {
@@ -217,8 +266,13 @@ function resolveWorkflowProfile(input = {}) {
 
   const authorities = input.authorities || {};
   for (const authority of ["user", "work_item", "project"]) {
-    if (hasPolicy(authorities[authority])) {
-      const result = resolvePolicy(authorities[authority], authority, input, sessionKind);
+    const policy = authorities[authority];
+    if (hasPolicy(policy)) {
+      const typeDiagnostics = policyTypeDiagnostics(policy, authority);
+      if (typeDiagnostics.length > 0) {
+        return unresolvedResult(typeDiagnostics, { authority, sessionKind });
+      }
+      const result = resolvePolicy(policy, authority, input, sessionKind);
       return authority === "project"
         ? withPipelineOverride(result, prdPipeline, sessionKind)
         : result;
@@ -228,8 +282,13 @@ function resolveWorkflowProfile(input = {}) {
   const legacy = resolveLegacyPolicy(input.legacy, sessionKind);
   if (legacy) return legacy;
 
-  if (hasPolicy(authorities.user_default)) {
-    return resolvePolicy(authorities.user_default, "user_default", input, sessionKind);
+  const userDefault = authorities.user_default;
+  if (hasPolicy(userDefault)) {
+    const typeDiagnostics = policyTypeDiagnostics(userDefault, "user_default");
+    if (typeDiagnostics.length > 0) {
+      return unresolvedResult(typeDiagnostics, { authority: "user_default", sessionKind });
+    }
+    return resolvePolicy(userDefault, "user_default", input, sessionKind);
   }
 
   return resolvePolicy(
