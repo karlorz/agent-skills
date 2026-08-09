@@ -121,6 +121,7 @@ PERMISSION_MODE="always-approve"
 # install loop, so the two can never drift apart. SKIP_NONE is always 0.
 SKIP_NONE=0
 PLUGIN_SPECS=(
+  "grok-build-harness|grok-build-harness|SKIP_NONE"
   "superpowers|superpowers@anthropics/claude-plugins-official|SKIP_NONE"
   "simplify|simplify|SKIP_NONE"
   "deep-research|deep-research|SKIP_NONE"
