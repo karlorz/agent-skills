@@ -1,13 +1,15 @@
 ---
 name: setup-dev-loop
 user-invocable: false
-description: Scaffold per-repo dev-loop config (PRD layer, knowledge layer, release config, vault path) and build the project glossary with grill-with-docs. Run once per repo before using dev-loop.
+description: Scaffold per-repo dev-loop config (workflow profile, PRD layer, knowledge layer, release config, vault path) and build the project glossary with grill-with-docs. Run once per repo before using dev-loop.
 ---
 
 # Setup Dev-Loop
 
 Scaffold the per-repo configuration that dev-loop consumes:
 
+- **Workflow profile** — how much orchestration the loop adds (`native`,
+  `guided`, or explicit-only `full`)
 - **PRD layer** — which skill suite drives brainstorm → spec → plan → execute → review
 - **Knowledge layer** — how the loop captures, queries, and maintains project knowledge
 - **Release config** — how artifacts are published and deployed
@@ -28,7 +30,8 @@ Look at the current repo to understand its starting state:
 - `CONTEXT.md` and `CONTEXT-MAP.md` at repo root
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `./.claude/dev-loop.config.md` — does it already exist?
-- Installed skills — `ls ~/.claude/skills/` for available PRD backends
+- Installed skills — `ls ~/.claude/skills/` for available PRD backends.
+  Installation proves availability, never activation.
 - Installed interview backends — check for `grill-with-docs`, `grill-me` under `~/.claude/skills/`
 - `skillwiki path` — is a vault configured?
 - **Dependency doctor** — spawn `dev-loop:doctor-worker` (sonnet) to enumerate
@@ -51,17 +54,37 @@ Look at the current repo to understand its starting state:
 
 Summarise what's present and what's missing. Walk through decisions **one at a time**:
 
-**Section A — PRD layer.**
+**Section A — Workflow profile.**
 
-> Explainer: The PRD layer is the skill suite that drives the brainstorm → spec → plan → execute → review pipeline. Pick the workflow that matches how you want to work.
+> Explainer: The workflow profile controls how much orchestration dev-loop
+> adds. It is separate from the PRD provider: the profile selects the workflow
+> shape, while an installed provider may supply capabilities inside that
+> shape. Installation proves availability, never activation.
 
-Default posture: if superpowers skills are installed, propose `superpowers`. If only TDD skills are available, propose `tdd`. Otherwise `manual`.
+Default posture: propose `workflow_selection: adaptive`. With no stronger
+authority, adaptive selects `native` for self-directed routine work and
+`guided` when capability is `needs-guidance` or risk is `elevated`. It never
+selects `full` heuristically.
 
 Options:
-- **superpowers** — brainstorming, writing-plans, subagent-driven-development (full pipeline)
-- **codestable** — generate + validate (single-pass)
-- **tdd** — test-driven-development with red-green-refactor
-- **manual** — user drives everything, dev-loop is orchestrator only
+- **native** — rely on the host agent's built-in planning, implementation,
+  tools, and subagents with minimal ceremony
+- **guided** — add targeted spec, plan, TDD, or provider skills where useful
+- **full** — complete compatibility workflow; explicit-only
+
+Ask whether selection should be `adaptive` or `fixed`. For `fixed`, require
+one of the profiles above. For `adaptive`, record capability
+(`self-directed`, `needs-guidance`, or `unknown`) and risk (`routine` or
+`elevated`); do not write `workflow_profile` alongside adaptive selection.
+Invalid fixed policy must remain unresolved instead of falling back to full.
+Goal, CI, headless, and satellite sessions never prompt.
+
+Then choose the independent PRD provider. Default to `manual`; offer installed
+`superpowers`, `codestable`, or `tdd` providers as opt-in capability sources.
+Only pair `prd_layer: superpowers` and `prd_pipeline: full` automatically when
+the user explicitly chose the fixed `full` profile. Otherwise omit
+`prd_pipeline` so the resolver supplies `single-pass` for native or
+`tdd-first` for guided.
 
 **Section B — Knowledge layer.**
 
@@ -571,7 +594,7 @@ pre-1.19.0 behavior. Schema reference: `templates/project-config.md`
 ### 3. Confirm and write
 
 Show the user a draft of `./.claude/dev-loop.config.md` covering all sections
-(PRD, knowledge, release, interview, glossary, CI setup, merge authority,
+(workflow profile, PRD provider, knowledge, release, interview, glossary, CI setup, merge authority,
 critical paths, fact-check tier, idle deep-research, browser verification,
 reactive debugging, discipline path scoping, release policy). Let them edit
 before writing.

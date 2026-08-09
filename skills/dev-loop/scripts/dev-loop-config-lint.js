@@ -8,10 +8,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
+const { resolveWorkflowProfile } = require("./dev-loop-workflow-profile.js");
 
 const SCHEMA_VERSION = "dev-loop-config-lint.v1";
 const PRD_LAYERS = new Set(["superpowers", "codestable", "tdd", "manual", "none"]);
-const PRD_PIPELINES = new Set(["full", "tdd-first", "single-pass", "debug-only", "manual"]);
 const KNOWLEDGE_LAYERS = new Set(["skillwiki", "none"]);
 const CI_DISCOVERY = new Set(["runtime", "explicit"]);
 const PUBLISH_VIA = new Set(["ci-tag-trigger", "local", "none", ""]);
@@ -108,11 +108,24 @@ function lint(repo) {
       message: `prd_layer must be one of: ${[...PRD_LAYERS].join(", ")}`,
     });
   }
-  if (flat.prd_pipeline && !PRD_PIPELINES.has(flat.prd_pipeline)) {
+  const workflowResult = resolveWorkflowProfile({
+    authorities: {
+      project: {
+        mode: flat.workflow_selection,
+        profile: flat.workflow_profile,
+        capability: flat.workflow_capability,
+        risk: flat.workflow_risk,
+      },
+    },
+    legacy: {
+      prdPipeline: flat.prd_pipeline,
+    },
+  });
+  for (const item of workflowResult.diagnostics || []) {
     findings.push({
       severity: "error",
-      code: "invalid_prd_pipeline",
-      message: `prd_pipeline must be one of: ${[...PRD_PIPELINES].join(", ")}`,
+      code: item.code,
+      message: item.message,
     });
   }
   if (flat.knowledge_layer && !KNOWLEDGE_LAYERS.has(flat.knowledge_layer)) {

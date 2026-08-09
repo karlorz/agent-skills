@@ -17,6 +17,7 @@ cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
 slug: bad
 release_branch: main
 prd_layer: not-a-layer
+workflow_selection: fixed
 knowledge_layer: skillwiki
 release_policy:
   auto_bump: true
@@ -36,6 +37,7 @@ if (j.read_only !== true) throw new Error("read_only");
 if (j.overall.state !== "blocked") throw new Error("expected blocked");
 const codes = j.findings.map((f) => f.code);
 if (!codes.includes("invalid_prd_layer")) throw new Error("prd_layer");
+if (!codes.includes("workflow_fixed_profile_required")) throw new Error("workflow_fixed_profile_required");
 if (!codes.includes("auto_bump_no_triggers")) throw new Error("triggers");
 if (!codes.includes("invalid_merge_strategy")) throw new Error("merge_strategy");
 if (!codes.includes("invalid_merge_method")) throw new Error("merge_method");
@@ -50,6 +52,9 @@ cat > "$VALID/.claude/dev-loop.config.md" <<'EOF'
 slug: valid
 release_branch: main
 prd_layer: manual
+workflow_selection: adaptive
+workflow_capability: self-directed
+workflow_risk: routine
 knowledge_layer: none
 merge_policy:
   strategy: repo-policy
@@ -65,6 +70,50 @@ const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
 const codes = j.findings.map((f) => f.code);
 if (codes.includes("invalid_merge_strategy")) throw new Error("repo-policy must be accepted");
 process.stdout.write("ok-merge-policy\n");
+'
+
+WORKFLOW_BAD="$TMP/workflow-bad"
+mkdir -p "$WORKFLOW_BAD/.claude"
+cat > "$WORKFLOW_BAD/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: workflow-bad
+release_branch: main
+knowledge_layer: none
+workflow_selection: adaptive
+workflow_profile: full
+workflow_capability: deepseek-flash
+workflow_risk: critical
+```
+EOF
+OUT_WORKFLOW_BAD="$(node "$LINT_JS" --repo "$WORKFLOW_BAD" --format json --no-write 2>/dev/null)" || true
+echo "$OUT_WORKFLOW_BAD" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+const codes = j.findings.map((f) => f.code);
+for (const code of ["workflow_adaptive_profile_conflict", "invalid_workflow_capability", "invalid_workflow_risk"]) {
+  if (!codes.includes(code)) throw new Error(`${code}: ${JSON.stringify(j.findings)}`);
+}
+if (j.overall.state !== "blocked") throw new Error("invalid workflow config must block");
+process.stdout.write("ok-workflow-policy\n");
+'
+
+PIPELINE_BAD="$TMP/pipeline-bad"
+mkdir -p "$PIPELINE_BAD/.claude"
+cat > "$PIPELINE_BAD/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: pipeline-bad
+release_branch: main
+knowledge_layer: none
+workflow_selection: adaptive
+prd_pipeline: bogus
+```
+EOF
+OUT_PIPELINE_BAD="$(node "$LINT_JS" --repo "$PIPELINE_BAD" --format json --no-write 2>/dev/null)" || true
+echo "$OUT_PIPELINE_BAD" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+const matches = j.findings.filter((item) => item.code === "invalid_prd_pipeline");
+if (matches.length !== 1) throw new Error(`expected one resolver-owned pipeline finding: ${JSON.stringify(j.findings)}`);
+if (j.overall.state !== "blocked") throw new Error("invalid pipeline must block");
+process.stdout.write("ok-workflow-pipeline\n");
 '
 
 SCHEMA_BAD="$TMP/schema-bad"

@@ -429,6 +429,16 @@ run_dev_loop_prep_prompt_contract_checks() {
     fail "skills/dev-loop/scripts/dev-loop-config-schema.py missing"
   [ -f "$ROOT/skills/dev-loop/scripts/dev-loop-config-schema.js" ] ||
     fail "skills/dev-loop/scripts/dev-loop-config-schema.js missing"
+  [ -f "$ROOT/skills/dev-loop/scripts/dev-loop-workflow-profile.js" ] ||
+    fail "skills/dev-loop/scripts/dev-loop-workflow-profile.js missing"
+  assert_contains "dev-loop resolves workflow profiles" "$prompt" 'Workflow Profile Resolver'
+  assert_contains "dev-loop full profile explicit only" "$prompt" '`full` is explicit-only'
+  assert_contains "dev-loop installation is availability only" "$prompt" 'Installation proves availability, never activation.'
+  assert_not_contains "dev-loop no installed superpowers auto selection" "$prompt" 'if `superpowers:brainstorming` is available →'
+  assert_contains "project config documents workflow selection" "$template" 'workflow_selection: adaptive'
+  assert_contains "project config documents guided profile" "$template" '`guided`'
+  assert_contains "setup presents workflow profiles" "$setup" '**Section A — Workflow profile.**'
+  assert_contains "repo example defaults adaptive" "$config_example" 'workflow_selection: adaptive'
   assert_contains "dev-loop dashboard script" "$prompt" 'dev-loop-dashboard.js'
   assert_contains "dev-loop dashboard mode" "$prompt" 'MODE = dashboard'
   assert_contains "dev-loop why-skipped script" "$prompt" 'dev-loop-why-skipped.js'
@@ -944,6 +954,7 @@ run_codex_skill_mirror_contract_checks
 node "$ROOT/scripts/check-plugin-release-drift.js" --repo "$ROOT" --skill dev-loop
 bash "$ROOT/scripts/test-plugin-release-drift.sh"
 bash "$ROOT/scripts/test-dev-loop-config-schema.sh"
+bash "$ROOT/scripts/test-dev-loop-workflow-profile.sh"
 bash "$ROOT/scripts/test-dev-loop-write-preflight.sh"
 bash "$ROOT/scripts/test-dev-loop-verification-dispatch.sh"
 bash "$ROOT/scripts/test-dev-loop-config-lint.sh"

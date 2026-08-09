@@ -26,11 +26,21 @@ branch_policy:
   branch_protection_required: false
 ```
 
+## Workflow Profile
+
+```yaml
+# Adaptive selection chooses native for routine work and guided when the
+# configured capability or risk calls for more structure. It never selects
+# full implicitly; full is an explicit compatibility profile.
+workflow_selection: adaptive
+workflow_capability: self-directed
+workflow_risk: routine
+```
+
 ## PRD Layer
 
 ```yaml
-prd_layer: superpowers
-prd_pipeline: full
+prd_layer: manual
 prd_disciplines:
   - skill: superpowers:systematic-debugging
     when: failure

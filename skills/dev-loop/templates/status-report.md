@@ -21,6 +21,10 @@ the independent health and lifecycle fields.
 
 - Config: {{config_path}}
 - release_branch: {{release_branch}}
+- Workflow selection: {{workflow_selection}}
+- Workflow profile: {{workflow_profile}}
+- Workflow authority: {{workflow_authority}}
+- Workflow reason: {{workflow_reason}}
 - BACKEND_CAPS: {{backend_caps}}
 
 ## Dependency / Environment Health

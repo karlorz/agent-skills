@@ -13,6 +13,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
 const { compareSupportedSemver, parseSupportedSemver } = require("./dev-loop-version.js");
+const { pipelineSteps, resolveWorkflowProfile } = require("./dev-loop-workflow-profile.js");
 
 const SCHEMA_VERSION = "dev-loop-status.v1";
 
@@ -779,25 +780,13 @@ function runPreflightInventory(repo, vault, project) {
   }
 }
 
-function pipelineSteps(flat) {
-  const pipeline = flat.prd_pipeline || "full";
-  const map = {
-    full: ["spec", "plan", "execute", "review", "merge", "save"],
-    "tdd-first": ["plan", "execute", "review", "merge"],
-    "single-pass": ["execute", "review", "merge"],
-    "debug-only": ["execute", "merge"],
-    manual: [],
-  };
-  return map[pipeline] || map.full;
-}
-
-function previewOperations(nextAction, flat, browserVerify) {
+function previewOperations(nextAction, pipeline, browserVerify) {
   if (nextAction === "idle") return ["IDLE"];
   if (nextAction === "investigate") return ["INVESTIGATE"];
   if (nextAction === "prep") return ["PREP", "QUERY", "WORK"];
   if (nextAction === "status") return ["STATUS", "REFRESH"];
   if (nextAction !== "core") return [];
-  const operations = pipelineSteps(flat).map((step) => step.toUpperCase());
+  const operations = pipelineSteps(pipeline).map((step) => step.toUpperCase());
   if (browserVerify.would_run || (browserVerify.matched_files || []).length > 0) {
     operations.push("BROWSER-VERIFY");
   }
@@ -863,6 +852,29 @@ function buildReport(opts) {
     knowledgeLayer === "skillwiki" && vaultInfo.resolved
       ? ["query_vault", "create_work_item", "save_retro", "lint_vault", "audit_vault"]
       : [];
+  const workflowProfile = resolveWorkflowProfile({
+    authorities: {
+      project: {
+        mode: flat.workflow_selection,
+        profile: flat.workflow_profile,
+        capability: flat.workflow_capability,
+        risk: flat.workflow_risk,
+      },
+      user_default: {
+        mode: process.env.DEV_LOOP_WORKFLOW_SELECTION,
+        profile: process.env.DEV_LOOP_WORKFLOW_PROFILE,
+        capability: process.env.DEV_LOOP_WORKFLOW_CAPABILITY,
+        risk: process.env.DEV_LOOP_WORKFLOW_RISK,
+      },
+    },
+    legacy: {
+      prdPipeline: flat.prd_pipeline,
+    },
+    configurationErrors: cfg.missing ? [] : cfg.parser?.errors || [],
+    sessionKind: opts.orchestration === "goal" ? "goal" : "interactive",
+  });
+  const effectivePrdLayer = flat.prd_layer || "manual";
+  const effectivePrdPipeline = workflowProfile.effectivePipeline;
 
   const depsInline = probeDependencies(repo);
   const lastDoctor = readLastDoctor();
@@ -880,6 +892,12 @@ function buildReport(opts) {
     blockers.push({
       code: "invalid_config",
       detail: `config parser reported ${cfg.parser.errors.length} error(s)${location}: ${first.message}`,
+    });
+  }
+  if (workflowProfile.unresolved) {
+    blockers.push({
+      code: "workflow_profile_unresolved",
+      detail: workflowProfile.reason,
     });
   }
   if (depsInline.missing_required.length > 0) {
@@ -947,15 +965,15 @@ function buildReport(opts) {
   const ciConfigured = flat.ci_configured === true;
   const release = releasePreview(repo, flat);
   const browserVerify = browserVerifyPreview(repo, flat, depsInline.missing_optional);
-  const operations = previewOperations(nextAction, flat, browserVerify);
+  const operations = previewOperations(nextAction, effectivePrdPipeline, browserVerify);
   const relevantMissingOptional = (depsInline.missing_optional_entries || [])
     .filter((entry) =>
       optionalDependencyRelevant(entry, operations, {
         config: flat,
         intensity: opts.intensity,
         knowledgeLayer,
-        prdLayer: flat.prd_layer || "superpowers",
-        prdPipeline: flat.prd_pipeline || "full",
+        prdLayer: effectivePrdLayer,
+        prdPipeline: effectivePrdPipeline,
       }),
     )
     .map((entry) => entry.ref);
@@ -1038,10 +1056,11 @@ function buildReport(opts) {
       host: drift.host,
       args: [],
     },
+    workflow_profile: workflowProfile,
     caps: {
       backend: backendCaps,
-      prd_layer: flat.prd_layer || "superpowers",
-      prd_pipeline: flat.prd_pipeline || "full",
+      prd_layer: effectivePrdLayer,
+      prd_pipeline: effectivePrdPipeline,
       orchestration: opts.orchestration === "goal" ? ["goal_context", "non_interactive_goal"] : [],
       dispatch_mode: "unknown",
     },
@@ -1078,7 +1097,7 @@ function buildReport(opts) {
     },
     pipeline_preview: {
       would_pick: wouldPick,
-      steps: pipelineSteps(flat),
+      steps: pipelineSteps(effectivePrdPipeline),
       browser_verify: browserVerify,
       ci_gate: {
         would_run: ciConfigured,
@@ -1144,6 +1163,10 @@ function renderMarkdown(json) {
   lines.push(`- release_branch: ${json.project.release_branch}`);
   lines.push(`- BACKEND_CAPS: ${json.caps.backend.join(", ") || "(none)"}`);
   lines.push(`- prd_layer: ${json.caps.prd_layer}, pipeline: ${json.caps.prd_pipeline}`);
+  lines.push(`- workflow profile: ${json.workflow_profile.profile || "unresolved"}`);
+  lines.push(`- workflow selection: ${json.workflow_profile.mode || "unresolved"}`);
+  lines.push(`- workflow authority: ${json.workflow_profile.authority || "(none)"}`);
+  lines.push(`- workflow reason: ${json.workflow_profile.reason}`);
   lines.push("");
   lines.push("## Dependency / Environment Health");
   lines.push(`- dep_status: ${json.health.dep_status}`);

@@ -48,6 +48,47 @@ slug: <project-slug>
 release_branch: <branch-name>  # e.g., main, dev, master
 ```
 
+## Workflow profile
+
+The Workflow Profile Resolver chooses how much orchestration dev-loop adds.
+It is independent from the PRD provider: profile selects the workflow shape;
+`prd_layer` supplies optional skills for stages that the shape enables.
+Installation proves availability, never activation.
+
+- `native` — use the host agent's built-in planning, implementation, tool,
+  and subagent capabilities with minimal ceremony.
+- `guided` — add targeted structure such as an explicit spec, plan, TDD, or
+  provider skill when capability or risk evidence justifies it.
+- `full` — run the complete compatibility workflow. `full` is explicit-only
+  and is never selected by adaptive heuristics.
+
+Selection modes:
+
+- `adaptive` — choose `native` or `guided` from durable capability and risk
+  evidence; never infer `full`.
+- `fixed` — require an explicit `workflow_profile`.
+
+```yaml
+workflow_selection: adaptive      # adaptive | fixed
+workflow_capability: self-directed # self-directed | needs-guidance | unknown
+workflow_risk: routine             # routine | elevated
+# workflow_profile: guided         # native | guided | full; required for fixed
+```
+
+For an explicitly requested full Superpowers compatibility workflow:
+
+```yaml
+workflow_selection: fixed
+workflow_profile: full
+prd_layer: superpowers
+prd_pipeline: full
+```
+
+Authority is resolved in this order: current user instruction, work-item
+declaration, project configuration, user-level default, then the built-in
+adaptive default. Noninteractive sessions never prompt. Invalid fixed policy
+is unresolved and blocks execution instead of falling through to `full`.
+
 ## PRD layer
 
 Controls which skill suite drives the brainstorm → spec → plan → execute →
@@ -59,15 +100,22 @@ Pipeline templates (`prd_pipeline`) control which steps run. `PRD_CAPS`
 controls which skill to invoke per step. These are two separate concerns.
 
 ```yaml
-prd_layer: superpowers             # superpowers | codestable | tdd | manual | none
-prd_pipeline: full                 # full | tdd-first | single-pass | debug-only | manual
-                                    # (default per prd_layer; override from config)
+prd_layer: manual                  # superpowers | codestable | tdd | manual | none
+# prd_pipeline: single-pass        # optional legacy/stage-template override
 ```
+
+When `prd_pipeline` is omitted, the resolved workflow profile supplies the
+stage template: `native` → `single-pass`, `guided` → `tdd-first`, and
+explicit `full` → `full`. Existing explicit pipeline values remain supported
+and map through the resolver (`full` → `full`, `tdd-first` → `guided`, other
+legacy templates → `native`). Provider discovery only determines which
+capabilities are available inside the selected profile.
 
 ### PRD backends registry (optional)
 
 Override skill mappings or add future backends. If absent, defaults are
-derived from `prd_layer` + installed skills.
+derived from `prd_layer`. Installed skills are availability evidence only;
+they do not select a provider, profile, or pipeline.
 
 ```yaml
 prd_backends:

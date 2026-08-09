@@ -7,7 +7,7 @@ description: >
   "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet; immutable plugin payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.25: adaptive native/guided/full workflow profiles with explicit-only full activation, fail-closed policy resolution, and provider-independent pipeline selection; preserves immutable plugin payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -532,7 +532,8 @@ The current settings.json at `~/.claude/settings.json` has `"CLAUDE_CODE_SUBAGEN
 
 | Layer | Tool | Role |
 |-------|------|------|
-| PRD | Pluggable via `prd_layer` config — default `superpowers`, also `codestable`, `tdd`, `manual`, `none` | Brainstorm, spec, plan, execute, review |
+| Workflow | Workflow Profile Resolver — `native`, `guided`, explicit-only `full` | Select orchestration depth before providers are considered |
+| PRD | Pluggable via `prd_layer` config — default `manual`, also `superpowers`, `codestable`, `tdd`, `none` | Supply optional brainstorm, spec, plan, execute, review capabilities |
 | Knowledge | Pluggable via `knowledge_layer` config — default `skillwiki`, also `none` | Ingest, validate, query, crystallize, distill, decide, lint, audit |
 | Quality | `simplify:simplify` skill (required) | Pre-push code review gate |
 | Hygiene | `claude-md-management:claude-md-improver` | Long-session context maintenance |
@@ -543,10 +544,43 @@ Steps branch on **capabilities**, not backend names — check `if <capability> i
 BACKEND_CAPS` rather than `if knowledge_layer == "skillwiki"`. This lets new
 backends slot in by declaring which capabilities they provide.
 
-The PRD layer follows the same pattern via `prd_layer` in the project config.
+The Workflow Profile Resolver runs before PRD capability resolution. It picks
+the orchestration profile; the PRD layer then supplies optional capabilities
+inside that profile. Installation proves availability, never activation.
 Steps 3–6 branch on `PRD_CAPS` instead of naming specific skills. Pipeline
 templates (`prd_pipeline`) control which steps run; `PRD_CAPS` controls which
-skill to invoke per step. These are two separate concerns.
+skill to invoke per step. Profile, pipeline, and provider are separate
+concerns.
+
+### Workflow Profile Resolver
+
+Profiles:
+
+| Profile | Default pipeline | Behavior |
+|---|---|---|
+| `native` | `single-pass` | Use host-native planning, tools, implementation, and subagents; inline missing stage capabilities. |
+| `guided` | `tdd-first` | Add targeted planning, TDD, or provider skills; never run the complete brainstorm/full sequence by default. |
+| `full` | `full` | Run the complete compatibility workflow. `full` is explicit-only. |
+
+Selection modes are `adaptive` and `fixed`. `fixed` requires an explicit
+`workflow_profile`. `adaptive` selects `guided` only when capability evidence
+is `needs-guidance` or risk is `elevated`; otherwise it selects `native`.
+Adaptive selection never chooses `full`.
+
+Resolve authority in this order:
+
+1. current user instruction
+2. work-item declaration
+3. project configuration
+4. legacy explicit `prd_pipeline` mapping
+5. user-level default
+6. built-in adaptive default
+
+Legacy mappings are `full` → `full`, `tdd-first` → `guided`, and
+`single-pass` / `debug-only` / `manual` → `native`. Invalid policy is
+unresolved and blocks the write cycle; it never falls through to `full`.
+Goal, headless, CI, and satellite sessions never prompt. The resolver reports
+its authority and reason so status output remains explainable.
 
 ### Capability Matrix
 
@@ -579,10 +613,12 @@ See config template for `knowledge_backends` registry details.
 | `review` | simplify:simplify (prefer dev-loop:simplify-worker) | codestable:validate | superpowers:requesting-code-review + simplify:simplify | manual | — |
 | `subagent_dispatch` | yes | no | no | no | no |
 
-At REFRESH, `PRD_CAPS` is resolved alongside `BACKEND_CAPS`: read `prd_layer`
-from config (default: auto-discover), look up the backend in `prd_backends`
-(or derive defaults), and store the set of PRD capabilities + registered skill
-names. Steps 3–6 check `PRD_CAPS` membership instead of naming specific skills.
+At REFRESH, resolve the workflow profile first. Then resolve `PRD_CAPS`
+alongside `BACKEND_CAPS`: read `prd_layer` from config (default: `manual`),
+look up the backend in `prd_backends` (or derive defaults), and store the set
+of PRD capabilities + registered skill names. Installed skills only prove
+availability. Steps 3–6 check `PRD_CAPS` membership instead of naming specific
+skills.
 
 ### Orchestration Capability Set (v1.22.0)
 
@@ -691,20 +727,20 @@ to invoke per step. These are two separate concerns.
 
 | Template | Steps | Use case |
 |---|---|---|
-| `full` | spec → plan → execute → review → merge | Default for superpowers. New features, refactors. |
+| `full` | spec → plan → execute → review → merge | Explicit full compatibility workflow for new features or refactors. |
 | `tdd-first` | plan → execute → review → merge | Plan IS the test suite. TDD discipline during execute. |
 | `single-pass` | execute → review → merge | Spec is inline from QUERY. Small features, fixes. |
 | `debug-only` | execute → merge | No spec/plan. Root cause → fix → verify. |
 | `manual` | (none) | User drives everything. Dev-loop is orchestrator only. |
 
-Default pipeline per `prd_layer`:
-- `superpowers` → `full`
-- `codestable` → `single-pass`
-- `tdd` → `tdd-first`
-- `manual` → `manual`
-- `none` → `manual`
+Default pipeline per resolved workflow profile:
+- `native` → `single-pass`
+- `guided` → `tdd-first`
+- `full` → `full`
 
-Config can override: `prd_pipeline: tdd-first` even with `prd_layer: superpowers`.
+An explicit `prd_pipeline` remains a separate stage-template override. In
+legacy configs without workflow fields, it also maps through the resolver as
+documented above. Provider choice never changes the selected profile.
 
 ### Cross-Cutting Disciplines
 
@@ -855,14 +891,25 @@ prd_disciplines:
      differs from `skillwiki path` '<resolved>'. Use `vault: auto` for
      portable configs, or keep the explicit path only if this repo is
      intentionally pinned to one machine."
-     Then resolve `PRD_CAPS` — read `prd_layer` from config. If absent,
-     auto-discover: if `superpowers:brainstorming` is available →
-     `superpowers`; else if `superpowers:test-driven-development` is
-     available → `tdd`; else → `manual`. Read `prd_backends` map if
-     present; otherwise derive defaults from `prd_layer`. Store the set
-     of PRD capabilities and registered skill names as `PRD_CAPS`.
-     Resolve `prd_pipeline` (default per `prd_layer`, override from config).
-     Store as `PRD_PIPELINE`. Resolve `prd_disciplines` if declared:
+     **Resolve workflow profile before providers.** Use
+     `scripts/dev-loop-workflow-profile.js` as the shared resolver. Assemble
+     authorities from the current user instruction, selected work-item
+     declaration, project `workflow_selection` / `workflow_profile` /
+     `workflow_capability` / `workflow_risk`, user-level defaults, and the
+     built-in adaptive default. Preserve that precedence. Explicit legacy
+     `prd_pipeline` maps only after current user, work-item, and project
+     workflow policy. Store the result as `WORKFLOW_PROFILE`, including mode,
+     authority, reason, default pipeline, and unresolved diagnostics. The
+     resolver never prompts and adaptive selection never chooses `full`. If
+     unresolved, block the write cycle with `workflow_profile_unresolved`.
+     Then resolve `PRD_CAPS` — read `prd_layer` from config, defaulting to
+     `manual`. Read `prd_backends` if present; otherwise derive defaults from
+     the selected provider. Probe installed skills only to determine whether
+     a configured capability is available. Installation proves availability,
+     never activation. Store the capabilities and registered skill names as
+     `PRD_CAPS`. Resolve `prd_pipeline` from an explicit configured override,
+     otherwise from `WORKFLOW_PROFILE.defaultPipeline`; store it as
+     `PRD_PIPELINE`. Resolve `prd_disciplines` if declared:
      parse `include_paths` and `exclude_paths` on each discipline entry
      (both are optional — omit for global scope). Warn if a discipline has
      `mode: mandatory` without `include_paths`: "<skill> is mandatory
@@ -1033,9 +1080,10 @@ prd_disciplines:
      `knowledge_backends.skillwiki.vault: auto` and run `skillwiki path`
      when available), `knowledge_layer` (default
      `skillwiki` if vault exists, `none` otherwise — then derive
-     BACKEND_CAPS from it), `prd_layer` (default `superpowers` if
-     superpowers skills are available, else `manual` — then derive
-     PRD_CAPS from it),
+     BACKEND_CAPS from it), workflow policy (default
+     `workflow_selection: adaptive`, which resolves to `native` absent
+     stronger capability or risk evidence), `prd_layer` (default `manual` —
+     then derive PRD_CAPS from it),
      `cli_src`/`cli_test` (first `packages/*/src/commands/` or
      `src/commands/` match), `skills_glob`
      (`packages/skills/*/SKILL.md` if exists), `release_branch`
@@ -1055,10 +1103,10 @@ prd_disciplines:
        knowledge layer
    - **Fallback 3**: if critical fields (slug) cannot be resolved,
      default to `playground` as the slug. This ensures the PRD bridge
-     chain always has a target — `proj-work` emits redirect paths, and
-     `superpowers:brainstorming` / `superpowers:writing-plans` can fire
-     normally. If `knowledge_layer` also cannot be determined, default
-     to `none` and proceed with git-based alternatives.
+     chain always has a target — `proj-work` emits redirect paths and the
+     native profile can continue with inline artifacts. If `knowledge_layer`
+     also cannot be determined, default to `none` and proceed with git-based
+     alternatives. Never activate an installed provider from discovery alone.
 
 3. **Read CLAUDE.md and MEMORY.md fresh** — the system-prompt copy
    loaded at session start goes stale if a prior cycle edited them.
@@ -1363,6 +1411,18 @@ main session and can load external interview skills.
 **Output**: Interview findings (Q&A summary for native, sharpened terminology +
 decisions for grill-with-docs) are prepended to the work-item spec preamble.
 This feeds directly into the SPEC step.
+
+**Profile behavior across SPEC–EXECUTE:**
+
+- `native` uses the host harness inline for every enabled stage unless the
+  user or project explicitly configured a provider capability. It does not
+  require an external brainstorm, plan, TDD, or worktree workflow skill.
+- `guided` invokes only the targeted provider capability or discipline needed
+  for the enabled stage. It does not run the full brainstorm → plan →
+  subagent-development sequence merely because those skills are installed.
+- `full` runs the complete configured provider/pipeline behavior and is valid
+  only when explicitly selected (or mapped from an explicit legacy
+  `prd_pipeline: full`).
 
 ### 3. SPEC — spec artifact (conditional on `prd_pipeline` + `PRD_CAPS`)
 
@@ -2242,9 +2302,10 @@ stale local state:
    CLAUDE.md and MEMORY.md fresh every cycle.
 2. **Always start work with proj-work.** Redirect paths come from
    there, not from the PRD skill.
-3. **PRD skill is pluggable via `prd_layer` config.** Steps 3–6 branch on
-   `PRD_CAPS` and `prd_pipeline`, not hardcoded skill names. superpowers
-   is the default backend, not required.
+3. **Resolve workflow before providers.** Workflow selection is independent
+   from `prd_layer` and `prd_pipeline`. Adaptive chooses only `native` or
+   `guided`; `full` requires explicit authority. Steps 3–6 branch on
+   `PRD_CAPS` and the resolved pipeline, not installed skill names.
 4. **Never push without review.** Hard gate for code changes;
    git-only and vault-only work skip simplify review (nothing to review). E2E
    joins the gate when the project has it.

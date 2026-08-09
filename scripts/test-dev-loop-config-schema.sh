@@ -136,6 +136,29 @@ The release policy: remains a human decision until the review is complete.
 - Keep the branch stable and documented.
 EOF
 
+cat > "$TMP/workflow-profile.md" <<'EOF'
+# Workflow profile keys
+
+```yaml
+workflow_selection: adaptive
+workflow_capability: needs-guidance
+```
+
+```yaml
+workflow_risk: elevated
+```
+EOF
+
+cat > "$TMP/workflow-invalid-type.md" <<'EOF'
+# Invalid workflow profile type
+
+```yaml
+workflow_selection: fixed
+workflow_profile:
+  - full
+```
+EOF
+
 assert_contract_fields() {
   local output="$1"
   node - "$output" <<'NODE'
@@ -341,6 +364,44 @@ assert.deepEqual(result.blocks, []);
 assert.deepEqual(result.errors, []);
 assert.deepEqual(result.warnings, []);
 process.stdout.write("ok-ordinary-prose\n");
+NODE
+
+WORKFLOW_OUT="$TMP/workflow-profile.json"
+python3 "$SCHEMA" --file "$TMP/workflow-profile.md" >"$WORKFLOW_OUT" ||
+  fail "valid workflow profile keys were rejected"
+assert_contract_fields "$WORKFLOW_OUT"
+node - "$WORKFLOW_OUT" <<'NODE'
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+
+const result = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+assert.deepEqual(result.config, {
+  workflow_selection: "adaptive",
+  workflow_capability: "needs-guidance",
+  workflow_risk: "elevated",
+});
+assert.deepEqual(result.provenance.workflow_selection, { block_index: 0, line: 4 });
+assert.deepEqual(result.provenance.workflow_capability, { block_index: 0, line: 5 });
+assert.deepEqual(result.provenance.workflow_risk, { block_index: 1, line: 9 });
+assert.deepEqual(result.errors, []);
+process.stdout.write("ok-workflow-profile-keys\n");
+NODE
+
+WORKFLOW_TYPE_OUT="$TMP/workflow-invalid-type.json"
+run_rejected "workflow invalid type" "$WORKFLOW_TYPE_OUT" "$TMP/workflow-invalid-type.err" \
+  python3 "$SCHEMA" --file "$TMP/workflow-invalid-type.md"
+node - "$WORKFLOW_TYPE_OUT" <<'NODE'
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+
+const result = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+assert.ok(
+  result.errors.some(
+    ({ code, path }) => code === "invalid_type" && path === "workflow_profile",
+  ),
+  JSON.stringify(result.errors),
+);
+process.stdout.write("ok-workflow-profile-type\n");
 NODE
 
 UNAVAILABLE_OUT="$TMP/parser-unavailable.json"

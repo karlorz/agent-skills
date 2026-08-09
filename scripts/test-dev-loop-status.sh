@@ -66,7 +66,95 @@ if (j.pipeline_preview.merge.strategy !== "repo-policy") throw new Error("repo-p
 if (j.pipeline_preview.merge.auto_merge_configured !== false) throw new Error("auto merge must default off");
 if (j.pipeline_preview.merge.auto_merge_eligible !== false) throw new Error("auto merge must fail closed");
 if ((j.pipeline_preview.merge.failed_gates || []).includes("ci_configured")) throw new Error("CI configuration is not merge authority");
+if (j.workflow_profile.profile !== "native") throw new Error(`missing policy must resolve native: ${JSON.stringify(j.workflow_profile)}`);
+if (j.workflow_profile.mode !== "adaptive" || j.workflow_profile.authority !== "builtin_adaptive") throw new Error(`missing policy authority: ${JSON.stringify(j.workflow_profile)}`);
+if (j.workflow_profile.prompts !== false) throw new Error("resolver must never prompt");
+if (j.caps.prd_layer !== "manual") throw new Error("missing provider must not default to superpowers");
+if (j.caps.prd_pipeline !== "single-pass") throw new Error(`native default pipeline: ${j.caps.prd_pipeline}`);
+if ((j.pipeline_preview.steps || []).join(",") !== "execute,review,merge") throw new Error(`native preview: ${JSON.stringify(j.pipeline_preview.steps)}`);
 process.stdout.write("ok-none-layer\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-fixed-full
+release_branch: main
+knowledge_layer: none
+prd_layer: superpowers
+workflow_selection: fixed
+workflow_profile: full
+```
+EOF
+OUT_FIXED_FULL="$(node "$STATUS_JS" --repo "$TMP" --project test-fixed-full --format json --no-write 2>/dev/null)" || fail "fixed full status failed"
+echo "$OUT_FIXED_FULL" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.workflow_profile.profile !== "full" || j.workflow_profile.authority !== "project") throw new Error(JSON.stringify(j.workflow_profile));
+if (j.caps.prd_pipeline !== "full") throw new Error(`full pipeline: ${j.caps.prd_pipeline}`);
+process.stdout.write("ok-fixed-full-profile\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-guided
+release_branch: main
+knowledge_layer: none
+workflow_selection: adaptive
+workflow_capability: needs-guidance
+workflow_risk: routine
+```
+EOF
+OUT_GUIDED="$(node "$STATUS_JS" --repo "$TMP" --project test-guided --format json --no-write --orchestration goal 2>/dev/null)" || fail "guided goal status failed"
+echo "$OUT_GUIDED" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.workflow_profile.profile !== "guided" || j.workflow_profile.mode !== "adaptive") throw new Error(JSON.stringify(j.workflow_profile));
+if (j.workflow_profile.prompts !== false || j.workflow_profile.sessionKind !== "goal") throw new Error(JSON.stringify(j.workflow_profile));
+if (j.caps.prd_layer !== "manual") throw new Error("guided availability must not select a provider");
+if (j.caps.prd_pipeline !== "tdd-first") throw new Error(`guided pipeline: ${j.caps.prd_pipeline}`);
+process.stdout.write("ok-adaptive-guided-profile\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-workflow-invalid
+release_branch: main
+knowledge_layer: none
+workflow_selection: fixed
+```
+EOF
+set +e
+OUT_WORKFLOW_INVALID="$(node "$STATUS_JS" --repo "$TMP" --project test-workflow-invalid --format json --no-write 2>/dev/null)"
+WORKFLOW_INVALID_EXIT=$?
+set -e
+[[ "$WORKFLOW_INVALID_EXIT" -eq 1 ]] || fail "invalid workflow profile must exit 1, got $WORKFLOW_INVALID_EXIT"
+echo "$OUT_WORKFLOW_INVALID" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.workflow_profile.unresolved !== true || j.workflow_profile.profile !== null) throw new Error(JSON.stringify(j.workflow_profile));
+if (!j.blockers.some((item) => item.code === "workflow_profile_unresolved")) throw new Error(JSON.stringify(j.blockers));
+if (j.caps.prd_pipeline !== null) throw new Error("unresolved policy must not claim a pipeline");
+process.stdout.write("ok-workflow-unresolved\n");
+'
+
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-pipeline-invalid
+release_branch: main
+knowledge_layer: none
+workflow_selection: adaptive
+prd_pipeline: bogus
+```
+EOF
+set +e
+OUT_PIPELINE_INVALID="$(node "$STATUS_JS" --repo "$TMP" --project test-pipeline-invalid --format json --no-write 2>/dev/null)"
+PIPELINE_INVALID_EXIT=$?
+set -e
+[[ "$PIPELINE_INVALID_EXIT" -eq 1 ]] || fail "invalid pipeline must exit 1, got $PIPELINE_INVALID_EXIT"
+echo "$OUT_PIPELINE_INVALID" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.workflow_profile.unresolved !== true || j.workflow_profile.effectivePipeline !== null) throw new Error(JSON.stringify(j.workflow_profile));
+if (!j.workflow_profile.diagnostics.some((item) => item.code === "invalid_prd_pipeline")) throw new Error(JSON.stringify(j.workflow_profile));
+if (!j.blockers.some((item) => item.code === "workflow_profile_unresolved")) throw new Error(JSON.stringify(j.blockers));
+if (j.caps.prd_pipeline !== null) throw new Error("invalid pipeline must not reach preview");
+process.stdout.write("ok-pipeline-unresolved\n");
 '
 
 cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
