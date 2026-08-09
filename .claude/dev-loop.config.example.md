@@ -115,7 +115,9 @@ merge_policy:
 
 ```yaml
 bump_script: ./scripts/bump-version.sh
-publish_via: ci-tag-trigger
+# This repository has no tag-triggered publisher. Create release tags manually
+# only after the exact main commit passes CI.
+publish_via: none
 manifests_count: 3
 remote_hosts: []
 release_policy:
@@ -161,5 +163,5 @@ vault_sync:
 notes:
   conventions: "Each plugin bump updates its Claude manifest, optional Codex manifest, and matching marketplace entry; SKILL.md has no release version field."
   merge_readiness: "Local tests pass, then push main. PR is fallback only."
-  release_readiness: "After main CI passes, tag using {skill}-{version}; CI tag trigger publishes."
+  release_readiness: "After main CI passes, create and push the {skill}-{version} tag manually; no tag-triggered publisher exists."
 ```
