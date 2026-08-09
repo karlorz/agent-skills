@@ -34,6 +34,9 @@ A configured or harness-provided signal about how much workflow support a run ma
 **Activation depth**:
 How much procedural instruction is loaded into a harness. Activation depth is an output concern of harness adapters, not a synonym for workflow profile. All activation depths retain mandatory SkillWiki authority, managed-write, provenance, and vault-placement rules.
 
+**Stage template**:
+The ordered development stages selected by `prd_pipeline`. A configured pipeline remains an explicit stage override even when it differs from the profile default, but it does not change a newer resolved workflow profile or activate a provider. Only a legacy config with no newer workflow keys maps `prd_pipeline` through the resolver as profile authority.
+
 **Selection authority**:
 The precedence used by the Workflow Profile Resolver: current user instruction, work-item declaration, project configuration, user-level default, then the built-in adaptive default. A higher-precedence explicit choice cannot be overridden by model or task heuristics.
 
@@ -92,6 +95,7 @@ The interleaved delegation from `/setup-dev-loop` to an interview backend (e.g.,
 - **Guided profile** selects targeted workflow disciplines without imposing a complete pipeline
 - **Full profile** applies the configured complete pipeline and requires explicit authorization
 - **Profile selection mode** determines whether the resolver uses a fixed profile or bounded adaptive selection
+- **Stage template** controls the active development stages independently of provider and profile selection
 - **Activation depth** is emitted through harness adapters after profile resolution; it does not select the profile
 - **Setup interview** produces `dev-loop.config.md`, `docs/agents/`, and optionally `CONTEXT.md` (via delegated interview backend)
 - **Work-item interview** produces a sharpened requirements summary that feeds into `spec.md`
