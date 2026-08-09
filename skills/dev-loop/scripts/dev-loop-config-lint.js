@@ -85,6 +85,11 @@ function lint(repo) {
   const flat = parsed.config || {};
   const nestedVault = flat.knowledge_backends?.skillwiki?.vault || "";
   const vault = nestedVault || flat.vault || "";
+  const parserTypePaths = new Set(
+    (parsed.errors || [])
+      .filter((diagnostic) => diagnostic.code === "invalid_type" && diagnostic.path)
+      .map((diagnostic) => diagnostic.path),
+  );
   for (const diagnostic of parsed.errors || []) {
     findings.push({
       severity: "error",
@@ -122,10 +127,12 @@ function lint(repo) {
     },
   });
   for (const item of workflowResult.diagnostics || []) {
+    if (item.path && parserTypePaths.has(item.path)) continue;
     findings.push({
       severity: "error",
       code: item.code,
       message: item.message,
+      ...(item.path ? { path: item.path } : {}),
     });
   }
   if (flat.knowledge_layer && !KNOWLEDGE_LAYERS.has(flat.knowledge_layer)) {

@@ -96,6 +96,31 @@ if (j.overall.state !== "blocked") throw new Error("invalid workflow config must
 process.stdout.write("ok-workflow-policy\n");
 '
 
+WORKFLOW_TYPE_BAD="$TMP/workflow-type-bad"
+mkdir -p "$WORKFLOW_TYPE_BAD/.claude"
+cat > "$WORKFLOW_TYPE_BAD/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: workflow-type-bad
+release_branch: main
+knowledge_layer: none
+workflow_selection: adaptive
+workflow_profile: [full]
+```
+EOF
+OUT_WORKFLOW_TYPE_BAD="$(node "$LINT_JS" --repo "$WORKFLOW_TYPE_BAD" --format json --no-write 2>/dev/null)" || true
+echo "$OUT_WORKFLOW_TYPE_BAD" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+const typeFindings = j.findings.filter((item) => item.path === "workflow_profile");
+if (typeFindings.length !== 1 || typeFindings[0].code !== "invalid_type") {
+  throw new Error(`expected one parser-owned workflow_profile type finding: ${JSON.stringify(j.findings)}`);
+}
+if (j.findings.some((item) => item.code === "invalid_workflow_profile_type")) {
+  throw new Error(`resolver duplicated parser type finding: ${JSON.stringify(j.findings)}`);
+}
+if (!Number.isInteger(typeFindings[0].line)) throw new Error("parser finding lost source line");
+process.stdout.write("ok-workflow-type-dedup\n");
+'
+
 PIPELINE_BAD="$TMP/pipeline-bad"
 mkdir -p "$PIPELINE_BAD/.claude"
 cat > "$PIPELINE_BAD/.claude/dev-loop.config.md" <<'EOF'

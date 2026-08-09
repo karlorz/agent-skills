@@ -88,8 +88,16 @@ function policyTypeDiagnostics(policy, authority) {
   return WORKFLOW_POLICY_FIELDS.flatMap(({ key, label, code }) => {
     const value = policy[key];
     if (value === undefined || value === null || typeof value === "string") return [];
-    return [diagnostic(code, `${label} must be a string`, authority)];
+    return [{ ...diagnostic(code, `${label} must be a string`, authority), path: label }];
   });
+}
+
+function resolveConfiguredPolicy(policy, authority, input, sessionKind) {
+  const typeDiagnostics = policyTypeDiagnostics(policy, authority);
+  if (typeDiagnostics.length > 0) {
+    return unresolvedResult(typeDiagnostics, { authority, sessionKind });
+  }
+  return resolvePolicy(policy, authority, input, sessionKind);
 }
 
 function unresolvedResult(diagnostics, { authority = null, mode = null, sessionKind = "interactive" } = {}) {
@@ -268,11 +276,7 @@ function resolveWorkflowProfile(input = {}) {
   for (const authority of ["user", "work_item", "project"]) {
     const policy = authorities[authority];
     if (hasPolicy(policy)) {
-      const typeDiagnostics = policyTypeDiagnostics(policy, authority);
-      if (typeDiagnostics.length > 0) {
-        return unresolvedResult(typeDiagnostics, { authority, sessionKind });
-      }
-      const result = resolvePolicy(policy, authority, input, sessionKind);
+      const result = resolveConfiguredPolicy(policy, authority, input, sessionKind);
       return authority === "project"
         ? withPipelineOverride(result, prdPipeline, sessionKind)
         : result;
@@ -284,11 +288,7 @@ function resolveWorkflowProfile(input = {}) {
 
   const userDefault = authorities.user_default;
   if (hasPolicy(userDefault)) {
-    const typeDiagnostics = policyTypeDiagnostics(userDefault, "user_default");
-    if (typeDiagnostics.length > 0) {
-      return unresolvedResult(typeDiagnostics, { authority: "user_default", sessionKind });
-    }
-    return resolvePolicy(userDefault, "user_default", input, sessionKind);
+    return resolveConfiguredPolicy(userDefault, "user_default", input, sessionKind);
   }
 
   return resolvePolicy(
