@@ -17,13 +17,13 @@ Uses the model and harness's native development behavior without imposing a bund
 Loads only the workflow disciplines justified by task risk, ambiguity, or recorded capability evidence. It may require targeted planning, TDD, worktree isolation, or review without imposing the complete Superpowers-style sequence. This is the normal scaffolding profile for lite models and higher-risk work performed by otherwise self-directed models.
 
 **Full profile** (`full`):
-Applies the complete configured structured workflow, currently represented by the Superpowers-style planning and execution pipeline. `full` is explicit-only. Skill installation or unrestricted automatic discovery cannot activate it. A current user instruction, work-item declaration, project policy, or user policy must select `full` or explicitly allow an automatic selector to enter it.
+Applies the complete configured structured workflow, currently represented by the Superpowers-style planning and execution pipeline. `full` is explicit-only. Skill installation or unrestricted automatic discovery cannot activate it. A current user instruction, work-item declaration, project policy, user policy, or legacy `prd_pipeline: full` compatibility signal (when newer workflow keys are absent) must explicitly select it.
 
 **Profile selection mode**:
-The policy determining how a workflow profile is chosen. `fixed` selects a recorded profile. `adaptive` may resolve to `native` or `guided` from task and capability evidence. It may resolve to `full` only when the governing explicit policy has separately authorized that escalation. `adaptive` is a selection mode, not a fourth workflow profile.
+The policy determining how a workflow profile is chosen. `fixed` selects a recorded profile. `adaptive` resolves only to `native` or `guided` from task and capability evidence; it never resolves to `full`. `adaptive` is a selection mode, not a fourth workflow profile.
 
 **Workflow Profile Resolver**:
-The proposed module that applies selection authority and returns one resolved workflow profile or an explicit unresolved result. It owns profile selection only. Planning, execution, dispatch, vault mutation, and harness-specific instruction loading remain implementations behind other interfaces or adapters.
+The implemented pure module that applies selection authority and returns one resolved workflow profile or an explicit unresolved result. It owns profile selection only. Planning, execution, dispatch, vault mutation, and harness-specific instruction loading remain implementations behind other interfaces or adapters.
 
 **Availability evidence**:
 Proof that a workflow skill, command, or harness operation can be invoked. Installation and discovery produce availability evidence only; they never select a workflow profile.
@@ -44,7 +44,7 @@ Goal, headless, CI, and satellite sessions never prompt for a workflow profile. 
 
 - Installation proves availability, never activation.
 - `full` is explicit-only.
-- Adaptive selection normally chooses `native` or `guided`.
+- Adaptive selection chooses only `native` or `guided`; it never chooses `full`.
 - Explicit policy outranks all heuristics.
 - Invalid configuration resolves as unresolved, not `full`.
 - Session-kind resolution is an input, not duplicated profile logic.
@@ -109,7 +109,7 @@ The interleaved delegation from `/setup-dev-loop` to an interview backend (e.g.,
 ## Flagged ambiguities
 
 - "Installed workflow" previously conflated availability with activation — resolved: installation produces **availability evidence** only; the **Workflow Profile Resolver** owns activation policy.
-- "Adaptive profile" previously risked becoming a fourth profile — resolved: **adaptive** is a **profile selection mode** that normally chooses `native` or `guided`.
+- "Adaptive profile" previously risked becoming a fourth profile — resolved: **adaptive** is a **profile selection mode** that chooses only `native` or `guided`.
 - "Full" previously behaved like an installation-derived default — resolved: the **full profile** is explicit-only and cannot be inferred from installation.
 - "Frontier model" and "lite model" are useful product discussion labels but unstable architecture terms — resolved: selection consumes configured or harness-provided **capability evidence**, never a product name alone.
 - "Activation depth" and "workflow profile" were used interchangeably — resolved: profile is policy; activation depth is harness-specific instruction loading after resolution.
