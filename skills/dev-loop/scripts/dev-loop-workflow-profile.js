@@ -218,11 +218,10 @@ function resolveWorkflowProfile(input = {}) {
   const authorities = input.authorities || {};
   for (const authority of ["user", "work_item", "project"]) {
     if (hasPolicy(authorities[authority])) {
-      return withPipelineOverride(
-        resolvePolicy(authorities[authority], authority, input, sessionKind),
-        prdPipeline,
-        sessionKind,
-      );
+      const result = resolvePolicy(authorities[authority], authority, input, sessionKind);
+      return authority === "project"
+        ? withPipelineOverride(result, prdPipeline, sessionKind)
+        : result;
     }
   }
 

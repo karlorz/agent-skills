@@ -116,6 +116,38 @@ resolved(
 resolved(
   {
     authorities: {
+      user: { mode: "fixed", profile: "native" },
+      project: { mode: "fixed", profile: "guided" },
+    },
+    legacy: { prdPipeline: "full" },
+  },
+  {
+    profile: "native",
+    authority: "user",
+    defaultPipeline: "single-pass",
+    effectivePipeline: "single-pass",
+  },
+);
+
+resolved(
+  {
+    authorities: {
+      work_item: { mode: "fixed", profile: "guided" },
+      project: { mode: "fixed", profile: "native" },
+    },
+    legacy: { prdPipeline: "full" },
+  },
+  {
+    profile: "guided",
+    authority: "work_item",
+    defaultPipeline: "tdd-first",
+    effectivePipeline: "tdd-first",
+  },
+);
+
+resolved(
+  {
+    authorities: {
       project: { mode: "adaptive", capability: "needs-guidance", risk: "routine" },
       user_default: { mode: "fixed", profile: "native" },
     },
