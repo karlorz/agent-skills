@@ -23,7 +23,7 @@ This document records the design. The verbatim runtime artifacts live in
    contract, not a folder of markdown.
 2. **Fidelity to the reference host.** The config template mirrors
    `~/.grok/config.toml` section-for-section. The plugin set and its
-   marketplace provenance are the same 13 enabled plugins with the same
+   marketplace provenance are the same 14 enabled plugins with the same
    originating marketplaces.
 3. **Secrets never ship.** The template carries `__HUB_API_KEY__` /
    `__NEW_API_KEY__` / `__CONTEXT7_API_KEY__` tokens. install.sh prompts for
@@ -79,12 +79,12 @@ Subagent model resolution order (grok-build v1.0.0, `README.md:1710-1717`):
 
 ## Companion plugin set
 
-The 13 enabled plugins and their originating marketplaces (verified from
+The 14 enabled plugins and their originating marketplaces (verified from
 `~/.grok/installed-plugins/registry.json`, 2026-08-08):
 
 | Marketplace | Plugins |
 |---|---|
-| `karlorz/agent-skills` | simplify, deep-research, dev-loop, claude-md-management, playwright-cli, grill-me, hermes-cli, codebase-architecture |
+| `karlorz/agent-skills` | grok-build-harness, simplify, deep-research, dev-loop, claude-md-management, playwright-cli, grill-me, hermes-cli, codebase-architecture |
 | `karlorz/llm-wiki` | skillwiki (`#packages/skills`), vault-sync (`#packages/vault-sync`) |
 | `openai/codex-plugin-cc` | codex (`#plugins/codex`) |
 | `anthropics/claude-plugins-official` | superpowers, context7 |
