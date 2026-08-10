@@ -876,9 +876,13 @@ remote_hosts: [<host>, ...]        # e.g., [sg01], or [] if not applicable
 
 | Mode | Behavior |
 |------|----------|
-| `ci-tag-trigger` | Bump → commit → push → tag → CI publishes. Verify tag landed on remote after push. |
+| `ci-tag-trigger` | Bump → commit → push → tag → CI publishes. Verify tag landed on remote after push. Config-lint verifies that at least one GitHub workflow has a tag-compatible trigger (`on.push.tags` or `workflow_dispatch`) when this mode is declared. |
 | `local` | Project's local release script runs on dev host (caution: interactive auth breaks /loop idempotency). |
 | `none` | Skip step 10 (PUSH). Deploy may still run if `remote_hosts` or `deploy_script` is set. |
+
+A tag existing on the remote does not prove a publishing CI path exists.
+Config-lint distinguishes `configured` (enum valid) from
+`verified_for_release` (tag trigger found in workflows).
 
 `deploy_script` is the command line to execute for step 9 (DEPLOY).
 It should be idempotent and handle its own rollback on failure.

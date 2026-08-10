@@ -257,6 +257,7 @@ valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 `ci_discovery` + `required_checks`, `preflight` lanes/limit,
 `merge_policy` strategy/method + per-work-item approval safety,
 `release_policy.auto_bump` + `trigger_globs` + `bump_script` existence,
+`publish_via` runtime-truth verification (tag trigger in `.github/workflows/` when `ci-tag-trigger`),
 `e2e_scripts` paths on disk, legacy `vault:` alias advisory.
 
 **Why-skipped (read-only):** `node skills/dev-loop/scripts/dev-loop-why-skipped.js --project <slug> --work <work-folder>` — missing automation gates + inventory findings for one item.
