@@ -373,6 +373,7 @@ function pluginCacheRoots() {
   return [
     path.join(home, ".claude", "plugins", "cache"),
     path.join(home, ".codex", "plugins", "cache"),
+    path.join(home, ".grok", "installed-plugins"),
   ];
 }
 

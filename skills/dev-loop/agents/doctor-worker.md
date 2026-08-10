@@ -53,6 +53,8 @@ This worker performs **two probes** per invocation and returns a combined JSON:
       - `~/.codex/plugins/cache/*/<plugin>/*/SKILL.md` (Codex plugin-root skill cache)
       - `~/.codex/plugins/cache/*/<plugin>/*/skills/<name>/SKILL.md`
       - `~/.codex/plugins/cache/*/<plugin>/*/<name>/SKILL.md`
+      - `~/.grok/installed-plugins/*-*/skills/<name>/SKILL.md` (Grok plugin skill cache)
+      - `~/.grok/installed-plugins/*-*/<name>/SKILL.md` (Grok plugin-root skill)
 
    **Agents** (`kind: agent`):
    - Split `ref` on `:` into `<plugin>` and `<name>`.
@@ -62,6 +64,8 @@ This worker performs **two probes** per invocation and returns a combined JSON:
       - `~/.claude/plugins/cache/*/<plugin>/*/agents/*.md`
       - `~/.codex/plugins/cache/*/<plugin>/*/agents/<name>.md`
       - `~/.codex/plugins/cache/*/<plugin>/*/agents/*.md`
+      - `~/.grok/installed-plugins/*-*/agents/<name>.md` (Grok plugin agent cache)
+      - `~/.grok/installed-plugins/*-*/agents/*.md`
    - For `agents/*.md` wildcard matches, read the YAML frontmatter and treat
      the entry as present when frontmatter `name:` equals `<name>`. This covers
      agents registered by frontmatter name where the file name is different,
@@ -72,6 +76,12 @@ This worker performs **two probes** per invocation and returns a combined JSON:
 3. Classify each entry:
    - `present` if any candidate path resolves.
    - `missing` if none resolve.
+   - When present, record `installed_via` based on which path resolved:
+     `plugin` (found in a plugin cache), `standalone` (found in a direct
+     skills directory), or `vault-local` (found inside a vault-local skills
+     directory). This helps diagnose cross-channel misreports where a
+     plugin-provided capability is reported missing because only one host's
+     standalone paths were probed.
 
 4. Compute overall classification:
    - `broken` if any `required[*].status == missing`

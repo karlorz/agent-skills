@@ -1,7 +1,7 @@
 {
   "name": "dev-loop",
-  "version": "1.26.27",
-  "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.26.27: config-lint verifies publish_via: ci-tag-trigger against actual GitHub workflow triggers; managed vault auto-commit uses path-scoped git staging instead of broad git add -A; preserves adaptive native/guided selection, explicit-only full activation, provider-independent pipeline selection, immutable plugin payload/version enforcement, exact host-aware cache diagnostics, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. Includes preflight prep mode, investigate, SkillWiki vault workflows, simplify review, CI health gates, and main-first release verification.",
+  "version": "1.26.28",
+  "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.26.28: dependency diagnosis probes Grok plugin cache paths and reports installed_via; claimability lifecycle distinguishes planned/claimable/waiting; research ranking separates project-owned from vault-global findings; provenance audit clarifies repo-relative sources; operator post-release verification checklist with in_sync/stale_session/payload_drift/manifest_mismatch/workflow_delivery_mismatch/unknown_host verdicts; preserves adaptive native/guided selection, explicit-only full activation, provider-independent pipeline selection, immutable plugin payload/version enforcement, exact host-aware cache diagnostics, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. Includes preflight prep mode, investigate, SkillWiki vault workflows, simplify review, CI health gates, and main-first release verification.",
   "author": {
     "name": "karlorz"
   },

@@ -7,7 +7,7 @@ description: >
   "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.27: config-lint verifies publish_via: ci-tag-trigger against actual GitHub workflow triggers (on.push.tags or workflow_dispatch); managed vault auto-commit in SAVE step 7 uses path-scoped git staging instead of broad git add -A, preserving unrelated dirty files. v1.26.25: adaptive native/guided/full workflow profiles with explicit-only full activation, fail-closed policy resolution, and provider-independent pipeline selection; preserves immutable plugin payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.28: dependency diagnosis probes Grok plugin cache paths and reports installed_via; claimability lifecycle distinguishes planned/claimable/waiting; research ranking separates project-owned from vault-global findings; provenance audit clarifies repo-relative sources; operator post-release verification checklist with in_sync/stale_session/payload_drift/manifest_mismatch/workflow_delivery_mismatch/unknown_host verdicts. v1.26.27: config-lint verifies publish_via: ci-tag-trigger against actual GitHub workflow triggers (on.push.tags or workflow_dispatch); managed vault auto-commit in SAVE step 7 uses path-scoped git staging instead of broad git add -A, preserving unrelated dirty files. v1.26.25: adaptive native/guided/full workflow profiles with explicit-only full activation, fail-closed policy resolution, and provider-independent pipeline selection; preserves immutable plugin payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -828,6 +828,8 @@ prd_disciplines:
      `~/.codex/plugins/cache/karlorz-agent-skills/dev-loop/<version>/`.
      For Claude, inspect only
      `~/.claude/plugins/cache/karlorz-agent-skills/dev-loop/<version>/`.
+   For Grok, inspect only
+     `~/.grok/installed-plugins/dev-loop-<hash>/`.
    - Hash the source and exact-version cached `SKILL.md`. Other semantic
      versions may be listed as inactive evidence, but never selected by mtime.
    - **States:**
@@ -1188,6 +1190,14 @@ prd_disciplines:
    - `degraded` → warn once per missing optional ref; store `DEP_DRIFT` set.
    - `healthy` → proceed.
 
+   **Runtime- and channel-aware probing:** The dependency probe inspects
+   Claude, Codex, and Grok plugin cache paths. Treat installation, session
+   registration, and callability as separate signals: an installed plugin
+   may still require a fresh session before its instructions are active. Do
+   not probe Claude-only standalone paths as authoritative in Codex or Grok
+   sessions. Keep optional dependency drift nonblocking when the documented
+   fallback is available, but make the reason and fallback explicit.
+
    **Behavior on `compact_count`** (tuned v1.20.0 — single auto-compacts in
    long-running loops are normal; previous thresholds escalated too aggressively):
    - `0` → one-line proactive emit: "Auto-compact monitor active — 0 firings
@@ -1252,6 +1262,23 @@ continue looking for ready work. Emit an `Automation Readiness Skips` block
 listing skipped slugs and missing/non-ready fields. If no ready work remains,
 fall through to the normal idle/goal continuation reporting instead of asking
 the user a question.
+
+**Claimability lifecycle (planned vs claimable vs waiting):** When ranking
+work items, distinguish three sub-states of `status: planned`:
+- **planned + claimable**: all readiness gates set and no blocking
+  conditions. This is immediately executable work.
+- **planned + waiting**: the item has an explicit waiting reason such as
+  `claimability: waiting_on_external_evidence` or
+  `claimability: waiting_on_human_approval` in frontmatter. These items
+  must NOT be selected for execution, but their waiting reason and next
+  external event should be surfaced in status output without repeatedly
+  re-selecting or declaring the project idle.
+- **planned + not-ready**: missing readiness fields but no explicit
+  waiting reason. These need `/dev-loop prep` before they become claimable.
+
+QUERY must rank `planned + claimable` separately from
+`planned + waiting`. Preserve the rule that a high-priority raw capture
+is not executable merely because its title contains `P0`.
 
 When `non_interactive_goal` is absent, preserve attended fallback behavior:
 warn before selecting an item without readiness metadata, then allow the
@@ -2043,6 +2070,20 @@ reference resolves and source frontmatter matches the body. Catches
 broken provenance from rotated raw files or moved concept pages. Quick
 read-only check — should report zero issues in healthy cycles.
 
+**Repo-relative and work-item sources:** Project work-item `sources:`
+entries that reference repo-relative paths (e.g.,
+`agent-skills/scripts/foo.js`) or sibling work-item artifacts (e.g.,
+`projects/<slug>/work/<item>/spec.md`) are valid implementation
+references, not raw-evidence citations. `skillwiki audit` may report
+these as `unused_sources` when the body does not contain `^[raw/...]`
+markers for them. This is expected: repo-relative sources do NOT require
+body markers, Markdown links, or a `## Sources Used` section — their
+presence in `sources:` frontmatter is sufficient provenance. Distinguish
+`unused_sources` that are raw-evidence citations (action: add body marker
+or remove from sources) from repo-relative implementation references
+(action: safe to ignore). Avoid creating citation churn merely to silence
+a diagnostic whose contract is unclear.
+
 **If `audit_vault` not in BACKEND_CAPS (git-local path):**
 Verify work-item directory structure completeness: each work item has
 spec.md, plan.md (or inline-justified skip), and retro.md. Flag
@@ -2315,6 +2356,60 @@ stale local state:
    Prune branches that have been merged upstream.
 3. **Uncommitted changes** — `git status --short`. Flag if work-in-progress
    has been sitting uncommitted for multiple cycles.
+
+## Operator Post-Release Verification Checklist
+
+After a dev-loop plugin release (version bump + tag + CI green), verify the
+release end-to-end. Each signal is checked separately; the final verdict is
+one of `in_sync`, `stale_session`, `payload_drift`, `manifest_mismatch`,
+`workflow_delivery_mismatch`, or `unknown_host`.
+
+```
+node skills/dev-loop/scripts/dev-loop-status.js \
+  --repo <cwd> \
+  --project <slug> \
+  --host <codex|claude|grok|unknown> \
+  --format both \
+  --preview-mode status
+```
+
+**Checklist (each signal is independent):**
+
+1. **Manifest agreement** — both plugin manifests (`.claude-plugin/plugin.json`
+   and `.codex-plugin/plugin.json`) and the marketplace entry declare the
+   same version. Mismatch → `manifest_mismatch`.
+2. **Payload hashing** — hash the source `SKILL.md` and the exact-version
+   cached `SKILL.md` for the active host. Different hashes → `payload_drift`.
+3. **Exact-SHA CI** — the commit at `HEAD` on `main` passed CI and E2E
+   (exact-SHA, not branch). Failing or stale CI → `workflow_delivery_mismatch`.
+4. **Tag peeling** — `git tag -l dev-loop-<version>` exists and peels to the
+   expected commit. Missing or mismatched tag → `workflow_delivery_mismatch`.
+5. **Session freshness** — installing or updating a plugin does NOT hot-swap
+   instructions into the current session. A stale session that has not been
+   restarted after an update → `stale_session`.
+6. **Marketplace discoverability** — the root `.claude-plugin/marketplace.json`
+   has a matching entry for the plugin. This is authoritative for Codex.
+   Missing → `manifest_mismatch`.
+
+**Verdicts:**
+- `in_sync`: all signals pass. The release is verified end-to-end.
+- `stale_session`: payload and manifests agree, but the current session has
+  not been restarted after the update. Restart and re-verify.
+- `payload_drift`: the cached payload hash differs from the source. Advance
+  the version and reinstall; never mutate an installed cache in place.
+- `manifest_mismatch`: manifests or marketplace disagree on version. Fix the
+  manifest and re-verify.
+- `workflow_delivery_mismatch`: CI is failing, stale, or the tag is missing.
+  Do not proceed until exact-SHA CI passes and the tag peels correctly.
+- `unknown_host`: the active host cannot be resolved. Block without
+  suggesting a write.
+
+**Recovery commands:**
+- Codex: `codex plugin add dev-loop@karlorz-agent-skills --json`
+- Claude: `claude plugin update dev-loop@karlorz-agent-skills`
+- Grok: `grok plugin update dev-loop`
+Never recommend mutating a versioned cache in place. Always use the
+platform's supported plugin installer/update path and restart the session.
 
 ## Hard Rules
 

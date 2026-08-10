@@ -147,6 +147,25 @@ there's claimable work to pick up.
 
 Score: impact × effort
 
+**Ownership classification (applied before final ranking):** Classify each
+finding by ownership boundary before applying P-scores:
+- `project-owned`: the finding is in the current repository/project's code
+  or vault pages. Highest claimability.
+- `vault-global`: vault-wide findings (sensitive-content detections, broken
+  wikilinks across projects). Real maintenance, but should not displace the
+  highest actionable project-owned finding.
+- `cross-project`: findings spanning multiple projects. Route to the
+  appropriate project or maintenance project.
+- `external-approval-required`: findings that require human approval before
+  any code or mutation change.
+
+Report both a **global maintenance priority** and a **current-project
+priority**. Prevent sensitive-content detector hits from being described as
+confirmed live secrets until attended classification occurs; never print
+detected values. Route global SkillWiki integrity work to the appropriate
+`llm-wiki` or maintenance project rather than creating an unrelated
+`agent-skills` work item automatically.
+
 | P | Impact | Examples |
 |---|--------|----------|
 | P0 | Spec violation | Regression, broken contract |
