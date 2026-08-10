@@ -39,7 +39,7 @@ The skill runs `scripts/install.sh`, which:
 3. Renders `config.toml`, carrying over any host-set keys the template does
    not emit (`[plugins].disabled`, extra marketplace sources, extra tables)
 4. Adds the companion marketplaces (karlorz-agent-skills, llm-wiki,
-   openai-codex, claude-plugins-official) and installs the 13-plugin set with
+   openai-codex, claude-plugins-official) and installs the 14-plugin set with
    `--trust`
 5. Verifies with `grok plugin list --json` and `grok inspect --json`
 

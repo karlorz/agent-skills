@@ -70,10 +70,13 @@ assert_contains "with-keys: context7 key injected" \
 assert_contains "with-keys: enabled list substituted" \
   "$(cat "$TEST_ROOT/with-keys.toml")" 'enabled = ["superpowers", "dev-loop", "skillwiki"]'
 
-# --- regression: harness plugin must be in [plugins].enabled ---------
-run_generate "$TEST_ROOT/harness-enabled.toml" --enabled "grok-build-harness,superpowers"
-assert_contains "harness plugin in enabled list" \
-  "$(cat "$TEST_ROOT/harness-enabled.toml")" '"grok-build-harness"'
+# --- regression: harness plugin must be in PLUGIN_SPECS + [plugins].enabled ---
+# Assert the harness plugin is in install.sh's PLUGIN_SPECS (the source of
+# truth for [plugins].enabled) — this is the guard that catches the original
+# bug. The dry-run assertion below independently verifies it surfaces in the
+# plugins line.
+assert_contains "harness plugin in PLUGIN_SPECS" \
+  "$(cat "$INSTALL")" 'grok-build-harness|grok-build-harness|SKIP_NONE'
 
 # --- config generation: env-only ---------------------------------------------
 run_generate "$TEST_ROOT/env-only.toml" --enabled "superpowers"

@@ -59,7 +59,7 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
    (model aliases won't resolve until `HARNESS_HUB_KEY` / `HARNESS_NEW_KEY`
    are exported).
 3. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
-   the 13 companion plugins, `grok inspect --json` reports agents discovered
+   the 14 enabled plugins (13 companions + grok-build-harness itself), `grok inspect --json` reports agents discovered
    (expect the 2 user agents + plugin agents) and no unresolved key tokens in
    config.toml.
 4. **Finish**: tell the user to start a new session so `~/.grok/AGENTS.md` and
