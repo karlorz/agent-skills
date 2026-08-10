@@ -11,7 +11,7 @@
     {
       "name": "deep-research",
       "source": "./skills/deep-research",
-      "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7/API verification, tiered model pinning (sonnet/haiku agents for external research, parent model for synthesis), deep-fetch, content refinement, and flexible output: terminal, file, or skillwiki vault integration with schema-compatible follow-up queueing. Spawnable as a subagent (model: sonnet) via deep-research:deep-research. v2.4.3: latest-by-default source triage, grok-search freshness, and Freshness & Verification Status reporting.",
+      "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration. Spawnable as a subagent (model: sonnet) via deep-research:deep-research.",
       "version": "2.4.3",
       "category": "research",
       "keywords": [
@@ -44,8 +44,8 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.26.29: bump-version.sh auto-inserts v<semver>: description markers. v1.26.28: dependency diagnosis probes Grok plugin cache paths and reports installed_via; claimability lifecycle distinguishes planned/claimable/waiting; research ranking separates project-owned from vault-global findings; provenance audit clarifies repo-relative sources; operator post-release verification checklist with in_sync/stale_session/payload_drift/manifest_mismatch/workflow_delivery_mismatch/unknown_host verdicts; preserves adaptive native/guided selection, explicit-only full activation, provider-independent pipeline selection, immutable plugin payload/version enforcement, exact host-aware cache diagnostics, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. Includes preflight prep mode, investigate, SkillWiki vault workflows, simplify review, CI health gates, and main-first release verification.",
-      "version": "1.26.29",
+      "description": "Adaptive dev cycle engine with SkillWiki vault, preflight prep, investigate, office-hours, config-lint, and cross-harness verification. Pass `high` for aggressive mode.",
+      "version": "1.26.30",
       "category": "automation",
       "keywords": [
         "dev-loop",
@@ -163,7 +163,7 @@
     {
       "name": "host-backup-restore",
       "source": "./skills/host-backup-restore",
-      "description": "Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker), post-discovery research, and skillwiki infrastructure capture. v3.6.4: explicit SSH/Tailscale identity restore for post-reinstall hosts, with safety snapshots, ca-certificates handling, and SSH validation. Supports Caddy domains, databases, systemd services, Hermes snapshots, and restore target pre-inspection.",
+      "description": "Host-level backup and restore with profile system, model-aware sonnet workers, post-discovery research, skillwiki infrastructure capture, and Hermes module. Supports Caddy domains, databases, systemd services, and Hermes snapshots.",
       "version": "3.6.4",
       "category": "operations",
       "keywords": [
@@ -184,7 +184,7 @@
     {
       "name": "grill-me",
       "source": "./skills/grill-me",
-      "description": "Relentless plan/design interview skills adapted from Matt Pocock's grilling, with inline cross-platform question style. v1.0.0: packages both skill names for direct invocation.",
+      "description": "Relentless plan/design interview skills adapted from Matt Pocock's grilling, with inline cross-platform question style.",
       "version": "1.0.0",
       "category": "productivity",
       "keywords": [
@@ -204,7 +204,7 @@
     {
       "name": "codebase-architecture",
       "source": "./skills/codebase-architecture",
-      "description": "Codebase analysis and reimplementation skill chain: router, deep-module design vocabulary, architecture analyze/extract (wiki-first markdown to projects/{slug}/architecture else repo docs/architecture), deepening HTML/MD reviews, and architecture-to-spec PRDs. Distilled from mattpocock design skills + architecture-explainer playbook. v0.1.1: vocabulary fix (module extracts), YAGNI improve, C4 evidence, slug algorithm, router skill, Codex openai.yaml.",
+      "description": "Codebase analysis and reimplementation skill chain: router, deep-module design vocabulary, architecture analyze/extract, deepening HTML/MD reviews, and architecture-to-spec PRDs.",
       "version": "0.1.1",
       "category": "architecture",
       "keywords": [
@@ -244,7 +244,7 @@
     {
       "name": "grok-build-harness",
       "source": "./skills/grok-build-harness",
-      "description": "v0.3.1: Fresh-host bootstrap for the karlorz subagent harness \u2014 installs the custom grok-build-byok parent agent and scout subagent, agentrules.md routing rules, the spliced subagent-contract AGENTS.md (user content preserved), and a sanitized BYOK config template that preserves host-set keys, then adds the companion marketplaces and installs the plugin set with --trust. Idempotent, backup-first, GROK_HOME-aware; keyed configs are never silently downgraded on keyless re-runs.",
+      "description": "Fresh-host bootstrap for the karlorz subagent harness \u2014 installs custom agents, agentrules, BYOK config, and the companion plugin set. Idempotent, backup-first, GROK_HOME-aware.",
       "version": "0.3.1",
       "category": "operations",
       "keywords": [

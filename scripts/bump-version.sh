@@ -4,9 +4,8 @@
 #
 # A plugin's release identity lives in two or three manifests that must stay in
 # sync. The Claude manifest is the release metadata anchor; the Codex manifest
-# and marketplace entry must agree on name and version. Descriptions may vary
-# by install surface, but any explicit v<semver>: release marker must match the
-# manifest version.
+# and marketplace entry must agree on name and version. Descriptions are stable
+# prose and never carry release version markers.
 #
 # The version lives in:
 #   1. skills/<skill>/.claude-plugin/plugin.json              "version": "X.Y.Z"
@@ -15,14 +14,13 @@
 #
 # This script reads the current version from .claude-plugin/plugin.json,
 # computes the next version, and rewrites all manifest files in place while
-# preserving their exact formatting. SKILL.md frontmatter follows the Agent
-# Skills schema and must not carry release version fields; however, when the
-# description: field contains an explicit v<semver>: release-marker chain, the
-# script inserts a bare v{new}: marker at the front of that chain so the
-# description stays in sync with the manifest version without manual editing.
-# This script does NOT git add/commit/tag/push — the dev-loop PUSH step owns
-# that. It prints the suggested tag in the repo's tag_format ({skill}-{version},
-# e.g. dev-loop-1.20.1).
+# preserving their exact formatting. Release notes live in
+# skills/<skill>/CHANGELOG.md (Keep a Changelog format): when the skill has a
+# CHANGELOG.md, the script prepends an empty "## [NEW] - YYYY-MM-DD" entry after
+# the header for the maintainer to fill in; skills without a CHANGELOG.md are a
+# silent no-op. This script does NOT git add/commit/tag/push — the dev-loop
+# PUSH step owns that. It prints the suggested tag in the repo's tag_format
+# ({skill}-{version}, e.g. dev-loop-1.20.1).
 #
 # Usage:
 #   scripts/bump-version.sh <skill> [patch|minor|major] [options]
@@ -210,22 +208,23 @@ if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
 fi
 FILES="$FILES, .claude-plugin/marketplace.json"
 
-# --- detect SKILL.md description v<semver> marker chain ----------------------
-# If the description: field contains a v<X.Y.Z>: release-marker chain, insert
-# a bare v{NEW}: marker at the front of the chain. Skills without the marker
-# pattern are unaffected.
-HAS_DESC_MARKER=0
-if [ -n "$SKILL_MD" ] && [ -f "$SKILL_MD" ]; then
-  if grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+:' "$SKILL_MD"; then
-    HAS_DESC_MARKER=1
-    FILES="$FILES, $(echo "$SKILL_MD" | sed "s|$REPO_ROOT/||")"
-  fi
+# --- detect skill CHANGELOG.md -----------------------------------------------
+# Release notes live in skills/<skill>/CHANGELOG.md (Keep a Changelog format).
+# When present, prepend an empty "## [NEW] - YYYY-MM-DD" entry after the header
+# so the maintainer can fill in the notes. Skills without a CHANGELOG.md are a
+# silent no-op.
+CHANGELOG="$SKILL_DIR/CHANGELOG.md"
+CHANGELOG_DATE="$(date +%Y-%m-%d)"
+HAS_CHANGELOG=0
+if [ -f "$CHANGELOG" ]; then
+  HAS_CHANGELOG=1
+  FILES="$FILES, skills/$SKILL/CHANGELOG.md"
 fi
 
 printf 'files:    %s\n' "$FILES"
 
-if [ "$HAS_DESC_MARKER" -eq 1 ]; then
-  printf 'description-marker: insert v%s: at front of SKILL.md chain\n' "$NEW"
+if [ "$HAS_CHANGELOG" -eq 1 ]; then
+  printf 'changelog: prepend "## [%s] - %s" entry to skills/%s/CHANGELOG.md\n' "$NEW" "$CHANGELOG_DATE" "$SKILL"
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -267,23 +266,27 @@ awk -v name="$SKILL" -v ver="$NEW" '
   { print }
 ' "$MARKETPLACE" > "$tmp" && mv "$tmp" "$MARKETPLACE"
 
-# --- SKILL.md description v<semver> marker insertion -------------------------
-# Insert a bare "v{NEW}: " at the front of the existing release-marker chain.
-# The marker chain lives in the description: > block, typically on one long
-# line: "  Pass `high` for aggressive mode. v1.26.28: ... v1.26.27: ...".
-# We insert before the FIRST v<semver>: occurrence on the line that has the
-# markers.  Skills without the pattern are skipped (HAS_DESC_MARKER=0).
-if [ "$HAS_DESC_MARKER" -eq 1 ]; then
+# --- CHANGELOG.md entry prepend ----------------------------------------------
+# Insert "## [NEW] - DATE" plus a blank line right before the first "## "
+# release entry (i.e. after the header block). If the file has no "## " entry
+# yet, append at the end. Skills without a CHANGELOG.md are skipped
+# (HAS_CHANGELOG=0); the maintainer fills in the notes manually.
+if [ "$HAS_CHANGELOG" -eq 1 ]; then
   tmp="$(mktemp)"
-  awk -v newver="$NEW" '
-    !done && match($0, /v[0-9]+\.[0-9]+\.[0-9]+:/) {
-      pos = RSTART
-      # Insert "v{newver}: " right before the first v<semver>: marker.
-      $0 = substr($0, 1, pos-1) "v" newver ": " substr($0, pos)
+  awk -v header="## [$NEW] - $CHANGELOG_DATE" '
+    !done && /^## / {
+      print header
+      print ""
       done=1
     }
     { print }
-  ' "$SKILL_MD" > "$tmp" && mv "$tmp" "$SKILL_MD"
+    END {
+      if (!done) {
+        print header
+        print ""
+      }
+    }
+  ' "$CHANGELOG" > "$tmp" && mv "$tmp" "$CHANGELOG"
 fi
 
 # --- verify all manifests now agree ------------------------------------------

@@ -45,8 +45,8 @@ assert_fail() {
   fi
 }
 
-stale_marker_root="$(copy_fixture stale-marker)"
-python3 - "$stale_marker_root" <<'PY'
+marker_root="$(copy_fixture unwanted-marker)"
+python3 - "$marker_root" <<'PY'
 import json
 import pathlib
 import sys
@@ -68,7 +68,7 @@ for plugin in data["plugins"]:
         plugin["description"] += " v9.9.9: stale fixture marker."
 marketplace.write_text(json.dumps(data, indent=2) + "\n")
 PY
-assert_fail "stale release marker is reported" "release marker" "$stale_marker_root"
+assert_fail "release markers in descriptions are reported" "release marker" "$marker_root"
 
 duplicate_root="$(copy_fixture duplicate-entry)"
 python3 - "$duplicate_root" <<'PY'

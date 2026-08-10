@@ -213,47 +213,54 @@ EOF
   assert_eq "demo-basic marketplace" "$(read_market_version "$tmp/.claude-plugin/marketplace.json" demo-basic)" "0.4.1"
 }
 
-run_bump_version_description_marker_checks() {
-  local tmp saved_cwd
+run_bump_version_changelog_checks() {
+  local tmp
   tmp="$(mktemp -d)"
-  saved_cwd="$(pwd)"
-  trap 'cd "$saved_cwd"; rm -rf "$tmp"' RETURN
+  trap 'rm -rf "$tmp"' RETURN
 
   mkdir -p "$tmp/scripts" "$tmp/.claude-plugin"
   cp "$ROOT/scripts/bump-version.sh" "$tmp/scripts/bump-version.sh"
   chmod +x "$tmp/scripts/bump-version.sh"
 
-  # Skill WITH a v<semver>: description marker chain (nested layout)
-  mkdir -p "$tmp/skills/demo-marker/skills/demo-marker"
-  mkdir -p "$tmp/skills/demo-marker/.claude-plugin"
-  mkdir -p "$tmp/skills/demo-marker/.codex-plugin"
-  cat > "$tmp/skills/demo-marker/skills/demo-marker/SKILL.md" <<'EOF'
+  # Skill WITH a CHANGELOG.md (nested layout)
+  mkdir -p "$tmp/skills/demo-changelog/skills/demo-changelog"
+  mkdir -p "$tmp/skills/demo-changelog/.claude-plugin"
+  mkdir -p "$tmp/skills/demo-changelog/.codex-plugin"
+  cat > "$tmp/skills/demo-changelog/skills/demo-changelog/SKILL.md" <<'EOF'
 ---
-name: demo-marker
-description: >
-  A demo skill. v1.0.0: initial release with markers. v0.9.0: beta.
+name: demo-changelog
+description: A demo skill.
 ---
 EOF
-  cat > "$tmp/skills/demo-marker/.claude-plugin/plugin.json" <<'EOF'
+  cat > "$tmp/skills/demo-changelog/.claude-plugin/plugin.json" <<'EOF'
 {
-  "name": "demo-marker",
+  "name": "demo-changelog",
   "version": "1.0.0"
 }
 EOF
-  cat > "$tmp/skills/demo-marker/.codex-plugin/plugin.json" <<'EOF'
+  cat > "$tmp/skills/demo-changelog/.codex-plugin/plugin.json" <<'EOF'
 {
-  "name": "demo-marker",
+  "name": "demo-changelog",
   "version": "1.0.0"
 }
+EOF
+  cat > "$tmp/skills/demo-changelog/CHANGELOG.md" <<'EOF'
+# Changelog
+
+All notable changes to this skill are documented in this file.
+
+## [1.0.0] - 2026-01-01
+
+- Initial release.
 EOF
 
-  # Skill WITHOUT any v<semver>: marker (should be a no-op for SKILL.md)
+  # Skill WITHOUT a CHANGELOG.md (should be a silent no-op)
   mkdir -p "$tmp/skills/demo-plain/skills/demo-plain"
   mkdir -p "$tmp/skills/demo-plain/.claude-plugin"
   cat > "$tmp/skills/demo-plain/skills/demo-plain/SKILL.md" <<'EOF'
 ---
 name: demo-plain
-description: A plain skill with no version markers.
+description: A plain skill with no changelog.
 ---
 EOF
   cat > "$tmp/skills/demo-plain/.claude-plugin/plugin.json" <<'EOF'
@@ -267,7 +274,7 @@ EOF
 {
   "plugins": [
     {
-      "name": "demo-marker",
+      "name": "demo-changelog",
       "version": "1.0.0"
     },
     {
@@ -278,32 +285,41 @@ EOF
 }
 EOF
 
-  # Dry-run: should report description-marker insertion
+  # Dry-run: should report the CHANGELOG.md prepend
   local dry_out
-  dry_out="$(cd "$tmp" && ./scripts/bump-version.sh demo-marker --set 1.1.0 --dry-run)"
-  assert_contains "marker dry-run reports SKILL.md" "$dry_out" "SKILL.md"
-  assert_contains "marker dry-run reports insertion" "$dry_out" "description-marker: insert v1.1.0:"
+  dry_out="$(cd "$tmp" && ./scripts/bump-version.sh demo-changelog --set 1.1.0 --dry-run)"
+  assert_contains "changelog dry-run reports CHANGELOG.md" "$dry_out" "CHANGELOG.md"
+  assert_contains "changelog dry-run reports entry" "$dry_out" "## [1.1.0]"
 
-  # Real bump: verify marker inserted at front of chain
-  cd "$tmp" && ./scripts/bump-version.sh demo-marker --set 1.1.0 >/dev/null 2>&1
-  local skill_md="$tmp/skills/demo-marker/skills/demo-marker/SKILL.md"
-  assert_contains "marker inserted v1.1.0 at front" "$(cat "$skill_md")" "v1.1.0:"
-  assert_contains "marker preserved old v1.0.0" "$(cat "$skill_md")" "v1.0.0:"
-  assert_contains "marker preserved old v0.9.0" "$(cat "$skill_md")" "v0.9.0:"
+  # Real bump: verify the new entry was prepended and old entries preserved
+  (cd "$tmp" && ./scripts/bump-version.sh demo-changelog --set 1.1.0 >/dev/null 2>&1)
+  local changelog new_line old_line
+  changelog="$(cat "$tmp/skills/demo-changelog/CHANGELOG.md")"
+  assert_contains "changelog header preserved" "$changelog" "All notable changes to this skill are documented in this file."
+  assert_contains "changelog prepended new version" "$changelog" "## [1.1.0] - "
+  assert_contains "changelog preserved old version entry" "$changelog" "## [1.0.0] - 2026-01-01"
+  assert_contains "changelog preserved old notes" "$changelog" "- Initial release."
 
-  # Verify v1.1.0 appears before v1.0.0 in the description text
-  local desc_line first_col second_col
-  desc_line=$(grep 'v1\.1\.0:' "$skill_md" | head -1)
-  first_col=$(printf '%s' "$desc_line" | awk '{ print index($0, "v1.1.0:") }')
-  second_col=$(printf '%s' "$desc_line" | awk '{ print index($0, "v1.0.0:") }')
-  [ "$first_col" -lt "$second_col" ] ||
-    fail "v1.1.0 marker should appear before v1.0.0 (got cols $first_col vs $second_col)"
+  new_line="$(grep -n '^## \[1\.1\.0\]' "$tmp/skills/demo-changelog/CHANGELOG.md" | head -1 | cut -d: -f1)"
+  old_line="$(grep -n '^## \[1\.0\.0\]' "$tmp/skills/demo-changelog/CHANGELOG.md" | head -1 | cut -d: -f1)"
+  [ -n "$new_line" ] && [ -n "$old_line" ] ||
+    fail "changelog version entries not found"
+  [ "$new_line" -lt "$old_line" ] ||
+    fail "new changelog entry should appear before the old entry (got lines $new_line vs $old_line)"
 
-  # No-marker skill: should NOT report SKILL.md or description-marker
+  # The new entry is empty (just the version header) — maintainer fills notes
+  local next_line
+  next_line="$(sed -n "$((new_line + 1))p" "$tmp/skills/demo-changelog/CHANGELOG.md")"
+  [ -z "$next_line" ] ||
+    fail "new changelog entry must be empty (just the version header), got: '$next_line'"
+
+  # No-changelog skill: dry-run must not mention CHANGELOG.md; real run is a no-op
   local plain_dry
   plain_dry="$(cd "$tmp" && ./scripts/bump-version.sh demo-plain --set 2.1.0 --dry-run)"
-  assert_not_contains "plain dry-run no SKILL.md" "$plain_dry" "SKILL.md"
-  assert_not_contains "plain dry-run no description-marker" "$plain_dry" "description-marker"
+  assert_not_contains "plain dry-run no CHANGELOG.md" "$plain_dry" "CHANGELOG.md"
+  (cd "$tmp" && ./scripts/bump-version.sh demo-plain --set 2.1.0 >/dev/null 2>&1)
+  [ ! -e "$tmp/skills/demo-plain/CHANGELOG.md" ] ||
+    fail "skill without CHANGELOG.md must not create one"
 }
 
 run_doctor_prompt_contract_checks() {
@@ -768,19 +784,20 @@ run_dev_loop_metadata_contract_checks() {
   codex_description="$(jq -r '.description' "$codex_manifest")"
   marketplace_description="$(jq -r '.plugins[] | select(.name == "dev-loop") | .description' "$marketplace")"
 
-  assert_contains "dev-loop SKILL.md current version headline" "$(cat "$skill_root/skills/dev-loop/SKILL.md")" "v${skill_version}:"
-  assert_contains "dev-loop Claude manifest current version headline" "$claude_description" "v${skill_version}:"
-  assert_contains "dev-loop Codex manifest current version headline" "$codex_description" "v${skill_version}:"
-  assert_contains "dev-loop marketplace current version headline" "$marketplace_description" "v${skill_version}:"
+  # Descriptions are stable prose: no v<semver>: release markers anywhere.
+  assert_no_release_markers "dev-loop SKILL.md description" "$(read_frontmatter_field "$skill_root/skills/dev-loop/SKILL.md" description)"
+  assert_no_release_markers "dev-loop Claude manifest description" "$claude_description"
+  assert_no_release_markers "dev-loop Codex manifest description" "$codex_description"
+  assert_no_release_markers "dev-loop marketplace description" "$marketplace_description"
   assert_eq "dev-loop Claude/Codex release headline" "$claude_description" "$codex_description"
   assert_eq "dev-loop Claude/marketplace release headline" "$claude_description" "$marketplace_description"
-  assert_contains "dev-loop release headline immutable payload contract" "$claude_description" "immutable plugin payload/version enforcement"
-  assert_contains "dev-loop release headline host-aware cache contract" "$claude_description" "exact host-aware cache diagnostics"
-  assert_contains "dev-loop release headline fresh-session recovery" "$claude_description" "platform-correct fresh-session recovery"
 
-  assert_contains "dev-loop Claude manifest mentions prep mode" "$claude_description" "preflight prep mode"
-  assert_contains "dev-loop Codex manifest mentions prep mode" "$codex_description" "preflight prep mode"
-  assert_contains "dev-loop marketplace mentions prep mode" "$marketplace_description" "preflight prep mode"
+  assert_contains "dev-loop Claude manifest mentions prep mode" "$claude_description" "preflight prep"
+  assert_contains "dev-loop Codex manifest mentions prep mode" "$codex_description" "preflight prep"
+  assert_contains "dev-loop marketplace mentions prep mode" "$marketplace_description" "preflight prep"
+
+  [ -f "$skill_root/CHANGELOG.md" ] || fail "skills/dev-loop/CHANGELOG.md missing"
+  assert_contains "dev-loop CHANGELOG current version entry" "$(cat "$skill_root/CHANGELOG.md")" "## [$skill_version]"
 
   assert_json_array_contains "dev-loop Claude manifest prep keyword" "$claude_manifest" ".keywords" "prep"
   assert_json_array_contains "dev-loop Claude manifest preflight keyword" "$claude_manifest" ".keywords" "preflight"
@@ -873,56 +890,25 @@ run_plugin_version_sync_contract_checks() {
   )
 }
 
-assert_release_markers() {
-  local label="$1" description="$2" expected_version="$3"
+assert_no_release_markers() {
+  local label="$1" description="$2"
 
-  # The description may contain a chain of historical v<semver>: markers
-  # (v1.26.29: ... v1.26.28: ... v1.26.27: ...). The FIRST (most recent)
-  # marker must match the current manifest version. Additionally, no marker
-  # may exceed the current version (catches stale/future fixture markers).
-  local first_marker max_marker
-  first_marker="$(
-    python3 - "$description" "$expected_version" <<'PY'
+  # Descriptions are stable prose and must NEVER carry v<semver>: release
+  # markers; release notes live in skills/<skill>/CHANGELOG.md instead.
+  local marker
+  marker="$(
+    python3 - "$description" <<'PY'
 import re
 import sys
 
 description = sys.argv[1]
-expected = sys.argv[2]
 markers = re.findall(r"\bv([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?):", description)
 if markers:
     print(markers[0])
 PY
   )"
-
-  if [ -n "$first_marker" ]; then
-    assert_eq "$label release marker" "$first_marker" "$expected_version"
-
-    # Also check that no marker version exceeds the current version.
-    # This catches stale/future fixture markers (e.g. v9.9.9:) without
-    # rejecting the legitimate historical chain.
-    max_marker="$(
-      python3 - "$description" "$expected_version" <<'PY'
-import re
-import sys
-
-description = sys.argv[1]
-expected = sys.argv[2]
-markers = re.findall(r"\bv([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?):", description)
-
-def parse_ver(v):
-    base = v.split("-")[0]
-    return tuple(int(x) for x in base.split("."))
-
-expected_ver = parse_ver(expected)
-for m in markers:
-    if parse_ver(m) > expected_ver:
-        print(m)
-        break
-PY
-    )"
-    [ -z "$max_marker" ] ||
-      fail "$label release marker v$max_marker: exceeds current version $expected_version"
-  fi
+  [ -z "$marker" ] ||
+    fail "$label: unexpected v<semver>: release marker 'v$marker:' in description"
 }
 
 run_plugin_metadata_contract_checks() {
@@ -949,14 +935,14 @@ run_plugin_metadata_contract_checks() {
     assert_eq "$name marketplace/Claude name" "$(jq -r '.name' "$claude_manifest")" "$name"
     assert_eq "$name marketplace/Claude version" "$(read_json_version "$claude_manifest")" "$version"
     claude_description="$(jq -r '.description // empty' "$claude_manifest")"
-    assert_release_markers "$name marketplace" "$marketplace_description" "$version"
-    assert_release_markers "$name Claude manifest" "$claude_description" "$version"
+    assert_no_release_markers "$name marketplace" "$marketplace_description"
+    assert_no_release_markers "$name Claude manifest" "$claude_description"
 
     if [ -f "$codex_manifest" ]; then
       assert_eq "$name Codex/Claude name" "$(jq -r '.name' "$codex_manifest")" "$name"
       assert_eq "$name Codex/Claude version" "$(read_json_version "$codex_manifest")" "$version"
       codex_description="$(jq -r '.description // empty' "$codex_manifest")"
-      assert_release_markers "$name Codex manifest" "$codex_description" "$version"
+      assert_no_release_markers "$name Codex manifest" "$codex_description"
     fi
   done < <(
     jq -r '.plugins[] | [.name, .version, .source, (.description // "")] | @tsv' "$marketplace" | sort
@@ -966,10 +952,10 @@ run_plugin_metadata_contract_checks() {
     name="$(jq -r '.name' "$root/.claude-plugin/plugin.json")"
     version="$(read_json_version "$root/.claude-plugin/plugin.json")"
     claude_description="$(jq -r '.description // empty' "$root/.claude-plugin/plugin.json")"
-    assert_release_markers "$name Claude manifest" "$claude_description" "$version"
+    assert_no_release_markers "$name Claude manifest" "$claude_description"
     if [ -f "$root/.codex-plugin/plugin.json" ]; then
       codex_description="$(jq -r '.description // empty' "$root/.codex-plugin/plugin.json")"
-      assert_release_markers "$name Codex manifest" "$codex_description" "$version"
+      assert_no_release_markers "$name Codex manifest" "$codex_description"
     fi
   done < <(
     find "$ROOT/skills" -mindepth 3 -maxdepth 3 -type f \
@@ -1054,7 +1040,7 @@ run_codex_skill_mirror_contract_checks() {
 }
 
 run_bump_version_checks
-run_bump_version_description_marker_checks
+run_bump_version_changelog_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_simplify_skill_contract_checks
