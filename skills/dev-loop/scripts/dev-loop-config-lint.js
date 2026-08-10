@@ -66,6 +66,75 @@ function exists(p) {
   }
 }
 
+/**
+ * Check if any GitHub Actions workflow file in the given directory has a
+ * tag-compatible trigger: on.push.tags (non-empty) or workflow_dispatch.
+ * Uses regex extraction since js-yaml is not a project dependency.
+ */
+function hasTagCompatibleTrigger(workflowsDir) {
+  let files = [];
+  try {
+    files = fs.readdirSync(workflowsDir).filter((f) => /\.ya?ml$/i.test(f));
+  } catch {
+    return false;
+  }
+  for (const file of files) {
+    const filePath = path.join(workflowsDir, file);
+    let content = "";
+    try {
+      content = fs.readFileSync(filePath, "utf8");
+    } catch {
+      continue;
+    }
+    // Strip leading "---" document marker if present
+    const body = content.replace(/^---\s*\n/, "");
+    // Quick check: is there an "on:" key at the start of a line?
+    const onMatch = body.match(/^on:\s*(.*)$/m);
+    if (!onMatch) continue;
+    // If "on:" is followed by workflow_dispatch, it's a compatible trigger
+    const onInline = onMatch[1].trim();
+    if (/^workflow_dispatch\b/.test(onInline)) return true;
+    // If "on:" is an inline flow mapping, check for tags or workflow_dispatch
+    if (onInline.startsWith("{")) {
+      if (/workflow_dispatch/.test(onInline)) return true;
+      if (/tags\s*:/.test(onInline)) return true;
+      continue;
+    }
+    // Block-style: read lines after "on:" until the next top-level key
+    const lines = body.split("\n");
+    const onLineIdx = lines.findIndex((l) => /^on:\s*.*$/.test(l));
+    if (onLineIdx === -1) continue;
+    // Scan indented lines under "on:" block
+    for (let i = onLineIdx + 1; i < lines.length; i += 1) {
+      const line = lines[i];
+      // Stop at next top-level key (same or less indentation)
+      if (/^\S/.test(line)) break;
+      if (/^\s*workflow_dispatch\s*:/.test(line)) return true;
+      if (/^\s*push\s*:/.test(line)) {
+        // Check for tags: under this push block
+        for (let j = i + 1; j < lines.length; j += 1) {
+          const pushLine = lines[j];
+          if (/^\S/.test(pushLine)) break;
+          // Stop if we've left the push block (next key at same indent)
+          if (/^\s{2,}\S/.test(pushLine) && !/^\s{4,}/.test(pushLine) && !/^\s*tags\s*:/.test(pushLine) && !/^\s*branches\s*:/.test(pushLine) && !/^\s*paths\s*:/.test(pushLine)) break;
+          if (/^\s*tags\s*:/.test(pushLine)) {
+            // Check it's non-empty (has array items or inline values)
+            const tagsLine = pushLine.replace(/^\s*tags\s*:\s*/, "");
+            if (tagsLine.length > 0) return true;
+            // Check next lines for array items
+            for (let k = j + 1; k < lines.length; k += 1) {
+              const arrLine = lines[k];
+              if (!/^\s*[-]/.test(arrLine)) break;
+              return true;
+            }
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
 function lint(repo) {
   const configPath = path.join(repo, ".claude", "dev-loop.config.md");
   const templatePath = path.join(repo, "skills", "dev-loop", "templates", "project-config.md");
@@ -233,6 +302,28 @@ function lint(repo) {
       code: "publish_without_release_policy",
       message: "publish_via set but release_policy block absent — auto-bump at PUSH will not run",
     });
+  }
+  // Verify publish_via: ci-tag-trigger against actual workflow triggers
+  if (flat.publish_via === "ci-tag-trigger") {
+    const workflowsDir = path.join(repo, ".github", "workflows");
+    if (!exists(workflowsDir)) {
+      findings.push({
+        severity: "warn",
+        code: "publish_via_no_tag_trigger",
+        message: "publish_via=ci-tag-trigger but no .github/workflows/ directory found - the declared CI publishing path does not exist",
+      });
+    } else if (hasTagCompatibleTrigger(workflowsDir)) {
+      infos.push({
+        code: "publish_via_verified",
+        message: "publish_via=ci-tag-trigger and a tag-compatible workflow trigger (on.push.tags or workflow_dispatch) was found",
+      });
+    } else {
+      findings.push({
+        severity: "warn",
+        code: "publish_via_no_tag_trigger",
+        message: "publish_via=ci-tag-trigger but no GitHub workflow has a tag trigger (on.push.tags) or workflow_dispatch - the declared CI publishing path may not exist",
+      });
+    }
   }
   const mergePolicy = flat.merge_policy || null;
   if (mergePolicy && mergePolicy.strategy && !MERGE_STRATEGIES.has(mergePolicy.strategy)) {

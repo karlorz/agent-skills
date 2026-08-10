@@ -7,7 +7,7 @@ description: >
   "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode. v1.26.26: raw runtime workflow policy shape/type validation fails closed at the winning authority instead of falling through on malformed non-string values; aligns the full pipeline table with its existing save stage. v1.26.25: adaptive native/guided/full workflow profiles with explicit-only full activation, fail-closed policy resolution, and provider-independent pipeline selection; preserves immutable plugin payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
+  Pass `high` for aggressive mode. v1.26.27: config-lint verifies publish_via: ci-tag-trigger against actual GitHub workflow triggers (on.push.tags or workflow_dispatch); managed vault auto-commit in SAVE step 7 uses path-scoped git staging instead of broad git add -A, preserving unrelated dirty files. v1.26.25: adaptive native/guided/full workflow profiles with explicit-only full activation, fail-closed policy resolution, and provider-independent pipeline selection; preserves immutable plugin payload/version enforcement, exact host-aware cache diagnosis, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. v1.26.24: planning and decision agents inherit the invoking parent model while research and mechanical workers remain on Sonnet. v1.26.22: schema-backed YAML config parsing replaces regex flatteners with a Python/PyYAML bridge, shared Node adapter, nested deep-merge, source-line provenance, and fail-closed diagnostics for status/lint/migrate. v1.26.21: status separates health from lifecycle state. v1.26.18: separate CI discovery and health from merge authority, with repo-policy merge strategy, explicit per-work-item auto-merge approval, and exact healthy-check enforcement. v1.26.17: preflight-inventory performance (lane short-circuits, skip validate on done, ready/active aliases, all-projects capture single-pass). v1.26.16: hide dev-loop companion helpers from user command surfaces; standardize /dev-loop and $dev-loop mode entrypoints. v1.26.15: sdd-execute-worker adapter for superpowers:subagent-driven-development EXECUTE step. v1.26.14: /dev-loop dashboard mode dispatch.
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)
@@ -1704,7 +1704,27 @@ will skip PUSH.
 **Vault auto-commit (sub-step of SAVE, only when `query_vault` in BACKEND_CAPS):**
 If `VAULT_AUTO_COMMIT` is true AND `query_vault` in BACKEND_CAPS:
 1. `git -C $VAULT diff --quiet` — if clean, skip silently.
-2. If dirty: `git -C $VAULT add -A && git -C $VAULT commit -m "dev-loop[${work_slug}]: auto-commit vault changes"`.
+2. If dirty, stage only the authorized target files (path-scoped staging):
+   a. Snapshot the vault base OID (`git -C $VAULT rev-parse HEAD`), porcelain
+      status (`git -C $VAULT status --porcelain`), and the authorized path
+      set (the files this cycle intended to write: retro log entry, work-item
+      retro.md, crystallize output, etc.) before mutation.
+   b. After completing the managed write, re-verify the porcelain status
+      immediately before staging. If unrelated paths changed concurrently,
+      preserve them byte-for-byte: do NOT stage them.
+   c. Stage only the explicit target files:
+      `git -C $VAULT add <path1> <path2> ...` (never `git add -A` or
+      `git add .` for a narrow managed log operation).
+   d. If no paths were staged (all targets were clean), skip the commit
+      silently.
+   e. Commit with: `git -C $VAULT commit -m "dev-loop[${work_slug}]: managed write (retro/crystallize)"`.
+   f. If unrelated paths changed between the snapshot and staging, either
+      continue with exact path-scoped staging or fail closed with a clear
+      deferral report. Never sweep unrelated dirty files into a managed
+      commit.
+   g. An IDLE retro or research log is deferrable when safe persistence
+      cannot be proved (e.g., concurrent changes that cannot be isolated).
+      Reporting success must not imply that a durable vault log was written.
 3. If commit fails (no changes after add, or git not configured), skip silently — never block the cycle on vault commit failure.
 If `VAULT_AUTO_COMMIT` is false, skip.
 
@@ -2001,7 +2021,7 @@ CLAUDE.md updates remain manual). The auto-memory surfacing still happens.
 **Vault dirty-tree check (sub-step of AUDIT, only when `query_vault` in BACKEND_CAPS):**
 After claude-md-improver and auto-memory surfacing:
 - `git -C $VAULT diff --quiet` — if dirty, emit warning:
-  "Vault working tree is dirty after cycle. Run `git -C $VAULT add -A && git -C $VAULT commit` or enable `vault_auto_commit: true` in dev-loop config."
+  "Vault working tree is dirty after cycle. Run `git -C $VAULT add <specific-files>` or enable `vault_auto_commit: true` in dev-loop config."
 - This is a warning, not a cycle blocker — the cycle proceeds regardless.
 
 **Vault sync contention check (sub-step of AUDIT, only when `VAULT_SYNC_PEER_AWARE`):**
