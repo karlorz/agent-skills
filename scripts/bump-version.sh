@@ -16,10 +16,13 @@
 # This script reads the current version from .claude-plugin/plugin.json,
 # computes the next version, and rewrites all manifest files in place while
 # preserving their exact formatting. SKILL.md frontmatter follows the Agent
-# Skills schema and must not carry release version fields. This script does
-# NOT git add/commit/tag/push — the dev-loop PUSH step owns that. It prints
-# the suggested tag in the repo's tag_format ({skill}-{version}, e.g.
-# dev-loop-1.20.1).
+# Skills schema and must not carry release version fields; however, when the
+# description: field contains an explicit v<semver>: release-marker chain, the
+# script inserts a bare v{new}: marker at the front of that chain so the
+# description stays in sync with the manifest version without manual editing.
+# This script does NOT git add/commit/tag/push — the dev-loop PUSH step owns
+# that. It prints the suggested tag in the repo's tag_format ({skill}-{version},
+# e.g. dev-loop-1.20.1).
 #
 # Usage:
 #   scripts/bump-version.sh <skill> [patch|minor|major] [options]
@@ -206,7 +209,24 @@ if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
   FILES="$FILES, skills/$SKILL/.codex-plugin/plugin.json"
 fi
 FILES="$FILES, .claude-plugin/marketplace.json"
+
+# --- detect SKILL.md description v<semver> marker chain ----------------------
+# If the description: field contains a v<X.Y.Z>: release-marker chain, insert
+# a bare v{NEW}: marker at the front of the chain. Skills without the marker
+# pattern are unaffected.
+HAS_DESC_MARKER=0
+if [ -n "$SKILL_MD" ] && [ -f "$SKILL_MD" ]; then
+  if grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+:' "$SKILL_MD"; then
+    HAS_DESC_MARKER=1
+    FILES="$FILES, $(echo "$SKILL_MD" | sed "s|$REPO_ROOT/||")"
+  fi
+fi
+
 printf 'files:    %s\n' "$FILES"
+
+if [ "$HAS_DESC_MARKER" -eq 1 ]; then
+  printf 'description-marker: insert v%s: at front of SKILL.md chain\n' "$NEW"
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   printf '\n[dry-run] no files written.\n'
@@ -246,6 +266,25 @@ awk -v name="$SKILL" -v ver="$NEW" '
   }
   { print }
 ' "$MARKETPLACE" > "$tmp" && mv "$tmp" "$MARKETPLACE"
+
+# --- SKILL.md description v<semver> marker insertion -------------------------
+# Insert a bare "v{NEW}: " at the front of the existing release-marker chain.
+# The marker chain lives in the description: > block, typically on one long
+# line: "  Pass `high` for aggressive mode. v1.26.28: ... v1.26.27: ...".
+# We insert before the FIRST v<semver>: occurrence on the line that has the
+# markers.  Skills without the pattern are skipped (HAS_DESC_MARKER=0).
+if [ "$HAS_DESC_MARKER" -eq 1 ]; then
+  tmp="$(mktemp)"
+  awk -v newver="$NEW" '
+    !done && match($0, /v[0-9]+\.[0-9]+\.[0-9]+:/) {
+      pos = RSTART
+      # Insert "v{newver}: " right before the first v<semver>: marker.
+      $0 = substr($0, 1, pos-1) "v" newver ": " substr($0, pos)
+      done=1
+    }
+    { print }
+  ' "$SKILL_MD" > "$tmp" && mv "$tmp" "$SKILL_MD"
+fi
 
 # --- verify all manifests now agree ------------------------------------------
 P_NEW="$(read_plugin_version)"

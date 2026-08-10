@@ -44,8 +44,8 @@
     {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
-      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.26.28: dependency diagnosis probes Grok plugin cache paths and reports installed_via; claimability lifecycle distinguishes planned/claimable/waiting; research ranking separates project-owned from vault-global findings; provenance audit clarifies repo-relative sources; operator post-release verification checklist with in_sync/stale_session/payload_drift/manifest_mismatch/workflow_delivery_mismatch/unknown_host verdicts; preserves adaptive native/guided selection, explicit-only full activation, provider-independent pipeline selection, immutable plugin payload/version enforcement, exact host-aware cache diagnostics, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. Includes preflight prep mode, investigate, SkillWiki vault workflows, simplify review, CI health gates, and main-first release verification.",
-      "version": "1.26.28",
+      "description": "Generic single-pass PRD + skillwiki dev cycle engine. v1.26.29: bump-version.sh auto-inserts v<semver>: description markers. v1.26.28: dependency diagnosis probes Grok plugin cache paths and reports installed_via; claimability lifecycle distinguishes planned/claimable/waiting; research ranking separates project-owned from vault-global findings; provenance audit clarifies repo-relative sources; operator post-release verification checklist with in_sync/stale_session/payload_drift/manifest_mismatch/workflow_delivery_mismatch/unknown_host verdicts; preserves adaptive native/guided selection, explicit-only full activation, provider-independent pipeline selection, immutable plugin payload/version enforcement, exact host-aware cache diagnostics, platform-correct fresh-session recovery, deterministic write preflight, and typed verification dispatch. Includes preflight prep mode, investigate, SkillWiki vault workflows, simplify review, CI health gates, and main-first release verification.",
+      "version": "1.26.29",
       "category": "automation",
       "keywords": [
         "dev-loop",
@@ -112,7 +112,7 @@
     {
       "name": "hermes-cli",
       "source": "./skills/hermes-cli",
-      "description": "Hermes Agent CLI commands reference — full terminal command surface for hermes-agent by NousResearch",
+      "description": "Hermes Agent CLI commands reference \u2014 full terminal command surface for hermes-agent by NousResearch",
       "version": "1.0.1",
       "category": "reference",
       "keywords": [
@@ -244,7 +244,7 @@
     {
       "name": "grok-build-harness",
       "source": "./skills/grok-build-harness",
-      "description": "v0.3.1: Fresh-host bootstrap for the karlorz subagent harness — installs the custom grok-build-byok parent agent and scout subagent, agentrules.md routing rules, the spliced subagent-contract AGENTS.md (user content preserved), and a sanitized BYOK config template that preserves host-set keys, then adds the companion marketplaces and installs the plugin set with --trust. Idempotent, backup-first, GROK_HOME-aware; keyed configs are never silently downgraded on keyless re-runs.",
+      "description": "v0.3.1: Fresh-host bootstrap for the karlorz subagent harness \u2014 installs the custom grok-build-byok parent agent and scout subagent, agentrules.md routing rules, the spliced subagent-contract AGENTS.md (user content preserved), and a sanitized BYOK config template that preserves host-set keys, then adds the companion marketplaces and installs the plugin set with --trust. Idempotent, backup-first, GROK_HOME-aware; keyed configs are never silently downgraded on keyless re-runs.",
       "version": "0.3.1",
       "category": "operations",
       "keywords": [

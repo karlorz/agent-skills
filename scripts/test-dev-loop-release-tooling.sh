@@ -213,6 +213,99 @@ EOF
   assert_eq "demo-basic marketplace" "$(read_market_version "$tmp/.claude-plugin/marketplace.json" demo-basic)" "0.4.1"
 }
 
+run_bump_version_description_marker_checks() {
+  local tmp saved_cwd
+  tmp="$(mktemp -d)"
+  saved_cwd="$(pwd)"
+  trap 'cd "$saved_cwd"; rm -rf "$tmp"' RETURN
+
+  mkdir -p "$tmp/scripts" "$tmp/.claude-plugin"
+  cp "$ROOT/scripts/bump-version.sh" "$tmp/scripts/bump-version.sh"
+  chmod +x "$tmp/scripts/bump-version.sh"
+
+  # Skill WITH a v<semver>: description marker chain (nested layout)
+  mkdir -p "$tmp/skills/demo-marker/skills/demo-marker"
+  mkdir -p "$tmp/skills/demo-marker/.claude-plugin"
+  mkdir -p "$tmp/skills/demo-marker/.codex-plugin"
+  cat > "$tmp/skills/demo-marker/skills/demo-marker/SKILL.md" <<'EOF'
+---
+name: demo-marker
+description: >
+  A demo skill. v1.0.0: initial release with markers. v0.9.0: beta.
+---
+EOF
+  cat > "$tmp/skills/demo-marker/.claude-plugin/plugin.json" <<'EOF'
+{
+  "name": "demo-marker",
+  "version": "1.0.0"
+}
+EOF
+  cat > "$tmp/skills/demo-marker/.codex-plugin/plugin.json" <<'EOF'
+{
+  "name": "demo-marker",
+  "version": "1.0.0"
+}
+EOF
+
+  # Skill WITHOUT any v<semver>: marker (should be a no-op for SKILL.md)
+  mkdir -p "$tmp/skills/demo-plain/skills/demo-plain"
+  mkdir -p "$tmp/skills/demo-plain/.claude-plugin"
+  cat > "$tmp/skills/demo-plain/skills/demo-plain/SKILL.md" <<'EOF'
+---
+name: demo-plain
+description: A plain skill with no version markers.
+---
+EOF
+  cat > "$tmp/skills/demo-plain/.claude-plugin/plugin.json" <<'EOF'
+{
+  "name": "demo-plain",
+  "version": "2.0.0"
+}
+EOF
+
+  cat > "$tmp/.claude-plugin/marketplace.json" <<'EOF'
+{
+  "plugins": [
+    {
+      "name": "demo-marker",
+      "version": "1.0.0"
+    },
+    {
+      "name": "demo-plain",
+      "version": "2.0.0"
+    }
+  ]
+}
+EOF
+
+  # Dry-run: should report description-marker insertion
+  local dry_out
+  dry_out="$(cd "$tmp" && ./scripts/bump-version.sh demo-marker --set 1.1.0 --dry-run)"
+  assert_contains "marker dry-run reports SKILL.md" "$dry_out" "SKILL.md"
+  assert_contains "marker dry-run reports insertion" "$dry_out" "description-marker: insert v1.1.0:"
+
+  # Real bump: verify marker inserted at front of chain
+  cd "$tmp" && ./scripts/bump-version.sh demo-marker --set 1.1.0 >/dev/null 2>&1
+  local skill_md="$tmp/skills/demo-marker/skills/demo-marker/SKILL.md"
+  assert_contains "marker inserted v1.1.0 at front" "$(cat "$skill_md")" "v1.1.0:"
+  assert_contains "marker preserved old v1.0.0" "$(cat "$skill_md")" "v1.0.0:"
+  assert_contains "marker preserved old v0.9.0" "$(cat "$skill_md")" "v0.9.0:"
+
+  # Verify v1.1.0 appears before v1.0.0 in the description text
+  local desc_line first_col second_col
+  desc_line=$(grep 'v1\.1\.0:' "$skill_md" | head -1)
+  first_col=$(printf '%s' "$desc_line" | awk '{ print index($0, "v1.1.0:") }')
+  second_col=$(printf '%s' "$desc_line" | awk '{ print index($0, "v1.0.0:") }')
+  [ "$first_col" -lt "$second_col" ] ||
+    fail "v1.1.0 marker should appear before v1.0.0 (got cols $first_col vs $second_col)"
+
+  # No-marker skill: should NOT report SKILL.md or description-marker
+  local plain_dry
+  plain_dry="$(cd "$tmp" && ./scripts/bump-version.sh demo-plain --set 2.1.0 --dry-run)"
+  assert_not_contains "plain dry-run no SKILL.md" "$plain_dry" "SKILL.md"
+  assert_not_contains "plain dry-run no description-marker" "$plain_dry" "description-marker"
+}
+
 run_doctor_prompt_contract_checks() {
   local doctor
   doctor="$(cat "$ROOT/skills/dev-loop/agents/doctor-worker.md")"
@@ -781,22 +874,55 @@ run_plugin_version_sync_contract_checks() {
 }
 
 assert_release_markers() {
-  local label="$1" description="$2" expected_version="$3" marker
+  local label="$1" description="$2" expected_version="$3"
 
-  while IFS= read -r marker; do
-    [ -n "$marker" ] || continue
-    assert_eq "$label release marker" "$marker" "$expected_version"
-  done < <(
-    python3 - "$description" <<'PY'
+  # The description may contain a chain of historical v<semver>: markers
+  # (v1.26.29: ... v1.26.28: ... v1.26.27: ...). The FIRST (most recent)
+  # marker must match the current manifest version. Additionally, no marker
+  # may exceed the current version (catches stale/future fixture markers).
+  local first_marker max_marker
+  first_marker="$(
+    python3 - "$description" "$expected_version" <<'PY'
 import re
 import sys
 
 description = sys.argv[1]
-markers = sorted(set(re.findall(r"\bv([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?):", description)))
-for marker in markers:
-    print(marker)
+expected = sys.argv[2]
+markers = re.findall(r"\bv([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?):", description)
+if markers:
+    print(markers[0])
 PY
-  )
+  )"
+
+  if [ -n "$first_marker" ]; then
+    assert_eq "$label release marker" "$first_marker" "$expected_version"
+
+    # Also check that no marker version exceeds the current version.
+    # This catches stale/future fixture markers (e.g. v9.9.9:) without
+    # rejecting the legitimate historical chain.
+    max_marker="$(
+      python3 - "$description" "$expected_version" <<'PY'
+import re
+import sys
+
+description = sys.argv[1]
+expected = sys.argv[2]
+markers = re.findall(r"\bv([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?):", description)
+
+def parse_ver(v):
+    base = v.split("-")[0]
+    return tuple(int(x) for x in base.split("."))
+
+expected_ver = parse_ver(expected)
+for m in markers:
+    if parse_ver(m) > expected_ver:
+        print(m)
+        break
+PY
+    )"
+    [ -z "$max_marker" ] ||
+      fail "$label release marker v$max_marker: exceeds current version $expected_version"
+  fi
 }
 
 run_plugin_metadata_contract_checks() {
@@ -928,6 +1054,7 @@ run_codex_skill_mirror_contract_checks() {
 }
 
 run_bump_version_checks
+run_bump_version_description_marker_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_simplify_skill_contract_checks
