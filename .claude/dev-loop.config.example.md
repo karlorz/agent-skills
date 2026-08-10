@@ -161,7 +161,7 @@ vault_sync:
 
 ```yaml
 notes:
-  conventions: "Each plugin bump updates its Claude manifest, optional Codex manifest, and matching marketplace entry; SKILL.md has no release version field."
+  conventions: "Each plugin bump updates its Claude manifest, optional Codex manifest, matching marketplace entry, and prepends a CHANGELOG.md entry; SKILL.md has no release version field; descriptions are stable prose without version markers."
   merge_readiness: "Local tests pass, then push main. PR is fallback only."
   release_readiness: "After main CI passes, create and push the {skill}-{version} tag manually; no tag-triggered publisher exists."
 ```

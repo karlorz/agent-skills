@@ -8,7 +8,7 @@
 | --require-keys | Installer flag hard-failing when hub/new gateway keys are missing; context7 key stays optional. | ADR-3 |
 | --restrictive | Installer flag rendering permission_mode = "plan" instead of "always-approve". | ADR-8 |
 | pin aliases | The sonnet / haiku / deepseek-v4-flash model aliases that [subagents.models] pins resolve to. | ADR-4 |
-| release marker | The `vX.Y.Z:` prefix in plugin descriptions that must match the manifest version. | ADR-5 |
+| release marker | ~~The `vX.Y.Z:` prefix in plugin descriptions that must match the manifest version.~~ Deprecated in v1.26.30: version markers migrated to `CHANGELOG.md`; descriptions are now stable prose. | ADR-5 |
 | scratch bootstrap | A full install.sh run against a disposable GROK_HOME, exercising every write path safely. | ADR-9 |
 | marketplace provenance | The originating marketplace for each installed plugin, recorded in installed-plugins/registry.json. | ADR-6 |
 | unknown-field warning | grok inspect warning for config keys the schema doesn't know; harmless but noisy. | ADR-6 |
