@@ -70,6 +70,11 @@ assert_contains "with-keys: context7 key injected" \
 assert_contains "with-keys: enabled list substituted" \
   "$(cat "$TEST_ROOT/with-keys.toml")" 'enabled = ["superpowers", "dev-loop", "skillwiki"]'
 
+# --- regression: harness plugin must be in [plugins].enabled ---------
+run_generate "$TEST_ROOT/harness-enabled.toml" --enabled "grok-build-harness,superpowers"
+assert_contains "harness plugin in enabled list" \
+  "$(cat "$TEST_ROOT/harness-enabled.toml")" '"grok-build-harness"'
+
 # --- config generation: env-only ---------------------------------------------
 run_generate "$TEST_ROOT/env-only.toml" --enabled "superpowers"
 assert_eq "env-only: zero api_key lines" \
@@ -155,6 +160,8 @@ assert_contains "dry-run: config plan listed" "$DRY_OUT" "config.toml: would"
 assert_contains "dry-run: plugin table listed" "$DRY_OUT" "superpowers simplify deep-research"
 assert_eq "dry-run: writes nothing" \
   "$([ -d "$TEST_ROOT/never-created" ] && echo exists || echo absent)" "absent"
+assert_contains "dry-run: harness plugin listed first" \
+  "$DRY_OUT" "plugins: grok-build-harness superpowers"
 
 # --- installer: missing-key warnings + --require-keys ------------------------
 WARN_OUT="$("$INSTALL" --grok-home "$TEST_ROOT/warn-home" --dry-run --skip-plugins 2>&1 || true)"
