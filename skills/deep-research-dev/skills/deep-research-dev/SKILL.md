@@ -237,7 +237,7 @@ Identify answer-critical claims **before gathering evidence** — during Phase 1
 
 ### Phase 3: Synthesis
 
-- **Pre-build deterministic fallback**: before composing the report, build a `## Findings` bullet list from the retained claims (`- <claim> [S<n>]`, where `S<n>` references the numbered Sources section). If synthesis output is empty, malformed, omits the TL;DR, or fails the Mermaid syntax check, emit the deterministic fallback instead. **Never return an empty report.**
+- **Pre-build deterministic fallback**: before composing the report, build a `## Findings` bullet list from the retained claims (`- <claim> [S<n>]`, where `S<n>` references the `## Sources` ledger). If synthesis output is empty, malformed, omits the TL;DR, or fails the Mermaid syntax check, emit the deterministic fallback instead. **Never return an empty report.**
 
 Compose research report with these sections:
 
@@ -268,13 +268,17 @@ Compose research report with these sections:
    |---|---|---|---|
    | <claim> | externally verified / locally verified only / unverified freshness claim | local -> grok-search -> official source | <conflicts, cache freshness, fallback notes> |
    Include the selected source-plan tags, freshness channel used, fallback/degradation, source conflicts, and stale local cache warnings. Include `source_type` in the audit-table source-route column where useful (e.g., `local -> grok-search -> primary`). Use one authoritative external source as enough verification by default; require a second source for high-risk, indirect, ambiguous, or contradictory claims.
-6. **Verification Methods** -- how to verify or reproduce the findings. This is critical: research that documents WHAT was found but not HOW to verify it creates fragile knowledge. Include:
+6. **Verification Methods** -- emit as a literal `## Verification Methods` heading (unnumbered, `##`-level): how to verify or reproduce the findings. This is critical: research that documents WHAT was found but not HOW to verify it creates fragile knowledge. Include:
    - The correct tools or commands to confirm the finding
    - Common wrong verification methods and why they fail (e.g., "checking `claude --help` for slash commands" vs "type `/` in session")
    - Links to canonical reference pages
 7. **Analysis** -- merged patterns, recommendations, caveats
-8. **Sources** -- numbered list with access dates
+8. **Sources** -- the complete **immutable source ledger** (the old numbered top-N list is gone): a `## Sources` table with the exact six-column header `| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |`. The ledger includes all retained evidence: every retained external third-party claim carries its exact external URL; local/repository evidence carries an explicit local record (path, and revision if available -- never a fabricated URL); and every external material conflict and source-plan degradation that survived synthesis stays as a ledger row -- degradations and conflicts are retained, not concealed. Unused or unopened search results are not ledger rows. In-body `[S<n>]` markers map to exactly one stable row. Once synthesized the ledger is immutable: refinement may improve prose outside the ledger but must not trim, delete, renumber, merge, or change ledger rows, URLs, or roles, or hide material conflicts.
 9. **Coverage and uncertainty** -- emit as a `## Coverage and uncertainty` heading at the end of the report: bulleted list of every dropped claim (with reason), every question that returned no usable output, every source-plan degradation, and every synthesis fallback. Distinguish `execution topology` (informational — e.g., inline fallback) from actual evidence gaps (missing source, unresolved material conflict, answer-critical claim without external verification). Only evidence gaps can support `Partial`; topology notes are informational only. If the list is empty, state: "All planned questions returned usable structured research, and every retained claim carries non-empty external verification."
+
+**Report presentation contract.** D defaults to the bundled template at `references/report-presentation-template.md`; no S report search or copy is performed by default. Build a language-adaptive numbered topical narrative -- suggested evidence-first shape: decision summary; scope/method; 3–8 selected topical evidence sections; risks/limitations; conclusion/next steps -- merging or dropping sections when appropriate; no filler sections merely to reach 10, and narrative labels localize to the report language. Preserve the literal unnumbered audit headings `## Freshness & Verification Status`, `## Verification Methods`, `## Sources`, and `## Coverage and uncertainty` exactly as written; better formatting must not change strict `Status: Partial` semantics -- Partial remains based on evidence gaps, not presentation polish.
+
+`--reuse-s-template` (interactive only): with an explicit user flag in an attended session, discover a relevant accessible S outline and reuse its heading order/categories **structure-only**. D cannot carry S facts/sources/conclusions -- no S facts, sources, citations, URLs, names, dates, metrics, or prose -- into the D report. If no usable outline applies, D falls back to the bundled template. The flag is disabled under `--unattended`; using the bundled presentation is informational only and is not an evidence gap or degradation.
 
 ### Phase 4: Content Refinement (unless --no-refine)
 
@@ -292,7 +296,7 @@ Pass B — Tightening:
 - Reduce verbose prose
 - Verify TL;DR accuracy against full findings
 - Check Mermaid rendering (if diagram present)
-- Trim sources to top 5-7 most authoritative
+- Do not trim, remove, renumber, or change any `## Sources` ledger reference or hide material conflicts; only improve prose outside the ledger and validate that every `[S<n>]` marker still maps to exactly one stable ledger row
 - Verify Verification Methods section is actionable (not just 'check the docs')
 
 Original report:
@@ -363,6 +367,7 @@ Warnings: <any>
 | `--type <concept\|comparison\|query\|entity>` | Force page type (vault mode only, default: query) |
 | `--no-raw` | Skip raw source capture (vault mode: no provenance chain) |
 | `--no-refine` | Skip content refinement phase |
+| `--reuse-s-template` | Interactive only: reuse a relevant accessible S outline's heading order/categories **structure-only**; never carry S facts, sources, citations, URLs, names, dates, metrics, or prose into D. Falls back to the bundled template when no usable outline applies. Disabled under `--unattended`. |
 
 ## Stop Conditions
 

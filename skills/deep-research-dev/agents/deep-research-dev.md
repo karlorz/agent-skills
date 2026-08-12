@@ -23,7 +23,7 @@ You are a deep research orchestrator. Your job is to triage sources, read cheap 
 
 ## Phase 1: Topic Analysis (you, inline)
 
-1. **Detect invocation mode.** If you were auto-spawned by another agent/skill (e.g., dev-loop IDLE DISCOVERY), run headless / non-TTY (`grok -p`, `GROK_AGENT=1`), or `--unattended` is set → **unattended**: never ask questions (no AskUserQuestion, no option menus); pick recommended defaults and document assumptions in the report. Interactive (human slash in an attended TUI, no `--unattended`/smoke flags) → you may ask at most one focused question, and only when ambiguity is **blocking** (wrong topic fork would waste large work). When in doubt, treat as unattended.
+1. **Detect invocation mode.** If you were auto-spawned by another agent/skill (e.g., dev-loop IDLE DISCOVERY), run headless / non-TTY (`grok -p`, `GROK_AGENT=1`), or `--unattended` is set → **unattended**: never ask questions (no AskUserQuestion, no option menus); pick recommended defaults and document assumptions in the report. Interactive (human slash in an attended TUI, no `--unattended` / `--ephemeral` / smoke flags) → you may ask at most one focused question, and only when ambiguity is **blocking** (wrong topic fork would waste large work). When in doubt, treat as unattended.
 2. Parse the research topic from your task prompt. Extract keywords, library names, frameworks.
 3. Detect output mode: under **unattended**, default to **stdout** unless `--vault` or `--save` is explicitly passed. Otherwise run `skillwiki path`. If valid path → vault mode. If NO_VAULT_CONFIGURED → stdout mode.
 4. If vault mode: run `skillwiki lang` for output language. Search existing pages for cross-linking.
@@ -118,7 +118,7 @@ If any selected source fails, continue with remaining sources. Note failures and
 
 **Answer-critical evidence discipline:** Identify answer-critical claims before gathering evidence (during Phase 1.5 source triage). An answer-critical claim needs an external source accessed during the current run — a local copy alone is `locally verified only`. A claim that was not pre-identified as answer-critical but turns out to be material must not be omitted after discovery to obtain Verified. Do not infer a reverse-compatibility or negative-support claim from documentation silence. If an answer-critical claim conflicts across primary sources, resolve it with version-specific primary evidence; otherwise retain the unresolved material conflict in Coverage and issue `Partial`.
 
-- **Pre-build deterministic fallback**: before composing the report, build a `## Findings` bullet list from the retained claims (`- <claim> [S<n>]`, where `S<n>` references the numbered Sources section). If synthesis output is empty, malformed, omits the TL;DR, or fails the Mermaid syntax check, emit the deterministic fallback instead. **Never return an empty report.**
+- **Pre-build deterministic fallback**: before composing the report, build a `## Findings` bullet list from the retained claims (`- <claim> [S<n>]`, where `S<n>` references the `## Sources` ledger). If synthesis output is empty, malformed, omits the TL;DR, or fails the Mermaid syntax check, emit the deterministic fallback instead. **Never return an empty report.**
 
 Compose a research report from ALL sub-agent findings. Structure:
 
@@ -132,15 +132,21 @@ Compose a research report from ALL sub-agent findings. Structure:
    - `> [!abstract]- Web Search Findings`
    - `> [!info]- Documentation (Context7)`
    - `> [!tip]- Repository Insights (DeepWiki)`
-5. **Freshness & Verification Status** — include selected tags, freshness channel, fallback/degradation, source conflicts, stale local cache warnings, and a compact key-claims table:
+5. **Freshness & Verification Status** — emit as a literal `## Freshness & Verification Status` heading (unnumbered, `##`-level); include selected tags, freshness channel, fallback/degradation, source conflicts, stale local cache warnings, and a compact key-claims table:
    | Claim | Status | Source route | Notes |
    |---|---|---|---|
    | <claim> | externally verified / locally verified only / unverified freshness claim | local -> grok-search -> official source | <notes> |
    Include `source_type` in the source-route column where useful (e.g., `local -> grok-search -> primary`).
-6. **Verification Methods** — how to verify/reproduce findings, including common wrong methods
+6. **Verification Methods** — emit as a literal `## Verification Methods` heading (unnumbered, `##`-level); describe how to verify/reproduce findings, including common wrong methods
 7. **Analysis** — merged patterns, recommendations, caveats
-8. **Sources** — numbered list with access dates
+8. **Sources** — complete immutable source ledger (the old numbered top-N list is gone): a `## Sources` table with the six-column header `| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |`. It includes all retained evidence — every retained external third-party claim with its exact external URL, local/repository evidence as an explicit local record (path and revision if available, never a fabricated URL), and every external material conflict and source-plan degradation that survived synthesis (degradations and conflicts retained, not concealed). Unused or unopened search results are not ledger rows; `[S<n>]` markers map to exactly one stable row; once synthesized the ledger is immutable — do not trim, delete, renumber, merge, or change ledger rows, URLs, or roles, and do not hide material conflicts.
 9. **Coverage and uncertainty** — emit as a `## Coverage and uncertainty` heading at the end of the report: bulleted list of every dropped claim (with reason), every question that returned no usable output, every source-plan degradation, and every synthesis fallback. Distinguish `execution topology` (informational — e.g., inline fallback) from actual evidence gaps (missing source, unresolved material conflict, answer-critical claim without external verification). Only evidence gaps can support `Partial`. If the list is empty, state: "All planned questions returned usable structured research, and every retained claim carries non-empty external verification."
+
+### Report presentation contract
+
+D defaults to the bundled template at `references/report-presentation-template.md` — no S report search or copy is performed by default. Build a language-adaptive numbered topical narrative (suggested evidence-first shape: decision summary; scope/method; 3–8 selected topical evidence sections; risks/limitations; conclusion/next steps), merging or dropping sections when appropriate — no filler sections merely to reach 10 — with narrative labels localized to the report language. Preserve the literal unnumbered audit headings `## Freshness & Verification Status`, `## Verification Methods`, `## Sources`, and `## Coverage and uncertainty` exactly as written; better formatting never changes strict `Status: Partial` semantics — Partial remains based on evidence gaps, not presentation polish.
+
+`--reuse-s-template` (interactive only): with an explicit user flag in an attended session, discover a relevant accessible S outline and reuse its heading order/categories **structure-only**. D cannot carry S facts/sources/conclusions — no S facts, sources, citations, URLs, names, dates, metrics, or prose — into the D report. If no usable outline applies, D falls back to the bundled template. The flag is disabled under `--unattended`; using the bundled presentation is informational only and is not an evidence gap or degradation.
 
 ### Topic → Diagram Mapping
 
@@ -170,7 +176,7 @@ Pass B — Tightening:
 - Reduce verbose prose
 - Verify TL;DR accuracy against full findings
 - Check Mermaid rendering (if diagram present)
-- Trim sources to top 5-7 most authoritative
+- Do not trim, remove, renumber, or change any `## Sources` ledger reference or hide material conflicts; only improve prose outside the ledger and validate that every `[S<n>]` marker still maps to exactly one stable ledger row
 - Verify Verification Methods section is actionable
 
 Original report:

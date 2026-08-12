@@ -15,8 +15,37 @@ entry in the root `.claude-plugin/marketplace.json`; install it by path only.
   on agent prompts, ≤4-question plan, claim caps (≤6/question, ≤24 total) with
   `source_type`, `**Status: Verified|Partial**` header + `## Coverage and
   uncertainty` section, deterministic findings fallback.
-- New flags `--unattended` and `--depth fast|default|thorough` on top of the
-  2.4.3 flag set (`--ephemeral`, `--save`, `--vault`, `--no-refine`, …).
+- New flags `--unattended`, `--depth fast|default|thorough`, and the
+  interactive-only `--reuse-s-template` (see Report presentation below) on top
+  of the 2.4.3 flag set (`--ephemeral`, `--save`, `--vault`, `--no-refine`, …).
+
+## Report presentation (output contract)
+
+D composes reports from a **bundled general template**
+(`references/report-presentation-template.md`): a language-adaptive numbered
+topical narrative whose section labels localize to the report language, while
+the literal `## Freshness & Verification Status` and `## Coverage and
+uncertainty` audit headings stay unnumbered and exact. By default D performs
+no S report search or copy — the bundled template is always the base.
+
+- `## Sources` is an **immutable source ledger** of retained evidence plus
+  material conflicts/degradations — not an exhaustive dump of unused search
+  results. Every retained external third-party claim carries its exact URL;
+  local evidence is explicitly identified as a local record, never a
+  fabricated URL. Rows are stable: no trimming, deletion, renumbering, or
+  concealment of material conflicts.
+- `--reuse-s-template` is an explicit interactive opt-in: it may reuse only a
+  relevant accessible S outline's section order/categories — **structure
+  only**. It cannot copy S facts, citations, URLs, sources, or conclusions.
+  If a usable S outline is unavailable or inapplicable, D falls back to its
+  bundled template. The flag works only in an otherwise interactive attended
+  invocation: it is disabled under `--unattended` and other
+  unattended/headless/smoke modes (the invocation logic treats `--ephemeral`
+  as unattended too), which always use the bundled template.
+- This is an output-contract change: the static tests verify the written
+  instructions, but demonstrating model adherence requires a new live D
+  report. The supplied finance D report predates this contract and was not
+  retroactively improved.
 
 Full behavior lives in `skills/deep-research-dev/SKILL.md`; version history in
 `CHANGELOG.md`.
