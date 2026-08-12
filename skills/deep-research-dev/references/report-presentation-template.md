@@ -53,12 +53,17 @@ remains based on evidence gaps, not on formatting quality.
 ## Freshness & Verification Status
 
 - Emit `**Status: Verified**` at the top of the report if every retained
-  claim carries non-empty external verification and no coverage gaps remain;
-  emit `**Status: Partial**` otherwise, listing the gaps inline. Status is
-  **Partial** if any of: a question returned no usable output; a claim was
-  dropped; an uncertainty was reported; synthesis produced an invalid or
-  empty body; a source-plan channel failed without a substitute. Better
-  formatting never upgrades `Partial` — status stays based on evidence gaps.
+  claim carries non-empty external verification and no evidence gaps remain;
+  emit `**Status: Partial**` otherwise, listing only the actual gaps inline.
+  A **topic-inherent unknown** is a requested fact that primary retained
+  evidence explicitly leaves undecided (for example, a consultation's final
+  adoption decision or future constituent list). It must be reported in
+  Coverage and uncertainty but **does not by itself require `Partial`**.
+  Status is **Partial** if a planned question returned no usable output; a
+  retained claim is unsupported, malformed, or dropped; an answer-critical
+  claim lacks external verification; a material source conflict remains
+  unresolved; a **required source route failed without a substitute**;
+  or synthesis produced an invalid or empty body. The status line must name only categories actually present in Coverage and uncertainty — do not hand-count claims or state a specific number when Coverage records a different count. Better formatting never upgrades `Partial` — status stays based on evidence gaps.
 - Include the selected source-plan tags, the freshness channel used,
   fallback/degradation notes, source conflicts, stale local cache warnings,
   and a compact key-claims audit table: `Claim | Status | Source route |
@@ -98,13 +103,18 @@ synthesis. Unused or unopened search results are not ledger rows.
 - Bullet every dropped claim (with reason), every question that returned no
   usable output, every source-plan degradation, and every synthesis
   fallback.
-- Distinguish `execution topology` (informational — e.g., inline fallback)
-  from actual evidence gaps (missing source, unresolved material conflict,
-  answer-critical claim without external verification). Only evidence gaps
-  can support `Partial`; topology notes are informational only.
-- If the list is empty, state: "All planned questions returned usable
-  structured research, and every retained claim carries non-empty external
-  verification."
+- Classify each item as a **topic-inherent unknown**, **execution topology**
+  note, or **evidence gap**. A topic-inherent unknown is explicitly left
+  undecided by primary retained evidence and is directly relevant to the
+  user's request; report it accurately, but it **does not by itself require
+  `Partial`**. Execution topology is informational (for example, inline
+  fallback). Evidence gaps include a missing source, unresolved material
+  conflict, unsupported retained claim, an answer-critical claim without
+  external verification, or a **required source route failed without a
+  substitute**; only evidence gaps can support `Partial`.
+- If no topic-inherent unknowns or evidence gaps remain, state: "All planned
+  questions returned usable structured research, and every retained claim
+  carries non-empty external verification."
 
 ## --reuse-s-template (optional, interactive only)
 

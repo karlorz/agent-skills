@@ -1,9 +1,10 @@
 # deep-research-dev
 
-**EXPERIMENTAL dev-lane fork** of the production `deep-research` skill (base
-v2.4.3), built for the deep-research eval matrix. **Not for production use.**
-This plugin is **not listed on the marketplace** — there is deliberately no
-entry in the root `.claude-plugin/marketplace.json`; install it by path only.
+**EXPERIMENTAL prerelease dev-lane fork** of the production `deep-research`
+skill (base v2.4.3), built for the deep-research eval matrix. **Not for production
+use.** It is published through the `karlorz-agent-skills` marketplace for
+controlled evaluation, but it is not a production replacement for
+`deep-research`.
 
 ## What differs from production
 
@@ -45,6 +46,12 @@ stay unnumbered and exact. By default D performs no S report search or copy
   invocation: it is disabled under `--unattended` and other
   unattended/headless/smoke modes (the invocation logic treats `--ephemeral`
   as unattended too), which always use the bundled template.
+- **Status semantics:** a **topic-inherent unknown** is a requested fact that
+  retained primary evidence explicitly leaves undecided. It is reported in
+  Coverage and uncertainty but **does not by itself require `Partial`**.
+  `Partial` remains mandatory for actual evidence gaps, including unsupported
+  retained claims, missing answer-critical verification, unresolved material
+  conflicts, or a required source route failed without a substitute.
 - This is an output-contract change: the static tests verify the written
   instructions, but demonstrating model adherence requires a new live D
   report. The supplied finance D report predates this contract and was not
@@ -53,7 +60,17 @@ stay unnumbered and exact. By default D performs no S report search or copy
 Full behavior lives in `skills/deep-research-dev/SKILL.md`; version history in
 `CHANGELOG.md`.
 
-## Install (local only)
+## Install
+
+With the `karlorz-agent-skills` marketplace configured, install the published
+experimental prerelease through the supported host installer:
+
+```bash
+codex plugin add deep-research-dev@karlorz-agent-skills --json
+claude plugin install deep-research-dev@karlorz-agent-skills
+```
+
+For local development only, Grok can also install the checked-out path:
 
 ```bash
 grok plugin install /path/to/agent-skills/skills/deep-research-dev --trust

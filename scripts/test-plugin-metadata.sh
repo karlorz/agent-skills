@@ -105,5 +105,21 @@ marketplace.write_text(json.dumps(data, indent=2) + "\n")
 PY
 assert_fail "orphan marketplace sources are reported" "marketplace source directory missing" "$orphan_root"
 
+dev_description_root="$(copy_fixture deep-research-dev-description-drift)"
+python3 - "$dev_description_root" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+marketplace = root / ".claude-plugin/marketplace.json"
+data = json.loads(marketplace.read_text())
+plugin = next(plugin for plugin in data["plugins"] if plugin["name"] == "deep-research-dev")
+plugin["description"] = "mismatched fixture description"
+marketplace.write_text(json.dumps(data, indent=2) + "\n")
+PY
+assert_fail "deep-research-dev marketplace description drift is reported" \
+  "deep-research-dev marketplace/Claude description" "$dev_description_root"
+
 printf '\n=== Results: %d passed, %d failed ===\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

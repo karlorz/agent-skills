@@ -14,3 +14,4 @@ __pycache__/
 skills/playwright-cli/.playwright-cli/
 logs/
 .worktrees/
+.superpowers/sdd/

@@ -33,6 +33,7 @@ _SKILL_MD = _SCRIPTS_DIR / ".." / "skills" / "deep-research-dev" / "SKILL.md"
 _AGENT_MD = _SCRIPTS_DIR / ".." / "agents" / "deep-research-dev.md"
 _README_MD = _SCRIPTS_DIR / ".." / "README.md"
 _CHANGELOG_MD = _SCRIPTS_DIR / ".." / "CHANGELOG.md"
+_TEMPLATE_MD = _SCRIPTS_DIR / ".." / "references" / "report-presentation-template.md"
 
 
 def _read(path: Path) -> str:
@@ -40,6 +41,11 @@ def _read(path: Path) -> str:
         print(f"contract FAIL: file not found: {path}", file=sys.stderr)
         sys.exit(1)
     return path.read_text(encoding="utf-8")
+
+
+def _normalize_whitespace(text: str) -> str:
+    """Compare prose contracts without coupling them to Markdown wrapping."""
+    return " ".join(text.split())
 
 
 # ── Required anchors ─────────────────────────────────────────────────────────
@@ -75,6 +81,23 @@ required_skill_policy = (
     "every retained claim carries non-empty external verification",
     "unresolved material conflict",
 )
+
+# A requested, primary-source-supported fact that is not yet decided is useful
+# report content rather than a research failure. It must remain distinct from
+# the evidence gaps that require Partial in each published instruction surface.
+required_status_semantics = (
+    "topic-inherent unknown",
+    "does not by itself require `Partial`",
+    "planned question returned no usable output",
+    "retained claim is unsupported, malformed, or dropped",
+    "answer-critical claim lacks external verification",
+    "material source conflict remains unresolved",
+    "required source route failed without a substitute",
+    "synthesis produced an invalid or empty body",
+    "The status line must name only categories actually present in Coverage and uncertainty",
+)
+
+legacy_blanket_uncertainty_rule = "an uncertainty was reported"
 
 # ── Landed presentation-contract anchors (approved plan — acceptance) ───────
 #
@@ -147,6 +170,13 @@ required_readme_plain_ordinal = (
     "ordinal prefixes",
 )
 
+# README and current CHANGELOG documentation alignment for the status-neutral
+# topic-inherent-unknown policy.
+required_status_semantics_docs = (
+    "topic-inherent unknown",
+    "does not by itself require `Partial`",
+)
+
 # Legacy top-N trimming instruction must stay REMOVED from both entrypoints.
 # The old numbered top-N list is gone (the immutable ledger replaced it);
 # the absence assertion below locks in that landed state.
@@ -155,23 +185,21 @@ legacy_trim_phrase = "Trim sources to top 5-7 most authoritative"
 
 # ── Changelog helpers ────────────────────────────────────────────────────────
 
-def _current_dev_entry(changelog_text: str) -> str:
-    """The current `[0.1.0-dev]` changelog entry: text from its
-    `## [0.1.0-dev]` heading up to (not including) the next `## [` version
-    heading. Historical entries are out of scope for the doc-alignment
-    checks."""
+def _current_release_entry(changelog_text: str) -> tuple[str, str]:
+    """Return the first versioned changelog entry and its heading.
+
+    The first `## [` heading is the current release regardless of whether it is
+    a stable version or an explicit beta prerelease.
+    """
     lines = changelog_text.splitlines()
-    start = next(
-        (i for i, line in enumerate(lines) if line.startswith("## [0.1.0-dev]")),
-        None,
-    )
+    start = next((i for i, line in enumerate(lines) if line.startswith("## [")), None)
     if start is None:
-        return ""
+        return "", ""
     end = next(
         (i for i in range(start + 1, len(lines)) if lines[i].startswith("## [")),
         len(lines),
     )
-    return "\n".join(lines[start:end])
+    return lines[start], "\n".join(lines[start:end])
 
 
 # ── Test runner ──────────────────────────────────────────────────────────────
@@ -200,6 +228,14 @@ def main() -> int:
             failures.append(
                 f"{label} missing: 'every retained claim carries non-empty external verification'"
             )
+        for phrase in required_status_semantics:
+            if _normalize_whitespace(phrase) not in _normalize_whitespace(text):
+                failures.append(f"{label} missing status-semantics anchor: {phrase!r}")
+
+    template_text = _read(_TEMPLATE_MD)
+    for phrase in required_status_semantics:
+        if _normalize_whitespace(phrase) not in _normalize_whitespace(template_text):
+            failures.append(f"report template missing status-semantics anchor: {phrase!r}")
 
     # Landed presentation contract — must be present in both entrypoints.
     for phrase in required_landed_contract:
@@ -242,28 +278,44 @@ def main() -> int:
     for phrase in required_readme_plain_ordinal:
         if phrase not in readme_text:
             failures.append(f"README.md missing plain-ordinal doc anchor: {phrase!r}")
+    for phrase in required_status_semantics_docs:
+        if phrase not in readme_text:
+            failures.append(f"README.md missing status-semantics doc anchor: {phrase!r}")
 
-    # CHANGELOG documentation alignment — the current [0.1.0-dev]
-    # presentation/contract entry must carry the corrected `## 1. Findings`
-    # fallback wording and must not contain the stale exact `## Findings`
-    # text. Historical entries are out of scope.
-    dev_entry = _current_dev_entry(_read(_CHANGELOG_MD))
-    if "## 1. Findings" not in dev_entry:
+    # CHANGELOG documentation alignment — the current release entry must carry
+    # the corrected `## 1. Findings` fallback wording and must not contain the
+    # stale exact `## Findings` text. Historical entries are out of scope.
+    current_heading, current_entry = _current_release_entry(_read(_CHANGELOG_MD))
+    if not current_heading:
+        failures.append("CHANGELOG missing a current version entry")
+    if "## 1. Findings" not in current_entry:
         failures.append(
-            "CHANGELOG [0.1.0-dev] entry missing corrected fallback wording: "
+            f"CHANGELOG current entry {current_heading or '<missing>'} missing corrected fallback wording: "
             "'## 1. Findings'"
         )
-    if "## Findings" in dev_entry:
+    if "## Findings" in current_entry:
         failures.append(
-            "CHANGELOG [0.1.0-dev] entry still contains stale exact fallback "
+            f"CHANGELOG current entry {current_heading or '<missing>'} still contains stale exact fallback "
             "wording: '## Findings'"
         )
 
-    # Landed acceptance check: legacy top-N trimming must stay gone.
-    for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
+    for phrase in required_status_semantics_docs:
+        if phrase not in current_entry:
+            failures.append(
+                f"CHANGELOG current entry {current_heading or '<missing>'} missing "
+                f"status-semantics anchor: {phrase!r}"
+            )
+
+    # Landed acceptance check: legacy top-N trimming and the obsolete blanket
+    # uncertainty trigger must stay gone from all instruction surfaces.
+    for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text), ("report template", template_text)):
         if legacy_trim_phrase in text:
             failures.append(
                 f"{label} still contains legacy top-N trimming phrase: {legacy_trim_phrase!r}"
+            )
+        if legacy_blanket_uncertainty_rule in text:
+            failures.append(
+                f"{label} still contains obsolete blanket uncertainty trigger: {legacy_blanket_uncertainty_rule!r}"
             )
 
     if failures:

@@ -856,6 +856,52 @@ run_deep_research_freshness_contract_checks() {
   assert_not_contains "deep-research agent no mandatory web search" "$agent_body" "always spawn at least 1"
 }
 
+run_deep_research_dev_metadata_contract_checks() {
+  local skill_root claude_manifest codex_manifest marketplace
+  local version claude_description codex_description marketplace_description
+  local marketplace_count marketplace_source
+
+  skill_root="$ROOT/skills/deep-research-dev"
+  claude_manifest="$skill_root/.claude-plugin/plugin.json"
+  codex_manifest="$skill_root/.codex-plugin/plugin.json"
+  marketplace="$ROOT/.claude-plugin/marketplace.json"
+
+  [ -f "$claude_manifest" ] || fail "deep-research-dev Claude manifest missing"
+  [ -f "$codex_manifest" ] || fail "deep-research-dev Codex manifest missing"
+  version="$(read_json_version "$claude_manifest")"
+  assert_eq "deep-research-dev Claude manifest name" "$(jq -r '.name' "$claude_manifest")" "deep-research-dev"
+  assert_eq "deep-research-dev Codex manifest name" "$(jq -r '.name' "$codex_manifest")" "deep-research-dev"
+  assert_eq "deep-research-dev Codex manifest version" "$(read_json_version "$codex_manifest")" "$version"
+
+  marketplace_count="$(jq -r '[.plugins[] | select(.name == "deep-research-dev")] | length' "$marketplace")"
+  assert_eq "deep-research-dev root marketplace entry count" "$marketplace_count" "1"
+  marketplace_source="$(jq -r '.plugins[] | select(.name == "deep-research-dev") | .source' "$marketplace")"
+  assert_eq "deep-research-dev root marketplace source" "$marketplace_source" "./skills/deep-research-dev"
+  assert_eq "deep-research-dev marketplace version" "$(read_market_version "$marketplace" deep-research-dev)" "$version"
+
+  claude_description="$(jq -r '.description' "$claude_manifest")"
+  codex_description="$(jq -r '.description' "$codex_manifest")"
+  marketplace_description="$(jq -r '.plugins[] | select(.name == "deep-research-dev") | .description' "$marketplace")"
+  assert_eq "deep-research-dev Claude/Codex description" "$claude_description" "$codex_description"
+  assert_eq "deep-research-dev marketplace/Claude description" "$marketplace_description" "$claude_description"
+  assert_contains "deep-research-dev prerelease version" "$version" "-beta."
+  assert_contains "deep-research-dev experimental description" "$claude_description" "Experimental prerelease"
+  assert_contains "deep-research-dev non-production description" "$claude_description" "Not for production use."
+
+  [ -f "$skill_root/CHANGELOG.md" ] || fail "skills/deep-research-dev/CHANGELOG.md missing"
+  assert_contains "deep-research-dev CHANGELOG current version entry" "$(cat "$skill_root/CHANGELOG.md")" "## [$version]"
+  assert_contains "deep-research-dev README marketplace installer" "$(cat "$skill_root/README.md")" \
+    "codex plugin add deep-research-dev@karlorz-agent-skills --json"
+  assert_contains "deep-research-dev README Claude marketplace installer" "$(cat "$skill_root/README.md")" \
+    "claude plugin install deep-research-dev@karlorz-agent-skills"
+  assert_json_array_contains "deep-research-dev marketplace experimental keyword" "$marketplace" \
+    '.plugins[] | select(.name == "deep-research-dev") | .keywords' "experimental"
+  assert_json_array_contains "deep-research-dev marketplace prerelease keyword" "$marketplace" \
+    '.plugins[] | select(.name == "deep-research-dev") | .keywords' "prerelease"
+  assert_json_array_contains "deep-research-dev marketplace evaluation keyword" "$marketplace" \
+    '.plugins[] | select(.name == "deep-research-dev") | .keywords' "evaluation"
+}
+
 run_skill_frontmatter_contract_checks() {
   while IFS= read -r skill; do
     validate_skill_frontmatter "$ROOT/$skill"
@@ -1057,6 +1103,7 @@ run_dev_loop_metadata_contract_checks
 run_model_routing_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
 run_deep_research_freshness_contract_checks
+run_deep_research_dev_metadata_contract_checks
 run_skill_frontmatter_contract_checks
 run_plugin_metadata_contract_checks
 run_marketplace_inventory_contract_checks

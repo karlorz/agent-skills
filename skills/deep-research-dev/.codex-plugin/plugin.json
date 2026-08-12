@@ -1,7 +1,7 @@
 {
   "name": "deep-research-dev",
-  "version": "0.1.0-dev",
-  "description": "EXPERIMENTAL dev-lane fork of deep-research (base 2.4.3): source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration. Not for production use; not listed in the marketplace.",
+  "version": "0.1.0-beta.1",
+  "description": "Experimental prerelease dev-lane fork of deep-research (base 2.4.3) for controlled evaluation: source-triaged research with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, refinement, and vault integration. Not for production use.",
   "author": {
     "name": "karlorz"
   },
