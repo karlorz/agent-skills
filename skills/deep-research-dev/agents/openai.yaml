@@ -1,0 +1,19 @@
+interface:
+  display_name: "Deep Research Dev"
+  short_description: "Source-triaged research across local files, freshness sources, docs, and repos with verification status."
+  default_prompt: "Research <topic> deeply using local evidence first, freshness checks when current truth matters, documentation, and repository sources."
+
+policy:
+  allow_implicit_invocation: true
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "grok-search"
+      description: "grok-search MCP server for latest/current freshness discovery with source provenance"
+    - type: "mcp"
+      value: "context7"
+      description: "Context7 MCP server for current library and framework documentation"
+    - type: "mcp"
+      value: "deepwiki-mcp"
+      description: "DeepWiki MCP server for repository exploration and codebase Q&A"

@@ -1,0 +1,11 @@
+{
+  "name": "deep-research-dev",
+  "version": "0.1.0-dev",
+  "description": "EXPERIMENTAL dev-lane fork of deep-research (base 2.4.3): source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration. Not for production use; not listed in the marketplace.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": ["research", "deep-research", "multi-source", "source-triage", "freshness", "grok-search", "context7", "deepwiki", "codex", "codex-app"],
+  "skills": "./skills/"
+}
