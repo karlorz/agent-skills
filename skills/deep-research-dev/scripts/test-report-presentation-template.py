@@ -5,8 +5,9 @@ D-owned report-presentation template.
 
 Asserts that `references/report-presentation-template.md` (owned by
 deep-research-dev) carries the full approved presentation/source-ledger
-contract: a language-adaptive numbered topical narrative with no filler
-sections, literal unnumbered audit headings, the `## Sources` ledger table
+contract: a language-adaptive numbered topical narrative with plain ASCII
+ordinal H2 headings and no filler sections, literal unnumbered audit
+headings, the `## Sources` ledger table
 whose header row is exactly the six contract fields in order (duplicates,
 omissions, reordering, and extra columns rejected), exact external-URL /
 explicit local-record / stable [S<n>] / immutability (no refiner trimming) /
@@ -51,9 +52,23 @@ required_narrative = (
     "no filler sections",
 )
 
-# Literal unnumbered audit headings plus the Sources ledger heading.
+# Plain ASCII ordinal narrative H2 headings (approved correction): every
+# narrative section heading must use a plain ASCII ordinal prefix (`1.`,
+# `2.`, `3.`, ...) in every report language — never localized numbering.
+# The template must also carry a literal example, and the four fixed audit
+# headings must be the only unnumbered H2 exceptions.
+required_plain_ordinal_narrative = (
+    "plain ASCII ordinal",
+    "## 1. Decision summary",
+    "the only unnumbered H2",
+    "every report language",
+)
+
+# Literal unnumbered audit headings plus the Sources ledger heading — all
+# four fixed audit headings (the only unnumbered H2 exceptions).
 required_headings = (
     "## Freshness & Verification Status",
+    "## Verification Methods",
     "## Coverage and uncertainty",
     "## Sources",
 )
@@ -156,6 +171,12 @@ def main() -> int:
     for phrase in required_narrative:
         if phrase not in text:
             failures.append(f"template missing narrative anchor: {phrase!r}")
+
+    for phrase in required_plain_ordinal_narrative:
+        if phrase not in text:
+            failures.append(
+                f"template missing plain-ordinal narrative anchor: {phrase!r}"
+            )
 
     for phrase in required_headings:
         if phrase not in text:

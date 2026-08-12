@@ -23,10 +23,13 @@ entry in the root `.claude-plugin/marketplace.json`; install it by path only.
 
 D composes reports from a **bundled general template**
 (`references/report-presentation-template.md`): a language-adaptive numbered
-topical narrative whose section labels localize to the report language, while
-the literal `## Freshness & Verification Status` and `## Coverage and
-uncertainty` audit headings stay unnumbered and exact. By default D performs
-no S report search or copy — the bundled template is always the base.
+topical narrative with sequential **plain ASCII ordinal** H2 heading
+prefixes (`## 1. <title>`, `## 2. <title>`, …) in **every report language**
+— only narrative title text localizes; ordinal prefixes never localize.
+The four fixed audit headings (`## Freshness & Verification Status`,
+`## Verification Methods`, `## Sources`, `## Coverage and uncertainty`)
+stay unnumbered and exact. By default D performs no S report search or copy
+— the bundled template is always the base.
 
 - `## Sources` is an **immutable source ledger** of retained evidence plus
   material conflicts/degradations — not an exhaustive dump of unused search

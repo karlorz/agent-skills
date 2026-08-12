@@ -18,11 +18,17 @@ direct agent `deep-research-dev.md`) implement exactly this contract.
 
 ## Adaptive numbered topical narrative
 
-Build a **language-adaptive numbered topical narrative**: sections are
-numbered and topical, and their labels localize to the report language (use
-the user's language, or `skillwiki lang` when available).
+Build a **language-adaptive numbered topical narrative**: every narrative
+section is an H2 heading with a plain ASCII ordinal prefix: `## 1. <title>`,
+`## 2. <title>`, ... . Use `1.`, `2.`, ... in every report language — the
+numbering is deliberately not localized (a Traditional-Chinese report still
+uses `## 1. <title>`, never `## 一、<title>`). Only the narrative title text
+localizes to the report language (use the user's language, or `skillwiki lang`
+when available).
 
-Suggested evidence-first shape:
+Suggested evidence-first shape (titles shown in English; emit each title as a
+sequential numbered H2 — e.g. `## 1. Decision summary` — in the report
+language):
 
 1. Decision summary
 2. Scope and method
@@ -32,8 +38,10 @@ Suggested evidence-first shape:
 
 Merge sections when topics overlap and drop sections the topic does not
 warrant; use fewer/merged sections when appropriate. There are **no filler sections**; never add a section merely to reach a fixed count — 1 to 10 is a
-maximum illustrative shape, not a quota. The narrative sections are numbered;
-the fixed audit block below stays unnumbered and literal.
+maximum illustrative shape, not a quota. A report may have fewer narrative
+sections, but the sections it has must use sequential plain ordinals. The
+four fixed audit headings below are the only unnumbered H2 exceptions; every
+other H2 in the report is a numbered narrative section.
 
 ## Fixed audit block
 
@@ -104,7 +112,9 @@ synthesis. Unused or unopened search results are not ledger rows.
 
 - Only explicit interactive use — a human passes the flag in an attended
   session — may discover a relevant accessible S outline and reuse its
-  heading order/categories. The reuse is **structure-only**: D **cannot carry S facts/sources/conclusions** — no S facts, sources, citations,
+  heading order/categories. Reused narrative headings still get D's plain
+  ASCII ordinal H2 prefixes — structure reuse never removes the numbering.
+  The reuse is **structure-only**: D **cannot carry S facts/sources/conclusions** — no S facts, sources, citations,
   URLs, names, dates, metrics, or prose may enter the D report.
 - If no usable S outline applies, D **falls back to the bundled template**
   and reports the fallback.

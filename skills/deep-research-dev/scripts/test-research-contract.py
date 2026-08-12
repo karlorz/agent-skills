@@ -7,9 +7,14 @@ expose the same capability-adaptive execution, answer-critical evidence discipli
 strict Partial-status semantics, and (per the approved presentation/source-ledger
 plan) the landed report-presentation contract: the D-owned bundled template,
 a complete immutable source ledger, stable [S<n>] mapping with exact
-external-URL / local-record rules, interactive-only --reuse-s-template, and
-literal audit headings.  No live model, network, Docker, or vault access is
-required — this is a pure text-anchor check on the two Markdown entrypoints.
+external-URL / local-record rules, interactive-only --reuse-s-template,
+plain ASCII ordinal narrative H2 headings, and
+literal audit headings.  The plugin README and the current CHANGELOG entry
+must document that contract consistently (plain ASCII ordinal narrative
+H2s, only narrative title text localized, `## 1. Findings` fallback
+wording).  No live model, network, Docker, or vault access is required —
+this is a pure text-anchor check on the two Markdown entrypoints plus the
+two documentation files.
 
 Run:
     python3 skills/deep-research-dev/scripts/test-research-contract.py
@@ -26,6 +31,8 @@ from pathlib import Path
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 _SKILL_MD = _SCRIPTS_DIR / ".." / "skills" / "deep-research-dev" / "SKILL.md"
 _AGENT_MD = _SCRIPTS_DIR / ".." / "agents" / "deep-research-dev.md"
+_README_MD = _SCRIPTS_DIR / ".." / "README.md"
+_CHANGELOG_MD = _SCRIPTS_DIR / ".." / "CHANGELOG.md"
 
 
 def _read(path: Path) -> str:
@@ -120,10 +127,51 @@ required_agent_mode_parity = (
     "no `--unattended` / `--ephemeral` / smoke flags",
 )
 
+# Plain ASCII ordinal narrative H2 headings (approved correction): both
+# entrypoints must instruct plain ASCII ordinal narrative H2 prefixes
+# (`## 1. <title>`, `## 2. <title>`, ...) in every report language —
+# never localized numbering.
+required_plain_ordinal_narrative = (
+    "plain ASCII ordinal",
+    "every report language",
+)
+
+# README documentation alignment (approved correction): the plugin README
+# must describe the plain ASCII ordinal narrative H2 contract and must
+# distinguish localized narrative title text from non-localized ordinal
+# prefixes (the stale "section labels localize" claim is gone).
+required_readme_plain_ordinal = (
+    "plain ASCII ordinal",
+    "every report language",
+    "title text localizes",
+    "ordinal prefixes",
+)
+
 # Legacy top-N trimming instruction must stay REMOVED from both entrypoints.
 # The old numbered top-N list is gone (the immutable ledger replaced it);
 # the absence assertion below locks in that landed state.
 legacy_trim_phrase = "Trim sources to top 5-7 most authoritative"
+
+
+# ── Changelog helpers ────────────────────────────────────────────────────────
+
+def _current_dev_entry(changelog_text: str) -> str:
+    """The current `[0.1.0-dev]` changelog entry: text from its
+    `## [0.1.0-dev]` heading up to (not including) the next `## [` version
+    heading. Historical entries are out of scope for the doc-alignment
+    checks."""
+    lines = changelog_text.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if line.startswith("## [0.1.0-dev]")),
+        None,
+    )
+    if start is None:
+        return ""
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].startswith("## [")),
+        len(lines),
+    )
+    return "\n".join(lines[start:end])
 
 
 # ── Test runner ──────────────────────────────────────────────────────────────
@@ -177,6 +225,39 @@ def main() -> int:
     for phrase in required_agent_mode_parity:
         if phrase not in agent_text:
             failures.append(f"agent.md missing mode-parity phrase: {phrase!r}")
+
+    # Plain ASCII ordinal narrative H2 headings — must be instructed in BOTH
+    # entrypoints regardless of report language.
+    for phrase in required_plain_ordinal_narrative:
+        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
+            if phrase not in text:
+                failures.append(
+                    f"{label} missing plain-ordinal narrative anchor: {phrase!r}"
+                )
+
+    # README documentation alignment — the plugin README must describe the
+    # plain ASCII ordinal narrative H2 contract and distinguish localized
+    # narrative title text from non-localized ordinal prefixes.
+    readme_text = _read(_README_MD)
+    for phrase in required_readme_plain_ordinal:
+        if phrase not in readme_text:
+            failures.append(f"README.md missing plain-ordinal doc anchor: {phrase!r}")
+
+    # CHANGELOG documentation alignment — the current [0.1.0-dev]
+    # presentation/contract entry must carry the corrected `## 1. Findings`
+    # fallback wording and must not contain the stale exact `## Findings`
+    # text. Historical entries are out of scope.
+    dev_entry = _current_dev_entry(_read(_CHANGELOG_MD))
+    if "## 1. Findings" not in dev_entry:
+        failures.append(
+            "CHANGELOG [0.1.0-dev] entry missing corrected fallback wording: "
+            "'## 1. Findings'"
+        )
+    if "## Findings" in dev_entry:
+        failures.append(
+            "CHANGELOG [0.1.0-dev] entry still contains stale exact fallback "
+            "wording: '## Findings'"
+        )
 
     # Landed acceptance check: legacy top-N trimming must stay gone.
     for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
