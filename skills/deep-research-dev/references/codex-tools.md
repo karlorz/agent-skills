@@ -19,6 +19,18 @@ This file is the deep-research-dev analogue of Superpowers'
 | Context7 / DeepWiki (MCP) | same MCP tools (host-exposed) |
 | `skillwiki` CLI (`path`/`lang`/`hash`/`validate`) | native shell |
 
+## Packaged discovery
+
+The marketplace release requires both the root marketplace entry and
+`.codex-plugin/plugin.json`. Install the experimental prerelease with:
+
+```bash
+codex plugin add deep-research-dev@karlorz-agent-skills --json
+```
+
+Verify the returned version and installed path, then start a new Codex session.
+The current session does not hot-swap plugin instructions.
+
 ## Subagent dispatch requires multi-agent support
 
 Phase 2 fans out 2–3 web-search agents + 2–3 deep-fetch agents + optional

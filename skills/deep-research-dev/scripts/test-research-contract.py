@@ -34,6 +34,7 @@ _AGENT_MD = _SCRIPTS_DIR / ".." / "agents" / "deep-research-dev.md"
 _README_MD = _SCRIPTS_DIR / ".." / "README.md"
 _CHANGELOG_MD = _SCRIPTS_DIR / ".." / "CHANGELOG.md"
 _TEMPLATE_MD = _SCRIPTS_DIR / ".." / "references" / "report-presentation-template.md"
+_CODEX_TOOLS_MD = _SCRIPTS_DIR / ".." / "references" / "codex-tools.md"
 
 
 def _read(path: Path) -> str:
@@ -177,6 +178,15 @@ required_status_semantics_docs = (
     "does not by itself require `Partial`",
 )
 
+# The released dev plugin must use the packaged Codex marketplace path rather
+# than advertise the standalone personal-skills channel as its installation
+# mechanism.
+required_codex_marketplace_discovery = (
+    "root marketplace entry",
+    "codex plugin add deep-research-dev@karlorz-agent-skills --json",
+)
+legacy_codex_personal_skill_discovery = "Discovery on Codex is via `~/.agents/skills/`"
+
 # Legacy top-N trimming instruction must stay REMOVED from both entrypoints.
 # The old numbered top-N list is gone (the immutable ledger replaced it);
 # the absence assertion below locks in that landed state.
@@ -281,6 +291,13 @@ def main() -> int:
     for phrase in required_status_semantics_docs:
         if phrase not in readme_text:
             failures.append(f"README.md missing status-semantics doc anchor: {phrase!r}")
+
+    codex_tools_text = _read(_CODEX_TOOLS_MD)
+    for phrase in required_codex_marketplace_discovery:
+        if phrase not in codex_tools_text:
+            failures.append(f"Codex tools reference missing marketplace-discovery anchor: {phrase!r}")
+    if legacy_codex_personal_skill_discovery in skill_text:
+        failures.append("SKILL.md still advertises the obsolete Codex personal-skills discovery path")
 
     # CHANGELOG documentation alignment — the current release entry must carry
     # the corrected `## 1. Findings` fallback wording and must not contain the

@@ -2,6 +2,13 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.1.0-beta.2] - 2026-08-13
+
+- Corrected packaged Codex discovery guidance to use the marketplace installer
+  and require a new session after installation. A topic-inherent unknown
+  **does not by itself require `Partial`**; the `## 1. Findings` fallback
+  remains available when synthesis is empty or invalid.
+
 ## [0.1.0-beta.1] - 2026-08-13
 
 - First marketplace-supported experimental prerelease. The root marketplace,
@@ -11,6 +18,8 @@ All notable changes to this skill are documented in this file.
   primary evidence is reportable and **does not by itself require `Partial`**;
   actual evidence gaps still require `Partial`. The deterministic fallback is
   `## 1. Findings` when synthesis output is empty or invalid.
+- Published Codex marketplace discovery guidance and removed the obsolete
+  personal-skills installation path from the packaged release documentation.
 - Hardened local D-lane evaluation provenance to decode user JSONL, record the
   matched session summary, and reject command text that only shares a query
   prefix.

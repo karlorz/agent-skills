@@ -76,8 +76,9 @@ For local development only, Grok can also install the checked-out path:
 grok plugin install /path/to/agent-skills/skills/deep-research-dev --trust
 ```
 
-Slash form: `/deep-research-dev:deep-research-dev`. On Codex, discovery is via
-`~/.agents/skills/` (see `references/codex-tools.md`).
+Slash form: `/deep-research-dev:deep-research-dev`. On Codex, use the
+marketplace install command above, then start a new session so the released
+plugin instructions load. See `references/codex-tools.md` for platform mapping.
 
 ## Eval / smoke
 

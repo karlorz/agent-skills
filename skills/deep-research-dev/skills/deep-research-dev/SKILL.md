@@ -102,7 +102,9 @@ Codex App these map to platform equivalents — `Agent` → `spawn_agent` /
 cost optimization ("cheap tier for mechanical gather/refine work"), not a hard
 requirement. See `references/codex-tools.md` for the full tool mapping, the
 multi_agent config gate, the model-tier fallback, and detached-HEAD sandbox
-handling for vault writes. Discovery on Codex is via `~/.agents/skills/`.
+handling for vault writes. Packaged Codex discovery uses the root marketplace
+entry and `.codex-plugin/plugin.json`; install with `codex plugin add
+deep-research-dev@karlorz-agent-skills --json`.
 
 ## When to Use
 
