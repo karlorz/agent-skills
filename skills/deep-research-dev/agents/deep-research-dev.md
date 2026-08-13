@@ -118,35 +118,41 @@ If any selected source fails, continue with remaining sources. Note failures and
 
 **Answer-critical evidence discipline:** Identify answer-critical claims before gathering evidence (during Phase 1.5 source triage). An answer-critical claim needs an external source accessed during the current run — a local copy alone is `locally verified only`. A claim that was not pre-identified as answer-critical but turns out to be material must not be omitted after discovery to obtain Verified. Do not infer a reverse-compatibility or negative-support claim from documentation silence. If an answer-critical claim conflicts across primary sources, resolve it with version-specific primary evidence; otherwise retain the unresolved material conflict in Coverage and issue `Partial`.
 
-- **Pre-build deterministic fallback**: before composing the report, build a `## 1. Findings` bullet list from the retained claims (`- <claim> [S<n>]`, where `S<n>` references the `## Sources` ledger). If synthesis output is empty, malformed, omits the TL;DR, or fails the Mermaid syntax check, emit the deterministic fallback instead. **Never return an empty report.**
+- **Pre-build deterministic fallback**: before composing, build retained-claim `## 1. Findings` bullets and preserve the complete source ledger. If normal synthesis is empty, malformed, omits required content, or has invalid Mermaid syntax, emit the **structurally valid fallback** from `references/report-presentation-template.md`: `**Status: Partial**`, **Status header, H1 title**, `## 1. Findings`, **all four audit headings**, the preserved ledger, and an **explicit evidence-gap Coverage entry**. **Never return an empty report** or an isolated Findings list.
 
 Compose a research report from ALL sub-agent findings. Structure:
 
-0. **Status header** (precedes TL;DR) — emit `**Status: Verified**` at the top of the report if every retained claim carries non-empty external verification and no evidence gaps remain; emit `**Status: Partial**` otherwise, listing only the actual gaps inline. A **topic-inherent unknown** is a requested fact that primary retained evidence explicitly leaves undecided (for example, a consultation's final adoption decision or future constituent list). It must be reported in Coverage and uncertainty but **does not by itself require `Partial`**. Status is **Partial** if any of: a planned question returned no usable output; a retained claim is unsupported, malformed, or dropped; an answer-critical claim lacks external verification; a material source conflict remains unresolved; a required source route failed without a substitute; or synthesis produced an invalid or empty body. The status line must name only categories actually present in Coverage and uncertainty — do not hand-count claims or state a specific number when Coverage records a different count.
-1. **TL;DR** — 3-5 bullets of key findings
-2. **Overview** — 1-2 paragraph synthesis
-3. **Mermaid diagram** — pick type from the mapping below, skip for simple factual topics
-4. **Findings** — organized by source type in collapsible callouts:
-   - `> [!note]- Local Evidence`
-   - `> [!abstract]- Freshness Search (grok-search/WebSearch)`
-   - `> [!abstract]- Web Search Findings`
-   - `> [!info]- Documentation (Context7)`
-   - `> [!tip]- Repository Insights (DeepWiki)`
-5. **Freshness & Verification Status** — emit as a literal `## Freshness & Verification Status` heading (unnumbered, `##`-level); include selected tags, freshness channel, fallback/degradation, source conflicts, stale local cache warnings, and a compact key-claims table:
-   | Claim | Status | Source route | Notes |
-   |---|---|---|---|
-   | <claim> | externally verified / locally verified only / unverified freshness claim | local -> grok-search -> official source | <notes> |
-   Include `source_type` in the source-route column where useful (e.g., `local -> grok-search -> primary`).
-6. **Verification Methods** — emit as a literal `## Verification Methods` heading (unnumbered, `##`-level); describe how to verify/reproduce findings, including common wrong methods
-7. **Analysis** — merged patterns, recommendations, caveats
-8. **Sources** — complete immutable source ledger (the old numbered top-N list is gone): a `## Sources` table with the six-column header `| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |`. It includes all retained evidence — every retained external third-party claim with its exact external URL, local/repository evidence as an explicit local record (path and revision if available, never a fabricated URL), and every external material conflict and source-plan degradation that survived synthesis (degradations and conflicts retained, not concealed). Unused or unopened search results are not ledger rows; `[S<n>]` markers map to exactly one stable row; once synthesized the ledger is immutable — do not trim, delete, renumber, merge, or change ledger rows, URLs, or roles, and do not hide material conflicts.
-9. **Coverage and uncertainty** — emit as a `## Coverage and uncertainty` heading at the end of the report: bulleted list of every dropped claim (with reason), every planned question that returned no usable output, every source-plan degradation, and every synthesis fallback. Classify each item as a **topic-inherent unknown**, **execution topology** note, or **evidence gap**. A topic-inherent unknown is explicitly left undecided by primary retained evidence and is directly relevant to the user's request; report it accurately, but it **does not by itself require `Partial`**. Execution topology is informational (for example, inline fallback). Evidence gaps include a missing source, unresolved material conflict, unsupported retained claim, an answer-critical claim without external verification, or a **required source route failed without a substitute**; only evidence gaps support `Partial`. If no topic-inherent unknowns or evidence gaps remain, state: "All planned questions returned usable structured research, and every retained claim carries non-empty external verification."
+0. **Status header and report identity** (before every H2) — emit exactly `**Status: Verified**` if every retained claim has non-empty external verification and no evidence gaps remain; otherwise `**Status: Partial**`. A **topic-inherent unknown** is a requested fact primary retained evidence explicitly leaves undecided. It goes in Coverage and uncertainty but **does not by itself require `Partial`**. `Partial` is required when a planned question has no usable output, a retained claim is unsupported/malformed/dropped, an answer-critical claim lacks external verification, a material source conflict is unresolved, a required route fails without a substitute, or synthesis is invalid/empty. Coverage names the actual evidence gap.
+
+   Immediately follow status with:
+   ```markdown
+   # <localized report title>
+
+   > Evidence cutoff: YYYY-MM-DD · Verification date: YYYY-MM-DD · Scope: <concise scope>
+
+   **This report covers**
+   1. <localized topic>
+   2. <localized topic>
+   3. <localized topic>
+   ```
+   Use an explicit user cutoff when available; otherwise declare the latest date retained evidence covers. The navigation is 3–4 labels, not an H2.
+1. **TL;DR** — only 3–5 decision-relevant bullets.
+2. **Overview / method** — explain scope and approach once; do not repeat the TL;DR.
+3. **Timeline** — one canonical date table. Mermaid is optional and **visual-only**: it mirrors the table and contains no extra dates or claims.
+4. **Findings** — selected evidence sections; merge overlap and explain each fact once.
+5. **Freshness & Verification Status** — literal `## Freshness & Verification Status` (unnumbered H2), with source plan/freshness/degradation/conflict audit and a key-claims table. Do not make **numeric tool-count claims** such as `web_fetch ×5`; exact counts belong in **capture metadata**.
+6. **Verification Methods** — literal `## Verification Methods` heading (unnumbered H2), with reproducible checks, wrong methods, and canonical references.
+7. **Analysis** — only patterns/caveats that do not duplicate Findings; omit if redundant.
+8. **Sources** — literal `## Sources` with exact immutable six-column ledger `| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |`. External rows use exact URLs and role label `direct-fetch` or `search-summary only`; `direct-fetch`, `search-summary only`, `local-record:`, and `retained-without-citation` are **literal English labels** in every report language, while their surrounding explanation localizes. Every search-summary-only source identifier is disclosed in Coverage. Local/repository rows use `local-record:` and either live below the ignored run-artifact directory or carry `sha256=<64-hex-content-hash>`. Every `[S<n>]` marker maps to one stable row; every row is cited or has `retained-without-citation` in its role. Do not trim/delete/renumber/merge/change ledger rows, URLs, or roles after synthesis.
+9. **Coverage and uncertainty** — literal `## Coverage and uncertainty` at the end. **Coverage contains only** dropped claims, unusable planned output, degradations, fallback, execution topology, topic-inherent unknowns, and evidence gaps. Only an **Evidence gap** supports `Partial`; `Evidence gap` is the **literal English label** in every report language, while its explanatory text localizes. Topic-inherent unknown and execution topology are status-neutral. State retained search-summary-only source identifiers here.
+
+Run `scripts/lint-report.py` against every generated report before capture review. It validates headings, ledger/citation mapping, source disclosure, local-record durability, cutoff, status/Coverage consistency, and model-narrated numeric tool counts. Record its result beside raw output; do not rewrite evidence or status to force a pass.
 
 ### Report presentation contract
 
-D defaults to the bundled template at `references/report-presentation-template.md` — no S report search or copy is performed by default. Build a language-adaptive numbered topical narrative (suggested evidence-first shape: decision summary; scope/method; 3–8 selected topical evidence sections; risks/limitations; conclusion/next steps), merging or dropping sections when appropriate — no filler sections merely to reach 10 — with narrative labels localized to the report language. Every narrative section is an H2 heading with a plain ASCII ordinal prefix: `## 1. <title>`, `## 2. <title>`, ... . Use `1.`, `2.`, ... in every report language — the numbering is deliberately not localized; only the title text localizes. A report may have fewer narrative sections, but the sections it has must use sequential plain ordinals. The four fixed audit headings are the only unnumbered H2 exceptions. Preserve the literal unnumbered audit headings `## Freshness & Verification Status`, `## Verification Methods`, `## Sources`, and `## Coverage and uncertainty` exactly as written; better formatting never changes strict `Status: Partial` semantics — Partial remains based on evidence gaps, not presentation polish.
+D defaults to the bundled template at `references/report-presentation-template.md` — no S search/copy occurs by default. The exact generated-report recipe above is validated by `scripts/lint-report.py`: status → localized H1 identity/cutoff/scope → compact navigation → sequential plain-ASCII narrative H2s → four literal audit headings. Keep facts in one narrative home, use a canonical timeline table with Mermaid visual-only, and keep Coverage to classifications/gaps. Better presentation never changes `Partial` semantics.
 
-`--reuse-s-template` (interactive only): with an explicit user flag in an attended session, discover a relevant accessible S outline and reuse its heading order/categories **structure-only**. Reused narrative headings still get D's plain ASCII ordinal H2 prefixes — structure reuse never removes the numbering. D cannot carry S facts/sources/conclusions — no S facts, sources, citations, URLs, names, dates, metrics, or prose — into the D report. If no usable outline applies, D falls back to the bundled template. The flag is disabled under `--unattended`; using the bundled presentation is informational only and is not an evidence gap or degradation.
+`--reuse-s-template` (interactive only): with an explicit user flag in an attended session, discover a relevant accessible S outline and reuse its heading order/categories **structure-only**. Reused narrative headings still use D's plain ASCII ordinal H2 prefixes. D cannot carry S facts/sources/conclusions — no S facts, sources, citations, URLs, names, dates, metrics, or prose. If no usable outline applies, D falls back to the bundled template. The flag is disabled under `--unattended`; bundled-presentation use is informational, not an evidence gap.
 
 ### Topic → Diagram Mapping
 
@@ -173,11 +179,14 @@ Pass A — Consolidation:
 - Merge similar examples or findings
 
 Pass B — Tightening:
-- Reduce verbose prose
-- Verify TL;DR accuracy against full findings
-- Check Mermaid rendering (if diagram present)
+- Reduce verbose prose while preserving the title/cutoff/navigation identity block
+- Verify TL;DR accuracy and remove repeated dates, metrics, and caveats
+- Check Mermaid rendering; Mermaid is visual-only and mirrors the canonical timeline table
 - Do not trim, remove, renumber, or change any `## Sources` ledger reference or hide material conflicts; only improve prose outside the ledger and validate that every `[S<n>]` marker still maps to exactly one stable ledger row
+- Preserve `direct-fetch` / `search-summary only` / `local-record:` / `retained-without-citation` disclosures and Coverage identifiers for search-summary-only rows
+- Do not add numeric tool-count claims; capture metadata owns counts
 - Verify Verification Methods section is actionable
+- Run `scripts/lint-report.py`; record failure rather than rewriting evidence or status to satisfy it
 
 Original report:
 <insert Phase 3 report>")
@@ -208,8 +217,8 @@ Sources Queried:
   - Source plan tags: <tags>
   - Local evidence: <paths or "not used">
   - grok-search freshness: <used/fallback/unavailable/not needed> (model: sonnet when spawned)
-  - Web search fallback: <count or "not used"> (model: sonnet)
-  - Deep-fetch: <count> agents (model: haiku)
+  - Web search fallback: <used/fallback unavailable/not needed> (model: sonnet)
+  - Deep-fetch: <used/not used> (model: haiku)
   - Context7: <library-id or "not used"> (model: sonnet)
   - DeepWiki: <repo or "not used"> (model: sonnet)
   - Freshness status: <externally verified / locally verified only / unverified freshness claim>

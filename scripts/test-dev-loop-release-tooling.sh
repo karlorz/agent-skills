@@ -902,6 +902,17 @@ run_deep_research_dev_metadata_contract_checks() {
     '.plugins[] | select(.name == "deep-research-dev") | .keywords' "evaluation"
 }
 
+run_deep_research_dev_generated_report_checks() {
+  local skill_root
+
+  skill_root="$ROOT/skills/deep-research-dev"
+  python3 "$skill_root/scripts/test-research-contract.py"
+  python3 "$skill_root/scripts/test-report-presentation-template.py"
+  python3 "$skill_root/scripts/test-lint-report.py"
+  python3 "$skill_root/scripts/test-capture-session-provenance.py"
+  bash "$skill_root/scripts/test-smoke-ephemeral.sh"
+}
+
 run_skill_frontmatter_contract_checks() {
   while IFS= read -r skill; do
     validate_skill_frontmatter "$ROOT/$skill"
@@ -1104,6 +1115,7 @@ run_model_routing_contract_checks
 run_agent_plugin_porter_release_workflow_contract_checks
 run_deep_research_freshness_contract_checks
 run_deep_research_dev_metadata_contract_checks
+run_deep_research_dev_generated_report_checks
 run_skill_frontmatter_contract_checks
 run_plugin_metadata_contract_checks
 run_marketplace_inventory_contract_checks

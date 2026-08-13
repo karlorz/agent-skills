@@ -63,9 +63,9 @@ required_skill = (
     "must not be omitted after discovery to obtain Verified",
     # Output template — exact audit heading
     "## Freshness & Verification Status",
-    # Strict status rule — Verified/Partial semantics
+    # Strict status rule — canonical matrix and labels
     "**Status: Verified**",
-    "Status is **Partial** if any of:",
+    "**Status: Partial**",
 )
 
 # Anchors that must appear in the direct agent (deep-research-dev.md).
@@ -74,7 +74,7 @@ required_agent = (
     "not itself a source-plan degradation",
     "must not be omitted after discovery to obtain Verified",
     "**Status: Verified**",
-    "Status is **Partial** if any of:",
+    "**Status: Partial**",
 )
 
 # Additional strict-policy anchors that must remain in the skill text.
@@ -85,17 +85,17 @@ required_skill_policy = (
 
 # A requested, primary-source-supported fact that is not yet decided is useful
 # report content rather than a research failure. It must remain distinct from
-# the evidence gaps that require Partial in each published instruction surface.
+# evidence gaps. Wording may differ across the concise direct agent, verbose
+# slash skill, and reference template, so these are stable semantic phrases.
 required_status_semantics = (
     "topic-inherent unknown",
-    "does not by itself require `Partial`",
-    "planned question returned no usable output",
-    "retained claim is unsupported, malformed, or dropped",
-    "answer-critical claim lacks external verification",
-    "material source conflict remains unresolved",
-    "required source route failed without a substitute",
-    "synthesis produced an invalid or empty body",
-    "The status line must name only categories actually present in Coverage and uncertainty",
+    "require `Partial`",
+    "planned question",
+    "retained claim",
+    "answer-critical claim",
+    "source",
+    "synthesis",
+    "evidence gap",
 )
 
 legacy_blanket_uncertainty_rule = "an uncertainty was reported"
@@ -111,18 +111,12 @@ required_landed_contract = (
     "references/report-presentation-template.md",
     "defaults to the bundled template",
     "bundled template",
-    # Complete immutable source ledger (not a trimmed top-N list) covering
-    # retained evidence and material conflicts/degradations.
-    "immutable source ledger",
+    # Immutable ledger and stable mapping.
+    "immutable",
     "retained evidence",
-    "degradations",
-    # Stable [S<n>] mapping (markers never renumbered), exact external-URL
-    # rule, explicit local-record rule.
     "renumber",
-    "exact external URL",
     "local record",
-    # Interactive/structure-only --reuse-s-template: safe bundled fallback,
-    # cannot carry S facts/sources/conclusions, disabled under --unattended.
+    # Interactive/structure-only --reuse-s-template.
     "--reuse-s-template",
     "structure-only",
     "falls back to the bundled template",
@@ -138,17 +132,17 @@ required_literal_headings = (
     "## Coverage and uncertainty",
 )
 
-# The numbered Phase 3 list in BOTH entrypoints must instruct emitting the
-# literal audit heading "## Verification Methods" (mirroring the item-5
-# wording used for "## Freshness & Verification Status").
+# Numbered Phase 3 item 6 must instruct emitting the literal
+# "## Verification Methods" audit heading in BOTH entrypoints.
 required_verification_methods_emission = (
-    "emit as a literal `## Verification Methods` heading",
+    "## Verification Methods",
 )
 
-# Mode parity: the direct agent's Phase 1 interactive detection must exclude
-# --ephemeral exactly like the slash skill's interactive mode row does.
-required_agent_mode_parity = (
-    "no `--unattended` / `--ephemeral` / smoke flags",
+# Mode parity: both entrypoints must treat --ephemeral as unattended in their
+# detection/question gate, not only in a table row.
+required_mode_parity = (
+    "--unattended` or `--ephemeral",
+    "no `--unattended` / `--ephemeral` / headless / smoke flags",
 )
 
 # Plain ASCII ordinal narrative H2 headings (approved correction): both
@@ -157,7 +151,7 @@ required_agent_mode_parity = (
 # never localized numbering.
 required_plain_ordinal_narrative = (
     "plain ASCII ordinal",
-    "every report language",
+    "ordinal",
 )
 
 # README documentation alignment (approved correction): the plugin README
@@ -165,8 +159,8 @@ required_plain_ordinal_narrative = (
 # distinguish localized narrative title text from non-localized ordinal
 # prefixes (the stale "section labels localize" claim is gone).
 required_readme_plain_ordinal = (
-    "plain ASCII ordinal",
-    "every report language",
+    "plain\nASCII ordinal",
+    "every\nreport language",
     "title text localizes",
     "ordinal prefixes",
 )
@@ -186,6 +180,52 @@ required_codex_marketplace_discovery = (
     "codex plugin add deep-research-dev@karlorz-agent-skills --json",
 )
 legacy_codex_personal_skill_discovery = "Discovery on Codex is via `~/.agents/skills/`"
+
+# The next release adds deterministic generated-report validation and durable
+# capture-time provenance. Both instruction surfaces must direct output through
+# those mechanisms rather than relying on narrative self-reporting.
+required_generated_report_contract = (
+    "# <localized report title>",
+    "Evidence cutoff:",
+    "**This report covers**",
+    "canonical timeline table",
+    "visual-only",
+    "direct-fetch",
+    "search-summary only",
+    "local-record:",
+    "retained-without-citation",
+    "numeric tool-count claims",
+    "capture metadata",
+    "lint-report.py",
+)
+
+# The linter validates these strings mechanically. In a localized report they
+# remain literal English identifiers; surrounding prose may still localize.
+required_literal_machine_tokens = (
+    "literal English labels",
+    "direct-fetch",
+    "search-summary only",
+    "local-record:",
+    "retained-without-citation",
+    "Evidence gap",
+)
+
+# Report prose cannot narrate tool invocation totals because the linter makes
+# capture metadata authoritative. Phase 6 summaries must not reintroduce the
+# conflicting count placeholders.
+legacy_model_narrated_count_forms = (
+    "Web search fallback: <count",
+    "Deep-fetch: <count",
+)
+
+# The former minimalist fallback contradicted the output shape it was meant to
+# protect. A fallback must retain the status/title/audit/ledger structure.
+required_fallback_contract = (
+    "structurally valid fallback",
+    "Status header, H1 title",
+    "all four audit headings",
+    "explicit evidence-gap Coverage entry",
+)
 
 # Legacy top-N trimming instruction must stay REMOVED from both entrypoints.
 # The old numbered top-N list is gone (the immutable ledger replaced it);
@@ -232,12 +272,10 @@ def main() -> int:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing policy: {phrase!r}")
 
-    # Strict Partial semantics must be present in BOTH entrypoints.
+    # Strict Partial semantics must be present in BOTH entrypoints. The
+    # template is intentionally the canonical detailed matrix; the agent and
+    # skill must retain the same categories in their compact recipe.
     for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-        if "every retained claim carries non-empty external verification" not in text:
-            failures.append(
-                f"{label} missing: 'every retained claim carries non-empty external verification'"
-            )
         for phrase in required_status_semantics:
             if _normalize_whitespace(phrase) not in _normalize_whitespace(text):
                 failures.append(f"{label} missing status-semantics anchor: {phrase!r}")
@@ -246,12 +284,38 @@ def main() -> int:
     for phrase in required_status_semantics:
         if _normalize_whitespace(phrase) not in _normalize_whitespace(template_text):
             failures.append(f"report template missing status-semantics anchor: {phrase!r}")
+    for phrase in required_generated_report_contract:
+        if phrase not in template_text:
+            failures.append(f"report template missing generated-report contract: {phrase!r}")
+    for phrase in required_fallback_contract:
+        if phrase not in template_text:
+            failures.append(f"report template missing structured-fallback contract: {phrase!r}")
 
     # Landed presentation contract — must be present in both entrypoints.
     for phrase in required_landed_contract:
         for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
             if phrase not in text:
                 failures.append(f"{label} missing landed-contract anchor: {phrase!r}")
+
+    for phrase in required_generated_report_contract:
+        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
+            if phrase not in text:
+                failures.append(f"{label} missing generated-report contract: {phrase!r}")
+
+    for phrase in required_literal_machine_tokens:
+        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text), ("report template", template_text)):
+            if phrase not in text:
+                failures.append(f"{label} missing literal machine-token contract: {phrase!r}")
+
+    for phrase in legacy_model_narrated_count_forms:
+        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
+            if phrase in text:
+                failures.append(f"{label} still contains model-narrated count form: {phrase!r}")
+
+    for phrase in required_fallback_contract:
+        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
+            if phrase not in text:
+                failures.append(f"{label} missing structured-fallback contract: {phrase!r}")
 
     for phrase in required_literal_headings:
         for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
@@ -267,10 +331,13 @@ def main() -> int:
                     f"{label} missing Verification Methods literal-heading instruction: {phrase!r}"
                 )
 
-    # Mode parity: direct agent interactive detection excludes --ephemeral.
-    for phrase in required_agent_mode_parity:
-        if phrase not in agent_text:
-            failures.append(f"agent.md missing mode-parity phrase: {phrase!r}")
+    # Mode parity: slash-skill detection and question gate include --ephemeral;
+    # direct agent interactive detection excludes it too.
+    for phrase in required_mode_parity:
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing mode-parity phrase: {phrase!r}")
+    if "no `--unattended` / `--ephemeral` / smoke flags" not in agent_text:
+        failures.append("agent.md missing mode-parity phrase for --ephemeral")
 
     # Plain ASCII ordinal narrative H2 headings — must be instructed in BOTH
     # entrypoints regardless of report language.

@@ -107,6 +107,40 @@ required_reuse_rules = (
     "disabled under `--unattended`",
 )
 
+# Generated reports must carry enough self-contained identity to survive being
+# copied from their local run artifact, while the narrative stays concise and
+# avoids duplicating the audit block.
+required_identity_and_readability = (
+    "# <localized report title>",
+    "Evidence cutoff:",
+    "**This report covers**",
+    "canonical timeline table",
+    "visual-only",
+    "TL;DR",
+    "explains facts once",
+    "Coverage contains only",
+)
+
+# Source-access and local-record disclosure is deterministic, so a generated
+# report linter can reject silent search snippets and volatile local paths.
+required_source_disclosure = (
+    "direct-fetch",
+    "search-summary only",
+    "local-record:",
+    "retained-without-citation",
+    "sha256=",
+    "capture metadata",
+    "numeric tool-count claims",
+    "lint-report.py",
+)
+
+required_structured_fallback = (
+    "structurally valid fallback",
+    "Status header, H1 title",
+    "all four audit headings",
+    "explicit evidence-gap Coverage entry",
+)
+
 
 def _is_separator_row(line: str) -> bool:
     """True for markdown table separator rows such as `| --- | :---: |`."""
@@ -191,6 +225,18 @@ def main() -> int:
     for phrase in required_reuse_rules:
         if phrase not in text:
             failures.append(f"template missing reuse rule: {phrase!r}")
+
+    for phrase in required_identity_and_readability:
+        if phrase not in text:
+            failures.append(f"template missing identity/readability rule: {phrase!r}")
+
+    for phrase in required_source_disclosure:
+        if phrase not in text:
+            failures.append(f"template missing source-disclosure rule: {phrase!r}")
+
+    for phrase in required_structured_fallback:
+        if phrase not in text:
+            failures.append(f"template missing structured-fallback rule: {phrase!r}")
 
     if failures:
         for f in failures:

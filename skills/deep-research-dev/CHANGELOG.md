@@ -2,6 +2,33 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.1.0-beta.3] - 2026-08-13
+
+- Added deterministic generated-report validation for report identity, numbered
+  narrative headings, ordered audit headings, source-ledger citations, source
+  access disclosure, durable local records, temporal cutoffs, and status versus
+  Coverage consistency. The smoke runner persists `lint.json` and derives tool
+  counts from capture metadata rather than model prose.
+- Added fail-closed capture-time session provenance for one unique decoded user
+  query: multiline JSONL and `<user_query>` envelopes are supported, agent
+  identity is recorded rather than filtered, and the matched summary is frozen
+  with a SHA-256 hash.
+- Replaced the former isolated `## 1. Findings` fallback with a structurally
+  valid report fallback that preserves its status, H1, audit headings, ledger,
+  and explicit evidence gap.
+- Added mandatory fail-closed source-selection preflight for controlled
+  local-plugin smokes; `DEEP_RESEARCH_DEV_PLUGIN_ROOT` is the optional root
+  override. Capture refuses to run if another same-named plugin wins discovery.
+  The one 2026-08-13 live smoke at
+  `.superpowers/sdd/deep-research-dev-reliability-report-lint/live-validation-20260813`
+  ran the older installed beta.2 plugin and is therefore retained as provenance
+  and rejected lint evidence, not as beta.3 validation.
+- Refined the report template with an H1 identity block, compact navigation,
+  canonical timeline table, non-duplicative layer rules, explicit
+  `direct-fetch` / `search-summary only` / `local-record:` disclosure, and a
+  structurally valid fallback. A primary-source-supported **topic-inherent unknown**
+  **does not by itself require `Partial`**.
+
 ## [0.1.0-beta.2] - 2026-08-13
 
 - Corrected packaged Codex discovery guidance to use the marketplace installer

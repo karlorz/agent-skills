@@ -23,21 +23,36 @@ controlled evaluation, but it is not a production replacement for
 ## Report presentation (output contract)
 
 D composes reports from a **bundled general template**
-(`references/report-presentation-template.md`): a language-adaptive numbered
-topical narrative with sequential **plain ASCII ordinal** H2 heading
-prefixes (`## 1. <title>`, `## 2. <title>`, …) in **every report language**
-— only narrative title text localizes; ordinal prefixes never localize.
-The four fixed audit headings (`## Freshness & Verification Status`,
-`## Verification Methods`, `## Sources`, `## Coverage and uncertainty`)
-stay unnumbered and exact. By default D performs no S report search or copy
-— the bundled template is always the base.
+(`references/report-presentation-template.md`). Every report begins with an
+exact status line, a localized H1 title, an evidence-cutoff/verification/scope
+block, and a compact topic map. The narrative then uses sequential **plain
+ASCII ordinal** H2 prefixes (`## 1. <title>`, `## 2. <title>`, …) in **every
+report language** — only narrative title text localizes; ordinal prefixes never
+localize. The four fixed audit headings (`## Freshness & Verification Status`,
+`## Verification Methods`, `## Sources`, `## Coverage and uncertainty`) stay
+unnumbered and exact. By default D performs no S report search or copy — the
+bundled template is always the base.
 
+- Keep layers concise: TL;DR has only decision-relevant facts; the narrative
+  explains a fact once; dates live in one canonical timeline table; Mermaid is
+  optional and visual-only; freshness is an audit; Coverage contains only
+  classifications, gaps, degradations, and dropped items.
 - `## Sources` is an **immutable source ledger** of retained evidence plus
-  material conflicts/degradations — not an exhaustive dump of unused search
-  results. Every retained external third-party claim carries its exact URL;
-  local evidence is explicitly identified as a local record, never a
-  fabricated URL. Rows are stable: no trimming, deletion, renumbering, or
-  concealment of material conflicts.
+  material conflicts/degradations — not unused search results. Every external
+  row declares `direct-fetch` or `search-summary only`; the latter is repeated
+  with its `[S<n>]` identifier in Coverage. The four linter-facing tokens
+  `direct-fetch`, `search-summary only`, `local-record:`, and
+  `retained-without-citation` remain literal English labels in every report
+  language; only their surrounding explanation localizes. Local evidence uses
+  `local-record:` and either lives under the ignored run artifact directory or
+  includes a `sha256=<64-hex-content-hash>`. Rows are stable: no trimming,
+  deletion, renumbering, or concealment of material conflicts. Each row is
+  cited or explicitly `retained-without-citation`.
+- `scripts/lint-report.py` deterministically validates a generated report's
+  identity, heading order, ledger/citation mapping, source disclosure,
+  local-record durability, cutoff, status/Coverage consistency, and prohibited
+  model-narrated numeric tool counts. `smoke-ephemeral.sh` saves its `lint.json`
+  alongside the raw output and records tool counts only in capture metadata.
 - `--reuse-s-template` is an explicit interactive opt-in: it may reuse only a
   relevant accessible S outline's section order/categories — **structure
   only**. It cannot copy S facts, citations, URLs, sources, or conclusions.
@@ -51,11 +66,12 @@ stay unnumbered and exact. By default D performs no S report search or copy
   Coverage and uncertainty but **does not by itself require `Partial`**.
   `Partial` remains mandatory for actual evidence gaps, including unsupported
   retained claims, missing answer-critical verification, unresolved material
-  conflicts, or a required source route failed without a substitute.
-- This is an output-contract change: the static tests verify the written
-  instructions, but demonstrating model adherence requires a new live D
-  report. The supplied finance D report predates this contract and was not
-  retroactively improved.
+  conflicts, or a required source route failed without a substitute. In every
+  report language, `Evidence gap` is the literal English classification label
+  used by the deterministic linter; its explanatory text may localize.
+- The fallback is structurally valid: it retains the status, H1, numbered
+  Findings, audit headings, ledger, and an explicit evidence-gap Coverage
+  entry rather than returning an isolated bullet list.
 
 Full behavior lives in `skills/deep-research-dev/SKILL.md`; version history in
 `CHANGELOG.md`.
@@ -89,16 +105,34 @@ end-to-end with zero questions. One-off headless smoke from the plugin root:
 bash scripts/smoke-ephemeral.sh "skillwiki CLI latest version" [output-dir]
 ```
 
+Before a checkout-local smoke, ensure `grok inspect --json` selects this
+checkout's `skills/deep-research-dev/SKILL.md`; `grok plugin install "$PWD"
+--trust` is the local-development install path. If another same-named plugin
+wins discovery, the runner exits 3 rather than capturing the wrong version.
+
 The script runs `grok -p "/deep-research-dev:deep-research-dev --ephemeral
 --unattended <query> … ===REPORT===" -m "${MODEL:-deepseek-v4-flash}" --yolo
 --cwd … --output-format plain` and writes `cell.md` (final report),
-`cell.full.md` (full stream), and `meta.json` (duration_s, exit_code, model,
-cwd, timestamps) beside the cell. Override model / cwd with `MODEL` /
-`SMOKE_CWD` env vars. Output defaults to the ignored repository-local root
+`cell.full.md` (full stream), `meta.json` (timestamps, process outcome, exact
+observed tool counts, and fail-closed session provenance), `provenance.json`,
+optional frozen `session-summary.json`, and `lint.json`. The model identity is
+accepted only when one fresh decoded user-query record maps to the exact
+headless prompt; its agent identity and summary hash are capture evidence, not
+an eligibility filter. The runner requires a resolvable SkillWiki vault path:
+install `skillwiki` or pass an existing absolute
+`DEEP_RESEARCH_DEV_VAULT_ROOT` outside the artifact directory. Set
+`DEEP_RESEARCH_DEV_EVIDENCE_CUTOFF=YYYY-MM-DD` to make the linter verify the
+report's declared temporal cutoff against capture metadata. The runner always
+performs fail-closed source selection before capture; for controlled local-plugin
+runs, `DEEP_RESEARCH_DEV_PLUGIN_ROOT` optionally sets the expected absolute
+plugin root. Capture refuses to run if another same-named plugin wins discovery.
+Override model / cwd with `MODEL` / `SMOKE_CWD` env vars. Output defaults to the
+ignored repository-local root
 `.superpowers/sdd/deep-research-dev-eval-matrix/eval-runs/` (override with
-`DEEP_RESEARCH_DEV_ARTIFACT_ROOT`); an explicit `output-dir` inside the
-SkillWiki vault is rejected with exit 2 before anything is written
-(`DEEP_RESEARCH_DEV_VAULT_ROOT` overrides the resolved vault root, test-only).
+`DEEP_RESEARCH_DEV_ARTIFACT_ROOT`); after source selection succeeds, an explicit
+`output-dir` inside the SkillWiki vault is rejected with exit 2 before anything
+is written (`DEEP_RESEARCH_DEV_VAULT_ROOT` overrides the resolved vault root,
+test-only).
 
 ## Docs
 

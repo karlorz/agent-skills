@@ -31,6 +31,9 @@
 #               default: resolved via `skillwiki path`; must be an existing
 #               absolute directory; exit 3 when resolution or the containment
 #               probe fails)
+#   DEEP_RESEARCH_DEV_PLUGIN_ROOT     optional absolute expected plugin root;
+#               defaults to this packaged plugin's root and fails closed when
+#               another same-named plugin wins discovery
 #
 # Outputs (beside the cell):
 #   cell.md         final report — everything after the LAST literal ===REPORT===
@@ -39,6 +42,12 @@
 #                   marker is absent or the remainder is empty (extract-report.py)
 #   cell.full.md    full stdout stream (agent chatter + report)
 #   meta.json       run metadata incl. duration_s and exit_code
+#   session-summary.json  frozen selected session summary when uniquely observed
+#   lint.json       deterministic generated-report lint result
+#
+# Session provenance is captured fail-closed: a unique decoded fresh session
+# adds observed model, summary SHA-256, and tool counts to meta.json; zero or
+# ambiguous matches remain explicitly unverified without changing the report.
 #
 # Harness notes: wiki work item (vault-relative)
 #   projects/agent-skills/work/2026-08-11-deep-research-dev-eval-matrix/
@@ -47,6 +56,7 @@
 set -euo pipefail
 
 QUERY="${1:-}"
+EVIDENCE_CUTOFF="${DEEP_RESEARCH_DEV_EVIDENCE_CUTOFF:-}"
 if [[ -z "$QUERY" ]]; then
   echo "usage: smoke-ephemeral.sh \"<query>\" [output-dir]" >&2
   echo "  query       research topic (required)" >&2
@@ -54,7 +64,10 @@ if [[ -z "$QUERY" ]]; then
   echo "              (default: DEEP_RESEARCH_DEV_ARTIFACT_ROOT/<ts> — repo-local ignored root)" >&2
   echo "env: MODEL=<model> (default deepseek-v4-flash), SMOKE_CWD=<dir> (default: repo root)" >&2
   echo "     DEEP_RESEARCH_DEV_ARTIFACT_ROOT=<dir> (default: <repo>/.superpowers/sdd/deep-research-dev-eval-matrix/eval-runs)" >&2
-  echo "     DEEP_RESEARCH_DEV_VAULT_ROOT=<dir> (explicit vault root override; an output-dir inside it is rejected, exit 2; resolution/probe failure exits 3)" >&2
+  echo "     DEEP_RESEARCH_DEV_EVIDENCE_CUTOFF=YYYY-MM-DD (optional report evidence cutoff for linting)" >&2
+  echo "     DEEP_RESEARCH_DEV_SESSIONS_ROOT=<dir> (test-only session root override)" >&2
+  echo "     DEEP_RESEARCH_DEV_VAULT_ROOT=<dir> (existing absolute vault root override)" >&2
+  echo "     DEEP_RESEARCH_DEV_PLUGIN_ROOT=<dir> (optional exact local plugin root; defaults to this packaged plugin)" >&2
   exit 2
 fi
 
@@ -64,9 +77,108 @@ if ! command -v grok >/dev/null 2>&1; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 CWD="${SMOKE_CWD:-$REPO_ROOT}"
 MODEL="${MODEL:-deepseek-v4-flash}"
+PROVENANCE_HELPER="$SCRIPT_DIR/capture-session-provenance.py"
+REPORT_LINTER="$SCRIPT_DIR/lint-report.py"
+if [[ -n "${DEEP_RESEARCH_DEV_SESSIONS_ROOT:-}" ]]; then
+  # A caller-provided sessions root is test-only; snapshot it if available but
+  # never create it here. A missing root records unavailable provenance after
+  # the raw capture without touching the user's home session tree.
+  SESSIONS_ROOT="$DEEP_RESEARCH_DEV_SESSIONS_ROOT"
+else
+  SESSIONS_ROOT="$HOME/.grok/sessions/$(python3 - "$CWD" <<'PY'
+import sys
+from urllib.parse import quote
+print(quote(sys.argv[1], safe=""))
+PY
+)"
+fi
+
+[[ -f "$PROVENANCE_HELPER" ]] || { echo "error: provenance helper missing: $PROVENANCE_HELPER" >&2; exit 3; }
+[[ -f "$REPORT_LINTER" ]] || { echo "error: report linter missing: $REPORT_LINTER" >&2; exit 3; }
+
+EXPECTED_PLUGIN_ROOT="${DEEP_RESEARCH_DEV_PLUGIN_ROOT:-$PLUGIN_ROOT}"
+EXPECTED_PLUGIN_ROOT="$(python3 - "$EXPECTED_PLUGIN_ROOT" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1]).expanduser()
+if not root.is_absolute() or not root.is_dir():
+    raise SystemExit(1)
+print(root.resolve())
+PY
+)" || {
+  echo "error: DEEP_RESEARCH_DEV_PLUGIN_ROOT must be an existing absolute plugin directory" >&2
+  exit 3
+}
+DISCOVERED_SKILL="$(grok inspect --json 2>/dev/null | python3 -c '
+import json
+import sys
+try:
+    data = json.load(sys.stdin)
+    matches = [
+        item.get("source", {}).get("path")
+        for item in data.get("skills", [])
+        if item.get("name") == "deep-research-dev"
+        and item.get("source", {}).get("type") == "plugin"
+    ]
+except (OSError, ValueError, TypeError):
+    raise SystemExit(1)
+if len(matches) != 1 or not isinstance(matches[0], str):
+    raise SystemExit(1)
+print(matches[0])
+')" || {
+  echo "error: could not resolve exactly one discovered deep-research-dev plugin skill" >&2
+  exit 3
+}
+if ! python3 - "$DISCOVERED_SKILL" "$EXPECTED_PLUGIN_ROOT" <<'PY'
+from pathlib import Path
+import sys
+try:
+    skill = Path(sys.argv[1]).resolve()
+    root = Path(sys.argv[2]).resolve()
+    skill.relative_to(root)
+except (ValueError, OSError):
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+then
+  echo "error: selected deep-research-dev skill is not under DEEP_RESEARCH_DEV_PLUGIN_ROOT; refusing live capture" >&2
+  echo "  discovered: $DISCOVERED_SKILL" >&2
+  echo "  expected root: $EXPECTED_PLUGIN_ROOT" >&2
+  exit 3
+fi
+PLUGIN_VERSION="$(python3 - "$EXPECTED_PLUGIN_ROOT/.claude-plugin/plugin.json" <<'PY'
+import json
+import sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+    version = data["version"]
+except (OSError, ValueError, KeyError, TypeError):
+    raise SystemExit(1)
+if not isinstance(version, str) or not version:
+    raise SystemExit(1)
+print(version)
+PY
+)" || {
+  echo "error: could not read selected deep-research-dev plugin version" >&2
+  exit 3
+}
+DISCOVERED_SKILL_SHA256="$(python3 - "$DISCOVERED_SKILL" <<'PY'
+import hashlib
+from pathlib import Path
+import sys
+try:
+    print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+except OSError:
+    raise SystemExit(1)
+PY
+)" || {
+  echo "error: could not hash selected deep-research-dev skill" >&2
+  exit 3
+}
 
 ARTIFACT_ROOT="${DEEP_RESEARCH_DEV_ARTIFACT_ROOT:-$REPO_ROOT/.superpowers/sdd/deep-research-dev-eval-matrix/eval-runs}"
 if [[ -n "${2:-}" ]]; then
@@ -75,8 +187,8 @@ else
   OUT_DIR="$ARTIFACT_ROOT/$(date +%Y%m%d-%H%M%S)"
 fi
 
-# Vault boundary guard, evaluated BEFORE mkdir -p and BEFORE any grok
-# invocation. Vault root precedence: explicit DEEP_RESEARCH_DEV_VAULT_ROOT
+# Source selection is evaluated before this guard. The vault boundary guard runs
+# BEFORE mkdir -p and BEFORE the headless model invocation. Vault root precedence: explicit DEEP_RESEARCH_DEV_VAULT_ROOT
 # override, then `skillwiki path`. Three outcomes:
 #   1. vault root resolves and output-dir is inside it  -> exit 2 (unchanged);
 #   2. vault root resolves and output-dir is outside it -> continue;
@@ -197,6 +309,9 @@ mkdir -p "$OUT_DIR"
 CELL="$OUT_DIR/cell.md"
 FULL="$OUT_DIR/cell.full.md"
 META="$OUT_DIR/meta.json"
+PROVENANCE="$OUT_DIR/provenance.json"
+FROZEN_SUMMARY="$OUT_DIR/session-summary.json"
+LINT="$OUT_DIR/lint.json"
 RUN_ID="$(basename "$OUT_DIR")"
 QUERY_ID="$(printf '%s' "$QUERY" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-' | sed 's/^-*//; s/-*$//' | cut -c1-32)"
 [[ -n "$QUERY_ID" ]] || QUERY_ID="query"
@@ -209,6 +324,14 @@ then print the final report only (no tool narration)."
 
 STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 START_EPOCH="$(date +%s)"
+BEFORE_SESSIONS="$OUT_DIR/sessions-before.txt"
+PROVENANCE_SNAPSHOT_RC=0
+python3 "$PROVENANCE_HELPER" snapshot \
+  --sessions-root "$SESSIONS_ROOT" \
+  --output "$BEFORE_SESSIONS" || PROVENANCE_SNAPSHOT_RC=$?
+if [[ "$PROVENANCE_SNAPSHOT_RC" -ne 0 ]]; then
+  : >"$BEFORE_SESSIONS"
+fi
 
 set +e
 grok -p "$PROMPT" -m "$MODEL" --yolo --cwd "$CWD" --output-format plain >"$FULL" 2>&1
@@ -242,8 +365,12 @@ cat >"$META" <<EOF
   "phase": "smoke",
   "lane": "D",
   "query_id": "$(json_str "$QUERY_ID")",
+  "evidence_cutoff": "$(json_str "$EVIDENCE_CUTOFF")",
   "attempt": 1,
   "model": "$(json_str "$MODEL")",
+  "plugin_version": "$(json_str "$PLUGIN_VERSION")",
+  "plugin_skill": "$(json_str "$DISCOVERED_SKILL")",
+  "plugin_skill_sha256": "$(json_str "$DISCOVERED_SKILL_SHA256")",
   "slash": "/deep-research-dev:deep-research-dev --ephemeral --unattended",
   "cwd": "$(json_str "$CWD")",
   "started": "$(json_str "$STARTED")",
@@ -257,6 +384,85 @@ cat >"$META" <<EOF
   "purpose": "single-cell ephemeral unattended smoke (deep-research-dev dev lane)"
 }
 EOF
+
+# Capture-time session provenance is independent of report extraction. It is
+# fail-closed: a missing, malformed, or ambiguous session leaves no observed
+# model rather than guessing. The raw report and process outcome remain intact.
+PROVENANCE_RC=0
+if [[ "$PROVENANCE_SNAPSHOT_RC" -eq 0 ]]; then
+  python3 "$PROVENANCE_HELPER" resolve \
+    --sessions-root "$SESSIONS_ROOT" \
+    --before "$BEFORE_SESSIONS" \
+    --started "$STARTED" \
+    --query "$QUERY" \
+    --output "$PROVENANCE" \
+    --frozen-summary "$FROZEN_SUMMARY" || PROVENANCE_RC=$?
+else
+  python3 - "$PROVENANCE" <<'PY'
+import json
+import sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(json.dumps({
+    "actual_model": None,
+    "actual_model_matches": [],
+    "fresh_session_ids": [],
+    "observation_error": "pre-launch session snapshot failed; model observation unavailable",
+    "tool_counts": {},
+}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+  PROVENANCE_RC=1
+fi
+
+# Capture metadata is merged only after the provenance helper has produced its
+# immutable observation. The linter consumes the final metadata so the cutoff
+# check can compare against capture start time.
+python3 - "$META" "$PROVENANCE" "$PROVENANCE_RC" <<'PY'
+import json
+import sys
+from pathlib import Path
+meta_path = Path(sys.argv[1])
+provenance_path = Path(sys.argv[2])
+provenance_rc = int(sys.argv[3])
+meta = json.loads(meta_path.read_text(encoding="utf-8"))
+provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+for key in ("actual_model", "session_id", "session_provenance", "tool_counts", "fresh_session_ids", "actual_model_matches"):
+    if key in provenance:
+        meta[key] = provenance[key]
+if "observation_error" in provenance:
+    meta["actual_model_observation_error"] = provenance["observation_error"]
+meta["provenance_observation_exit_code"] = provenance_rc
+meta["provenance"] = "provenance.json"
+if meta.get("session_provenance"):
+    meta["frozen_session_summary"] = "session-summary.json"
+meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+
+# Run the deterministic output linter after extraction. It records the audit
+# result but never edits the report, changes the process exit, or invents a
+# successful report from a failed lint. Pass the run-artifact root so a durable
+# local record under it is accepted; add a temporal cutoff only when the caller
+# supplied one.
+LINT_ARGS=("$CELL" --metadata "$META" --artifact-root "$OUT_DIR")
+if [[ -n "$EVIDENCE_CUTOFF" ]]; then
+  LINT_ARGS+=(--cutoff "$EVIDENCE_CUTOFF")
+fi
+LINT_RC=0
+python3 "$REPORT_LINTER" "${LINT_ARGS[@]}" >"$LINT" || LINT_RC=$?
+python3 - "$META" "$LINT" "$LINT_RC" <<'PY'
+import json
+import sys
+from pathlib import Path
+meta_path = Path(sys.argv[1])
+lint_path = Path(sys.argv[2])
+lint_rc = int(sys.argv[3])
+meta = json.loads(meta_path.read_text(encoding="utf-8"))
+lint = json.loads(lint_path.read_text(encoding="utf-8"))
+meta["report_lint"] = "lint.json"
+meta["report_lint_exit_code"] = lint_rc
+meta["report_lint_ok"] = lint.get("ok") is True and lint_rc == 0
+meta["report_lint_errors"] = lint.get("errors", [])
+meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 
 printf 'deep-research-dev smoke complete\n'
 printf '  cell:     %s\n' "$CELL"

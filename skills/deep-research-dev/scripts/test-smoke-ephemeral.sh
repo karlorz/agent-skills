@@ -55,12 +55,23 @@
 #      created) -> must fail closed: exit 3, vault-resolution/boundary
 #      diagnostic, no output dir, no stub-Grok invocation (RED on the current
 #      resolver, which returns the override verbatim, unvalidated)
+#  16. Capture-time provenance: a fresh session with a decoded multiline
+#      `<user_query>` envelope, nonlegacy agent identity, and tool calls is
+#      frozen into the smoke metadata without treating agent_name as a filter.
+#  17. Generated-report lint: a structurally valid report produces lint.json;
+#      negative rule coverage belongs to test-lint-report.py.
+#  18. An explicitly expected plugin root fails closed before raw capture when
+#      discovery resolves a same-named plugin from another root.
+#  19. The default plugin root is verified against discovery and its selected
+#      version/SKILL hash are persisted in smoke metadata.
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SMOKE="$SCRIPT_DIR/smoke-ephemeral.sh"
 HELPER="$SCRIPT_DIR/extract-report.py"
+PROVENANCE_HELPER="$SCRIPT_DIR/capture-session-provenance.py"
+REPORT_LINTER="$SCRIPT_DIR/lint-report.py"
 
 PASS=0
 FAIL=0
@@ -86,8 +97,17 @@ if bash -n "$SMOKE"; then
 else
   bad "syntax: bash -n smoke-ephemeral.sh"
 fi
+for helper in "$HELPER" "$PROVENANCE_HELPER" "$REPORT_LINTER"; do
+  if [[ -f "$helper" ]] && python3 -m py_compile "$helper"; then
+    ok "syntax: $(basename "$helper") compiles"
+  else
+    bad "syntax: missing or invalid $(basename "$helper")"
+  fi
+done
 
 # ---- fixtures ---------------------------------------------------------------
+mkdir -p "$TMP/vault"
+
 # (a) marker on its own line, blank + whitespace-only lines after it
 cat > "$TMP/a.full" <<'EOF'
 narration line one
@@ -152,17 +172,149 @@ narration line
 EOF
 cp "$TMP/e.full" "$TMP/e.expected"
 
+# (f) structurally valid report for the post-extraction linter path.
+cat > "$TMP/f.full" <<'EOF'
+===REPORT===
+**Status: Verified**
+
+# Smoke report
+
+> Evidence cutoff: 2026-08-12 · Verification date: 2026-08-13 · Scope: fixture
+
+**This report covers**
+1. Capture
+2. Ledger
+
+## 1. Decision summary
+
+The official fixture is retained. [S1]
+
+## Freshness & Verification Status
+
+| Claim | Status | Source route | Notes |
+| --- | --- | --- | --- |
+| Fixture | externally verified | direct-fetch → primary | [S1] |
+
+## Verification Methods
+
+Open the fixture URL.
+
+## Sources
+
+| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |
+| --- | --- | --- | --- | --- | --- |
+| S1 | direct-fetch; retained fixture | Fixture / official source | primary | 2026-08-13 | https://example.test/fixture |
+
+## Coverage and uncertainty
+
+- **Topic-inherent unknown:** no additional decision is published.
+EOF
+cat > "$TMP/f.expected" <<'EOF'
+**Status: Verified**
+
+# Smoke report
+
+> Evidence cutoff: 2026-08-12 · Verification date: 2026-08-13 · Scope: fixture
+
+**This report covers**
+1. Capture
+2. Ledger
+
+## 1. Decision summary
+
+The official fixture is retained. [S1]
+
+## Freshness & Verification Status
+
+| Claim | Status | Source route | Notes |
+| --- | --- | --- | --- |
+| Fixture | externally verified | direct-fetch → primary | [S1] |
+
+## Verification Methods
+
+Open the fixture URL.
+
+## Sources
+
+| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |
+| --- | --- | --- | --- | --- | --- |
+| S1 | direct-fetch; retained fixture | Fixture / official source | primary | 2026-08-13 | https://example.test/fixture |
+
+## Coverage and uncertainty
+
+- **Topic-inherent unknown:** no additional decision is published.
+EOF
+
 # ---- stub grok (never invokes the real CLI) ---------------------------------
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/grok" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "inspect" && "${2:-}" == "--json" ]]; then
+  if [[ -n "${GROK_STUB_INSPECT_PATH:-}" ]]; then
+    python3 - "$GROK_STUB_INSPECT_PATH" <<'PY'
+import json
+import sys
+print(json.dumps({"skills": [{
+    "name": "deep-research-dev",
+    "source": {"type": "plugin", "path": sys.argv[1]},
+}]}))
+PY
+    exit 0
+  fi
+  printf '%s\n' '{"skills":[]}'
+  exit 0
+fi
 if [[ -n "${GROK_STUB_CALLED:-}" ]]; then
   touch "$GROK_STUB_CALLED"
+fi
+if [[ -n "${GROK_STUB_SESSION_ROOT:-}" ]]; then
+  python3 - "$GROK_STUB_SESSION_ROOT" "${GROK_STUB_SESSION_ID:-fresh-session}" "${GROK_STUB_QUERY:-}" <<'PY'
+import json
+import sys
+from pathlib import Path
+root = Path(sys.argv[1]) / sys.argv[2]
+query = sys.argv[3]
+root.mkdir(parents=True, exist_ok=True)
+(root / "summary.json").write_text(json.dumps({
+    "agent_name": "grok-build-plan",
+    "current_model_id": "deepseek-v4-flash-max",
+    "created_at": "2026-08-13T00:00:00.500000Z",
+}) + "\n", encoding="utf-8")
+prompt = (
+    "/deep-research-dev:deep-research-dev --ephemeral --unattended " + query
+    + "\n\nWhen the research report is complete, print a line exactly:\n"
+    + "===REPORT===\nthen print the final report only (no tool narration)."
+)
+records = [
+    {"type": "user", "content": [{"type": "text", "text": "<user_query>\n" + prompt + "\n</user_query>"}]},
+    {"type": "assistant", "content": "", "tool_calls": [
+        {"name": "web_fetch", "arguments": "{}"},
+        {"name": "web_fetch", "arguments": "{}"},
+        {"name": "grok-search", "arguments": "{}"},
+    ]},
+]
+(root / "chat_history.jsonl").write_text(
+    "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+)
+PY
 fi
 cat "$GROK_STUB_OUTPUT"
 exit "${GROK_STUB_EXIT:-0}"
 EOF
 chmod +x "$TMP/bin/grok"
+# stub date: fixed capture timestamp lets synthetic session metadata satisfy
+# the real runner's created_at >= started provenance predicate.
+cat > "$TMP/bin/date" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-u" && "${2:-}" == "+%Y-%m-%dT%H:%M:%SZ" ]]; then
+  printf '2026-08-13T00:00:00Z\n'
+elif [[ "${1:-}" == "+%s" ]]; then
+  printf '1786492800\n'
+else
+  exec /bin/date "$@"
+fi
+EOF
+chmod +x "$TMP/bin/date"
 
 # run_cell <name> <fixture> <expected-cell> — one full harness run via stub
 run_cell() {
@@ -173,7 +325,9 @@ run_cell() {
   local log="$TMP/run-$name.log"
   local rc
   GROK_STUB_OUTPUT="$fixture" GROK_STUB_EXIT=0 \
-    PATH="$TMP/bin:$PATH" bash "$SMOKE" "test query $name" "$rundir" \
+    PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-$name" \
+    DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+    GROK_AGENT=1 bash "$SMOKE" "test query $name" "$rundir" \
     >"$log" 2>&1
   rc=$?
   if [[ "$rc" -ne 0 ]]; then
@@ -185,6 +339,64 @@ run_cell() {
 }
 
 # ---- section 1: end-to-end through the real harness (stub grok) -------------
+# The runner is distributed inside the plugin, so its default expected root
+# must be the script's parent plugin directory, not a checkout-specific path.
+STANDALONE_PLUGIN="$TMP/standalone-plugin"
+cp -R "$SCRIPT_DIR/.." "$STANDALONE_PLUGIN"
+STANDALONE_SMOKE="$STANDALONE_PLUGIN/scripts/smoke-ephemeral.sh"
+STANDALONE_SKILL="$STANDALONE_PLUGIN/skills/deep-research-dev/SKILL.md"
+STANDALONE_RC=0
+GROK_STUB_OUTPUT="$TMP/f.full" GROK_STUB_EXIT=0 \
+  GROK_STUB_INSPECT_PATH="$STANDALONE_SKILL" \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/standalone-sessions" \
+  DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" GROK_AGENT=1 \
+  env -u DEEP_RESEARCH_DEV_PLUGIN_ROOT bash "$STANDALONE_SMOKE" "test query standalone" "$TMP/standalone-run" \
+  >"$TMP/run-standalone.log" 2>&1 || STANDALONE_RC=$?
+if [[ "$STANDALONE_RC" -eq 0 ]] && python3 - "$TMP/standalone-run/meta.json" "$STANDALONE_SKILL" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+meta = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+skill = Path(sys.argv[2]).resolve()
+assert Path(meta["plugin_skill"]).resolve() == skill, meta
+assert meta["plugin_version"] == "0.1.0-beta.3", meta
+assert meta["plugin_skill_sha256"] == hashlib.sha256(skill.read_bytes()).hexdigest(), meta
+PY
+then
+  ok "plugin-root: packaged standalone plugin uses its own default root and records identity"
+else
+  bad "plugin-root: standalone plugin default root failed (see $TMP/run-standalone.log)"
+fi
+
+EXPECTED_PLUGIN_ROOT="$TMP/expected-plugin"
+mkdir -p "$EXPECTED_PLUGIN_ROOT/skills/deep-research-dev" "$EXPECTED_PLUGIN_ROOT/.claude-plugin"
+EXPECTED_SKILL="$EXPECTED_PLUGIN_ROOT/skills/deep-research-dev/SKILL.md"
+printf '%s\n' '---' 'name: deep-research-dev' '---' >"$EXPECTED_SKILL"
+cat >"$EXPECTED_PLUGIN_ROOT/.claude-plugin/plugin.json" <<'EOF'
+{"name":"deep-research-dev","version":"0.1.0-test"}
+EOF
+export DEEP_RESEARCH_DEV_PLUGIN_ROOT="$EXPECTED_PLUGIN_ROOT"
+export GROK_STUB_INSPECT_PATH="$EXPECTED_SKILL"
+
+PRECHECK_OUT="$TMP/plugin-root-precheck"
+PRECHECK_RC=0
+GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_CALLED="$TMP/grok-called-plugin-root" \
+  GROK_STUB_INSPECT_PATH="$TMP/other-plugin/skills/deep-research-dev/SKILL.md" \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-plugin-root" \
+  DEEP_RESEARCH_DEV_PLUGIN_ROOT="$EXPECTED_PLUGIN_ROOT" DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+  GROK_AGENT=1 bash "$SMOKE" "test query plugin-root" "$PRECHECK_OUT" \
+  >"$TMP/run-plugin-root.log" 2>&1 || PRECHECK_RC=$?
+if [[ "$PRECHECK_RC" -eq 3 ]] \
+  && grep -Fq 'selected deep-research-dev skill is not under DEEP_RESEARCH_DEV_PLUGIN_ROOT' "$TMP/run-plugin-root.log" \
+  && [[ ! -e "$PRECHECK_OUT" && ! -e "$TMP/grok-called-plugin-root" ]]; then
+  ok "plugin-root: mismatched selected skill fails closed before capture"
+else
+  bad "plugin-root: expected fail-closed mismatched selected skill (see $TMP/run-plugin-root.log)"
+fi
+
+export GROK_STUB_INSPECT_PATH="$EXPECTED_SKILL"
+
 run_cell a "$TMP/a.full" "$TMP/a.expected" || true
 run_cell b "$TMP/b.full" "$TMP/b.expected" || true
 if ! grep -Fq 'no claims were dropped' "$TMP/run-b/cell.md"; then
@@ -205,8 +417,9 @@ else
 fi
 run_cell d "$TMP/d.full" "$TMP/d.expected" || true
 run_cell e "$TMP/e.full" "$TMP/e.expected" || true
+run_cell f "$TMP/f.full" "$TMP/f.expected" || true
 
-# ---- section 2: meta.json contract (harness behavior preserved) -------------
+# ---- section 2: metadata and post-capture contracts -------------------------
 # check_meta <label> <meta.json> <exp_exit> <exp_outcome>
 check_meta() {
   local label="$1" meta="$2" exp_exit="$3" exp_outcome="$4"
@@ -220,7 +433,11 @@ assert meta["outcome"] == exp_outcome, (meta["outcome"], exp_outcome)
 assert meta["phase"] == "smoke" and meta["cell"] == "cell.md"
 for key in ("run_id", "lane", "query_id", "attempt", "model", "slash",
             "cwd", "started", "finished", "duration_s", "bytes_stdout",
-            "bytes_report", "purpose"):
+            "bytes_report", "purpose", "provenance", "report_lint",
+            "plugin_version", "plugin_skill", "plugin_skill_sha256",
+            "report_lint_exit_code", "report_lint_ok", "report_lint_errors",
+            "tool_counts", "actual_model_matches", "fresh_session_ids",
+            "evidence_cutoff"):
     assert key in meta, key
 if exp_exit == 0:
     # requirement 6: for the inline example, cell.md must be strictly smaller
@@ -244,12 +461,85 @@ check_meta "b: meta.json valid — exit 0, outcome ok, bytes_report < bytes_stdo
 # failed grok run: exit handling must be preserved, extraction must still work
 mkdir -p "$TMP/run-fail"
 GROK_STUB_OUTPUT="$TMP/b.full" GROK_STUB_EXIT=3 \
-  PATH="$TMP/bin:$PATH" bash "$SMOKE" "test query fail" "$TMP/run-fail" \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-fail" \
+  DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+  GROK_AGENT=1 bash "$SMOKE" "test query fail" "$TMP/run-fail" \
   >"$TMP/run-fail.log" 2>&1 || true
 check_meta "fail: meta.json valid — exit 3, outcome failed" \
   "$TMP/run-fail/meta.json" 3 failed
 check "fail: cell.md still extracted on failed run" \
   "$TMP/b.expected" "$TMP/run-fail/cell.md"
+
+# (f) demonstrates that smoke metadata records a successful generated-report
+# lint without mutating the raw final report.
+if python3 - "$TMP/run-f/meta.json" "$TMP/run-f/lint.json" "$EXPECTED_SKILL" <<'PY'
+import hashlib
+import json, sys
+meta = json.load(open(sys.argv[1], encoding="utf-8"))
+lint = json.load(open(sys.argv[2], encoding="utf-8"))
+skill = open(sys.argv[3], "rb").read()
+assert meta["report_lint"] == "lint.json", meta
+assert meta["report_lint_ok"] is True, meta
+assert meta["report_lint_exit_code"] == 0, meta
+assert meta["report_lint_errors"] == [], meta
+assert lint["ok"] is True, lint
+assert meta["plugin_version"] == "0.1.0-test", meta
+assert meta["plugin_skill"] == sys.argv[3], meta
+assert meta["plugin_skill_sha256"] == hashlib.sha256(skill).hexdigest(), meta
+assert meta["actual_model"] is None, meta
+assert meta["tool_counts"] == {}, meta
+assert "actual_model_observation_error" in meta, meta
+PY
+then
+  ok "f: valid report lint and unverified absent-session provenance are persisted"
+else
+  bad "f: report lint/provenance metadata mismatch"
+fi
+
+# A decoded multiline `<user_query>` envelope and a nonlegacy agent identity
+# must produce durable model provenance and tool counts. The test passes a
+# dedicated sessions root and fixed clock so the capture is deterministic.
+PROV_ROOT="$TMP/provenance-sessions"
+mkdir -p "$PROV_ROOT" "$TMP/vault"
+cat > "$TMP/bin/skillwiki" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "$TMP/vault"
+EOF
+chmod +x "$TMP/bin/skillwiki"
+PROV_RC=0
+GROK_STUB_OUTPUT="$TMP/f.full" GROK_STUB_EXIT=0 \
+  GROK_STUB_SESSION_ROOT="$PROV_ROOT" GROK_STUB_SESSION_ID="fresh-multiline" \
+  GROK_STUB_QUERY=$'smoke provenance\nwith newline' \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$PROV_ROOT" \
+  DEEP_RESEARCH_DEV_EVIDENCE_CUTOFF="2026-08-12" DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+  GROK_AGENT=1 bash "$SMOKE" $'smoke provenance\nwith newline' "$TMP/run-provenance" \
+  >"$TMP/run-provenance.log" 2>&1 || PROV_RC=$?
+if [[ "$PROV_RC" -ne 0 ]]; then
+  sed 's/^/    /' "$TMP/run-provenance.log" >&2 || true
+fi
+if [[ "$PROV_RC" -eq 0 ]] && python3 - "$TMP/run-provenance" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+out = Path(sys.argv[1])
+meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+frozen = out / "session-summary.json"
+assert meta["actual_model"] == "deepseek-v4-flash-max", meta
+assert meta["session_id"] == "fresh-multiline", meta
+assert meta["session_provenance"]["agent_name"] == "grok-build-plan", meta
+assert meta["session_provenance"]["summary_sha256"] == hashlib.sha256(frozen.read_bytes()).hexdigest(), meta
+assert meta["frozen_session_summary"] == "session-summary.json", meta
+assert meta["tool_counts"] == {"grok-search": 1, "web_fetch": 2}, meta
+assert meta["provenance_observation_exit_code"] == 0, meta
+assert meta["evidence_cutoff"] == "2026-08-12", meta
+assert meta["report_lint_ok"] is True, meta
+PY
+then
+  ok "provenance: decoded multiline user query freezes model identity and tool counts"
+else
+  bad "provenance: expected durable decoded session provenance (see $TMP/run-provenance.log)"
+fi
 
 # ---- section 3: helper unit checks (byte-exact) -----------------------------
 if [[ -f "$HELPER" ]]; then
@@ -279,9 +569,11 @@ fi
 # r1: default artifact root — no output-dir argument -> exactly one run
 #     directory under $DEEP_RESEARCH_DEV_ARTIFACT_ROOT with an extracted
 #     cell.md (env -u: keep the run immune to an ambient vault override)
+mkdir -p "$TMP/default-sessions"
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-default" \
-  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_ARTIFACT_ROOT="$TMP/default-artifacts" \
-  env -u DEEP_RESEARCH_DEV_VAULT_ROOT bash "$SMOKE" "test query default-root" \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/default-sessions" DEEP_RESEARCH_DEV_ARTIFACT_ROOT="$TMP/default-artifacts" \
+  DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+  GROK_AGENT=1 bash "$SMOKE" "test query default-root" \
   >"$TMP/run-default.log" 2>&1 || bad "r1: smoke-ephemeral.sh exited $? (see $TMP/run-default.log)"
 
 r1_count="$(find "$TMP/default-artifacts" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ' || true)"
@@ -304,8 +596,8 @@ mkdir -p "$TMP/vault"
 rm -f "$TMP/grok-called-vault"
 r2_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-vault" \
-  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
-  bash "$SMOKE" "test query vault-reject" "$TMP/vault/forbidden-run" \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-vault" DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+  GROK_AGENT=1 bash "$SMOKE" "test query vault-reject" "$TMP/vault/forbidden-run" \
   >"$TMP/run-vault.log" 2>&1 || r2_rc=$?
 if [[ "$r2_rc" -eq 2 ]]; then
   ok "r2: vault-child output-dir rejected with exit 2"
@@ -351,8 +643,8 @@ chmod +x "$TMP/bin/skillwiki"
 rm -f "$TMP/grok-called-json"
 r3_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-json" \
-  PATH="$TMP/bin:$PATH" \
-  env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-json" \
+  GROK_AGENT=1 env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
   bash "$SMOKE" "test query json-vault" "$TMP/vault/forbidden-json-run" \
   >"$TMP/run-json.log" 2>&1 || r3_rc=$?
 if [[ "$r3_rc" -eq 2 ]]; then
@@ -393,8 +685,8 @@ rm -rf "$TMP/out-r4"
 rm -f "$TMP/grok-called-r4"
 r4_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-r4" \
-  PATH="$TMP/bin-r4:$TMP/bin:$PATH" \
-  env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
+  PATH="$TMP/bin-r4:$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-r4" \
+  GROK_AGENT=1 env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
   bash "$SMOKE" "test query resolver-fail" "$TMP/out-r4" \
   >"$TMP/run-r4.log" 2>&1 || r4_rc=$?
 if [[ "$r4_rc" -eq 3 ]]; then
@@ -436,7 +728,7 @@ EOF
 chmod +x "$TMP/bin-r5/skillwiki"
 cat > "$TMP/bin-r5/python3" <<EOF
 #!/usr/bin/env bash
-if [[ "\$1" == "-" && \$# -eq 3 ]]; then
+if [[ "\$1" == "-" && \$# -eq 3 && "\$2" != "$EXPECTED_SKILL" ]]; then
   exit 42
 fi
 exec "$REAL_PY" "\$@"
@@ -452,8 +744,9 @@ rm -f "$TMP/grok-called-r5"
 mkdir -p "$TMP/vault-r5"
 r5_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-r5" \
-  PATH="$TMP/bin-r5:$TMP/bin:$PATH" \
-  env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
+  PATH="$TMP/bin-r5:$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-r5" \
+  GROK_STUB_INSPECT_PATH="$EXPECTED_SKILL" \
+  GROK_AGENT=1 env -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
   bash "$SMOKE" "test query probe-fail" "$TMP/out-r5" \
   >"$TMP/run-r5.log" 2>&1 || r5_rc=$?
 if [[ "$r5_rc" -eq 3 ]]; then
@@ -499,7 +792,7 @@ EOF
 chmod +x "$TMP/bin-r6/skillwiki"
 cat > "$TMP/bin-r6/python3" <<EOF
 #!/usr/bin/env bash
-if [[ "\$1" == "-" && \$# -eq 3 ]]; then
+if [[ "\$1" == "-" && \$# -eq 3 && "\$2" != "$EXPECTED_SKILL" ]]; then
   exit 1
 fi
 exec "$REAL_PY" "\$@"
@@ -509,8 +802,9 @@ rm -rf "$TMP/out-r6"
 rm -f "$TMP/grok-called-r6"
 r6_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-r6" \
-  PATH="$TMP/bin-r6:$TMP/bin:$PATH" \
-  env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
+  PATH="$TMP/bin-r6:$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-r6" \
+  GROK_STUB_INSPECT_PATH="$EXPECTED_SKILL" \
+  GROK_AGENT=1 env -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
   bash "$SMOKE" "test query probe-exit1" "$TMP/out-r6" \
   >"$TMP/run-r6.log" 2>&1 || r6_rc=$?
 if [[ "$r6_rc" -eq 3 ]]; then
@@ -556,8 +850,9 @@ rm -rf "$TMP/out-r7"
 rm -f "$TMP/grok-called-r7"
 r7_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-r7" \
-  PATH="$TMP/bin-r7:$TMP/bin:$PATH" \
-  env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
+  PATH="$TMP/bin-r7:$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-r7" \
+  GROK_STUB_INSPECT_PATH="$EXPECTED_SKILL" \
+  GROK_AGENT=1 env -u DEEP_RESEARCH_DEV_VAULT_ROOT -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
   bash "$SMOKE" "test query resolver-garbage" "$TMP/out-r7" \
   >"$TMP/run-r7.log" 2>&1 || r7_rc=$?
 if [[ "$r7_rc" -eq 3 ]]; then
@@ -594,8 +889,9 @@ rm -rf "$TMP/out-r8"
 rm -f "$TMP/grok-called-r8"
 r8_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-r8" \
-  PATH="$TMP/bin:$PATH" \
-  env -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-r8" \
+  GROK_STUB_INSPECT_PATH="$EXPECTED_SKILL" \
+  GROK_AGENT=1 env -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
   DEEP_RESEARCH_DEV_VAULT_ROOT=relative-vault \
   bash "$SMOKE" "test query relative-override" "$TMP/out-r8" \
   >"$TMP/run-r8.log" 2>&1 || r8_rc=$?
@@ -632,8 +928,9 @@ rm -rf "$TMP/out-r9"
 rm -f "$TMP/grok-called-r9"
 r9_rc=0
 GROK_STUB_OUTPUT="$TMP/a.full" GROK_STUB_EXIT=0 GROK_STUB_CALLED="$TMP/grok-called-r9" \
-  PATH="$TMP/bin:$PATH" \
-  env -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-r9" \
+  GROK_STUB_INSPECT_PATH="$EXPECTED_SKILL" \
+  GROK_AGENT=1 env -u DEEP_RESEARCH_DEV_ARTIFACT_ROOT \
   DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/nonexistent-override-vault" \
   bash "$SMOKE" "test query nonexistent-override" "$TMP/out-r9" \
   >"$TMP/run-r9.log" 2>&1 || r9_rc=$?
