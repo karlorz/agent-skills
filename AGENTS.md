@@ -15,6 +15,19 @@ This repo works main-first:
 - Create a PR only if direct push conflicts, `main` moved, permissions fail, or branch protection blocks the push.
 - Tag releases only after main CI passes.
 
+## Artifact routing
+
+- Keep versioned implementation and test **source** in this repository.
+- Keep SDD task briefs, implementer reports, review packages, progress ledgers,
+  raw test output, smoke transcripts, run metadata, and scorer scratch under
+  `.superpowers/sdd/<work-id>/`; this path is local and ignored.
+- The SkillWiki vault stores only curated, shareable knowledge and project
+  process: decisions, normalized score tables, reusable lessons, and approved
+  specifications. Never place raw run output or SDD handoff/report files under
+  `projects/**/work/**`.
+- Before any vault mutation, use the SkillWiki managed workflow and respect
+  existing managed-write locks and unmerged state.
+
 Marketplace gotcha:
 
 - `codex plugin list` reads the root `.claude-plugin/marketplace.json`; a
