@@ -77,7 +77,7 @@ JSON
 #!/bin/bash
 set -euo pipefail
 
-cmd="${@: -1}"
+cmd="${!#}"
 remote_root="${FAKE_REMOTE_ROOT:?}"
 
 case "$cmd" in

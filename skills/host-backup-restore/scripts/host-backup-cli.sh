@@ -6,16 +6,22 @@ HOST=""
 BACKUP_USER=""
 ALL=false
 BACKUP_GROUPS=""
+GROUPS_SET=false
 HERMES_TIER="full"
+HERMES_TIER_SET=false
 DEST=""
+DEST_SET=false
 DRY_RUN=false
 REDETECT=false
 PROFILE=""
+PROFILE_SET=false
 SAVE_PROFILE=""
 LIST_PROFILES=false
 RESEARCH=false
 DB_USER=""
 DB_PASS=""
+SOURCE_ARCHIVE=""
+TRUSTED_SHA256=""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -23,29 +29,37 @@ usage() {
   echo "Usage: $0 --host HOST [options]"
   echo ""
   echo "Options:"
-  echo "  --host HOST           SSH target hostname (required)"
-  echo "  --user USER           SSH user (default: root; or use host-agent SSH alias for non-root)"
+  echo "  --host HOST           SSH target hostname (required, except for --profile portfolio-lab)"
+  echo "  --user USER           SSH user (default: agent; invalid for retrieval-only portfolio-lab)"
   echo "  --all                 Back up all groups"
   echo "  --groups 'g1,g2,...'  Specific groups: base,ssh,tailscale,caddy_domains,hermes,databases,other_services,apt,wiki"
-  echo "  --profile NAME        Use a backup profile (full, quick, minimal, or custom)"
+  echo "  --profile NAME        Use a backup profile (full, quick, minimal, portfolio-lab, or custom)"
   echo "  --save-profile NAME   Save current --groups/--hermes-tier as a named profile"
   echo "  --list-profiles       List all available profiles and exit"
   echo "  --hermes-tier TIER    minimal|standard|full (default: full)"
-  echo "  --dest PATH           Backup destination (default: ~/Desktop/backups/HOST/)"
+  echo "  --dest PATH           Backup destination (default: ~/Desktop/backups/HOST/; must be absolute for portfolio-lab)"
   echo "  --dry-run             Preview only, no actual backup"
   echo "  --redetect            Re-run discovery, ignore cache"
   echo "  --research            Run post-discovery research on detected services"
   echo "  --db-user USER        Database username for pg_dump/mysqldump (default: postgres/root)"
   echo "  --db-pass PASS        Database password for mysqldump"
   echo ""
+  echo "Portfolio Lab (exclusive --profile portfolio-lab; selects ONLY portfolio_lab):"
+  echo "  --source-archive PATH  Explicit remote/source archive path (required; retrieval only,"
+  echo "                         archive + <archive>.sha256 sidecar; no automatic cloud transfer)"
+  echo "  --trusted-sha256 HEX   Independently trusted 64-character archive SHA-256 (required)"
+  echo "  --dest PATH            Explicit absolute local retrieval destination (required; no default)"
+  echo ""
   echo "Profiles:"
-  echo "  Built-in: full (default), quick, minimal"
+  echo "  Built-in: full (default), quick, minimal, portfolio-lab (exclusive)"
   echo "  Custom:   ~/.config/host-backup-restore/profiles.yaml"
   echo ""
   echo "Examples:"
   echo "  $0 --host sg01 --profile quick"
   echo "  $0 --host sg01 --groups 'hermes,databases' --save-profile daily"
   echo "  $0 --host sg01 --all --research"
+  echo "  $0 --profile portfolio-lab --source-archive 'backup@storage.example:/mnt/encrypted-backups/portfolio-lab-YYYYMMDD.portfolio-lab-recovery.tar' \\"
+  echo "     --trusted-sha256 <trusted-archive-sha256> --dest \"\$HOME/Desktop/backups/portfolio-lab/\""
   exit 1
 }
 
@@ -54,17 +68,19 @@ while [ $# -gt 0 ]; do
     --host) HOST="$2"; shift 2 ;;
     --user) BACKUP_USER="$2"; shift 2 ;;
     --all) ALL=true; shift ;;
-    --groups) BACKUP_GROUPS="$2"; shift 2 ;;
-    --profile) PROFILE="$2"; shift 2 ;;
+    --groups) BACKUP_GROUPS="$2"; GROUPS_SET=true; shift 2 ;;
+    --profile) PROFILE="$2"; PROFILE_SET=true; shift 2 ;;
     --save-profile) SAVE_PROFILE="$2"; shift 2 ;;
     --list-profiles) LIST_PROFILES=true; shift ;;
-    --hermes-tier) HERMES_TIER="$2"; shift 2 ;;
-    --dest) DEST="$2"; shift 2 ;;
+    --hermes-tier) HERMES_TIER="$2"; HERMES_TIER_SET=true; shift 2 ;;
+    --dest) DEST="$2"; DEST_SET=true; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     --redetect) REDETECT=true; shift ;;
     --research) RESEARCH=true; shift ;;
     --db-user) DB_USER="$2"; shift 2 ;;
     --db-pass) DB_PASS="$2"; shift 2 ;;
+    --source-archive) SOURCE_ARCHIVE="$2"; shift 2 ;;
+    --trusted-sha256) TRUSTED_SHA256="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
@@ -76,9 +92,13 @@ if $LIST_PROFILES; then
   exit 0
 fi
 
-if [ -z "$HOST" ]; then
-  echo "Error: --host is required"
-  usage
+# ── Profile/groups exclusivity (portfolio-lab) ───────────────────────────
+# Never silently override a selection: --profile portfolio-lab combined with
+# any --groups, or --groups portfolio_lab combined with any --profile, is
+# rejected instead of one flag silently winning.
+if $GROUPS_SET && $PROFILE_SET && { [ "$PROFILE" = "portfolio-lab" ] || echo "$BACKUP_GROUPS" | grep -qw portfolio_lab; }; then
+  echo "Error: --profile portfolio-lab cannot be combined with --groups, and --groups portfolio_lab cannot be combined with any --profile (portfolio-lab is exclusive; it selects ONLY portfolio_lab)" >&2
+  exit 1
 fi
 
 # Resolve profile if specified
@@ -95,6 +115,57 @@ if [ -n "$PROFILE" ]; then
   else
     exit 1
   fi
+fi
+
+# ── Portfolio-lab exclusive path ─────────────────────────────────────────
+# portfolio-lab is a first-class built-in profile selecting ONLY the
+# portfolio_lab group. It cannot mix with generic host/identity/Caddy/Hermes
+# groups, performs no managed-host discovery, and never auto-transfers to
+# cloud storage. Scope is retrieval: archive + sidecar into an explicit local
+# --dest, then canonical `verify --archive` via the archive's embedded
+# bootstrap. The source archive is created on the source host with the
+# canonical `create` command (see SKILL.md); this path never creates it and
+# makes no storage-encryption attestation.
+if [ -n "$BACKUP_GROUPS" ] && echo "$BACKUP_GROUPS" | grep -qw portfolio_lab; then
+  source "$SCRIPT_DIR/profiles.sh"
+  if ! assert_portfolio_lab_isolated "$BACKUP_GROUPS"; then
+    exit 1
+  fi
+  if $ALL; then
+    echo "Error: portfolio-lab cannot be combined with --all (it is exclusive; selects ONLY portfolio_lab)" >&2
+    exit 1
+  fi
+  # Fail closed on generic flags that would otherwise be silently ignored:
+  # portfolio-lab backup is retrieval only — no host, no discovery, no
+  # research, no database creds, no profile saving.
+  if [ -n "$HOST" ] || [ -n "$BACKUP_USER" ] || $HERMES_TIER_SET || $REDETECT || $RESEARCH || [ -n "$SAVE_PROFILE" ] || [ -n "$DB_USER" ] || [ -n "$DB_PASS" ]; then
+    echo "Error: --host/--user/--hermes-tier/--redetect/--research/--save-profile/--db-user/--db-pass are not valid with --profile portfolio-lab (portfolio-lab backup is retrieval only)" >&2
+    exit 1
+  fi
+  [ -n "$SOURCE_ARCHIVE" ] || { echo "Error: --source-archive is required for portfolio-lab backup (explicit remote/source archive path)" >&2; exit 1; }
+  if ! $DEST_SET; then
+    echo "Error: --dest is required for portfolio-lab backup (explicit local retrieval destination; no default)" >&2
+    exit 1
+  fi
+  [ -n "$TRUSTED_SHA256" ] || { echo "Error: --trusted-sha256 is required for portfolio-lab backup (independently trusted archive digest)" >&2; exit 1; }
+  DRY_FLAG=""
+  $DRY_RUN && DRY_FLAG="--dry-run"
+  # shellcheck disable=SC2086
+  exec bash "$SCRIPT_DIR/portfolio-lab-backup.sh" \
+    --source-archive "$SOURCE_ARCHIVE" \
+    --dest "$DEST" \
+    --trusted-sha256 "$TRUSTED_SHA256" $DRY_FLAG
+fi
+
+# Portfolio-lab flags are only valid with the portfolio_lab group.
+if [ -n "$SOURCE_ARCHIVE" ] || [ -n "$TRUSTED_SHA256" ]; then
+  echo "Error: --source-archive/--trusted-sha256 are only valid with --groups portfolio_lab or --profile portfolio-lab" >&2
+  exit 1
+fi
+
+if [ -z "$HOST" ]; then
+  echo "Error: --host is required"
+  usage
 fi
 
 # Compose SSH target — resolve user from ~/.ssh/config if available

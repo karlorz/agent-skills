@@ -1,6 +1,6 @@
 ---
 name: host-backup-restore
-description: Host-level backup and restore with profile system (presets + custom YAML profiles), model-aware agents (sonnet worker for mechanical tasks), post-discovery research, and skillwiki infrastructure capture. Uses rsync with partial-dir for resumable WAN transfers. Use when backing up or restoring Caddy reverse-proxy domains, databases (postgres, mysql, redis, mongodb, sqlite), systemd services, full SSH identity/config, Tailscale state/config, and Hermes agent state on remote Linux hosts.
+description: Use when backing up or restoring remote Linux hosts, including Caddy reverse-proxy domains, databases, systemd services, SSH or Tailscale identity, Hermes state, or a Portfolio Lab recovery bundle that must be retrieved, verified, or restored.
 ---
 
 # Host Backup Restore
@@ -33,6 +33,20 @@ bash scripts/host-backup-cli.sh --list-profiles
 # Backup with post-discovery research
 bash scripts/host-backup-cli.sh --host sg01 --profile full --research
 
+# Portfolio Lab bundle retrieval (exclusive profile; retrieval + canonical verify)
+# Obtain this lowercase SHA-256 from a separate trusted channel; it is not the
+# retrieved .sha256 sidecar. --dest must be an absolute local path.
+bash scripts/host-backup-cli.sh --profile portfolio-lab \
+  --source-archive 'backup@storage.example:/mnt/encrypted-backups/portfolio-lab-20260814.portfolio-lab-recovery.tar' \
+  --trusted-sha256 '<independently-trusted-archive-sha256>' \
+  --dest "$HOME/Desktop/backups/portfolio-lab/"
+
+# Portfolio Lab bundle restore to a dev target (explicit target mode; see below)
+bash scripts/host-restore-cli.sh --archive ./portfolio-lab-20260814.portfolio-lab-recovery.tar \
+  --trusted-sha256 '<independently-trusted-archive-sha256>' \
+  --target devbox --user agent --target-mode dev --app-dir /srv/app --web-root /srv/www \
+  --groups portfolio_lab
+
 # Restore to a fresh host
 bash scripts/host-restore-cli.sh --archive ./sg01-backup.tar.gz --target newhost --all
 
@@ -44,7 +58,12 @@ bash scripts/host-restore-cli.sh --archive ./sg02-backup.tar.gz --target sg02 --
 
 ## Non-Root User Setup (Recommended)
 
-By default, backup and restore operations use the non-root `agent` user for SSH. Root access is not required if the `agent` user has passwordless sudo.
+By default, the generic host backup and restore operations use the non-root
+`agent` user for SSH. The Portfolio Lab recovery wrappers execute the packaged
+recovery CLI directly: use `--user root` for a production restore or activation
+preparation, and for a dev restore that requests `--start-dev-api`, because
+those commands write systemd paths and do not invoke `sudo`. A non-root user
+remains appropriate for retrieval and a staged-only dev restore.
 
 ### Prerequisite: Bootstrap the agent user
 
@@ -67,7 +86,9 @@ The CLI scripts default to `agent@<host>` for SSH connections:
 | `--user deploy` | `deploy@<host>` | `ssh deploy@sg01 "cmd"` |
 | `<host>-agent` alias | Uses SSH config | `ssh sg01-agent "cmd"` |
 
-The `agent` user requires passwordless sudo for operations that write to system paths (e.g., `/etc/caddy/`, `/etc/hosts`, systemd services). The `setup-remote-user.sh` script configures this automatically.
+The `agent` user requires passwordless sudo for the generic host operations
+that invoke it. Portfolio Lab recovery commands do not use `sudo`; select
+`--user root` when the canonical operation requires systemd access.
 
 ### Specifying a user explicitly
 
@@ -121,10 +142,14 @@ host-backup-restore/
 │   ├── backup-host.sh          # Mechanical backup script (reads manifest)
 │   ├── host-backup-cli.sh      # Non-interactive CLI backup (profile-aware)
 │   ├── host-restore-cli.sh     # Non-interactive CLI restore
+│   ├── portfolio-lab-backup.sh # Portfolio Lab bundle retrieval (exclusive group)
+│   ├── portfolio-lab-restore.sh# Portfolio Lab bundle restore (exclusive group)
+│   ├── portfolio_lab_archive.py# Stdlib-tarfile safety gate: validate members, extract exact bootstrap
 │   ├── profiles.sh             # Profile management (presets + YAML)
 │   └── research-host.sh        # Post-discovery research query generator
 └── tests/
-    └── test-restore.sh         # Per-component restore verification (27 assertions)
+    ├── test-restore.sh         # Per-component restore verification (27 assertions)
+    └── test-portfolio-lab-profile.sh  # Hermetic portfolio-lab profile tests
 ```
 
 ### Data flow
@@ -141,7 +166,7 @@ host-backup-restore/
 
 ## Profile System
 
-Backup profiles define which groups to back up and what hermes-tier to use. Three built-in presets plus unlimited custom profiles.
+Backup profiles define which groups to back up and what hermes-tier to use. Four built-in presets plus unlimited custom profiles.
 
 ### Built-in Presets
 
@@ -150,6 +175,9 @@ Backup profiles define which groups to back up and what hermes-tier to use. Thre
 | `full` | all 9 groups | full | Complete infrastructure backup including SSH identity and Tailscale state (default) |
 | `quick` | base, caddy_domains, hermes, databases | standard | Essential state — skips systemd units + apt |
 | `minimal` | hermes | minimal | Hermes agent state only — fastest snapshot |
+| `portfolio-lab` | portfolio_lab | n/a | Portfolio Lab application bundle only — **exclusive**; cannot mix with generic host/identity/Caddy/Hermes groups |
+
+> `portfolio-lab` is a first-class built-in preset (not a YAML-only profile) and its name is **reserved** — user YAML can never override it, and `--save-profile portfolio-lab` is refused. It selects ONLY the `portfolio_lab` group; combining it with `--groups`, `--all`, or any generic group fails (selections are never silently overridden: `--profile portfolio-lab` with any `--groups`, or `--groups portfolio_lab` with any `--profile`, is rejected). It follows the authoritative Portfolio Lab recovery CLI contract (`create` / `verify` / `restore` / `activate-prod`) — see [Portfolio Lab Profile](#portfolio-lab-profile).
 
 ### Custom Profiles
 
@@ -181,7 +209,7 @@ profiles:
 
 ### Interactive Profile Selection
 
-In interactive mode, after discovery, present profile selection before group selection:
+For `full`, `quick`, `minimal`, and custom profiles, present profile selection after discovery. Route `portfolio-lab` directly to the dedicated no-discovery bundle flow instead: backup uses `--profile portfolio-lab`; restore uses `--groups portfolio_lab` with an explicit target mode and paths.
 
 ```json
 {
@@ -191,12 +219,168 @@ In interactive mode, after discovery, present profile selection before group sel
     {"label": "full (Recommended)", "description": "All 9 groups — complete infrastructure backup with SSH identity and Tailscale state"},
     {"label": "quick", "description": "Essential state: Hermes, databases, Caddy, base (skips systemd + apt)"},
     {"label": "minimal", "description": "Hermes agent state only — fastest snapshot"},
+    {"label": "portfolio-lab", "description": "Retrieve or restore the isolated Portfolio Lab recovery bundle without discovery"},
     {"label": "Custom", "description": "Select individual groups manually"}
   ]
 }
 ```
 
-If "Custom" is selected, fall back to the per-group `AskUserQuestion` flow (Step 4b).
+If `portfolio-lab` is selected, collect the explicit archive/storage and target inputs, then run the dedicated flow in [Portfolio Lab Profile](#portfolio-lab-profile). If "Custom" is selected, fall back to the per-group `AskUserQuestion` flow (Step 4b).
+
+---
+
+## Portfolio Lab Profile
+
+`portfolio-lab` is a first-class built-in profile (not a YAML-only profile) for
+Portfolio Lab application bundles. It selects exactly one group —
+`portfolio_lab` — and is **exclusive**: it cannot be combined with generic
+host/identity/Caddy/Hermes groups (`base`, `ssh`, `tailscale`,
+`caddy_domains`, `hermes`, `databases`, `other_services`, `apt`, `wiki`) or
+with `--all`; such combinations fail closed. Selections are never silently
+overridden (`--profile portfolio-lab` + `--groups`, or `--groups
+portfolio_lab` + any `--profile`, is rejected), and the built-in name
+`portfolio-lab` is reserved against YAML override.
+
+The profile follows the **authoritative Portfolio Lab recovery CLI contract**.
+The skill never invents a `backup` subcommand or a `--no-activate`/`--activate`
+surface on that CLI. The canonical surface is:
+
+- `create --app-dir --web-root --tasker-service --archive --storage-encryption-attested`
+- `verify --archive`
+- `restore --archive --app-dir --web-root --target-mode dev|prod [--allow-production-paths] [--start-dev-api] [--tasker-service]`
+- `activate-prod --app-dir --web-root --tasker-service --confirm-authoritative-activation --former-authority-confirmed-stopped LABEL`
+
+Archives must be plaintext files named `*.portfolio-lab-recovery.tar` (any other
+format or name is rejected), with a `.tar.sha256` checksum sidecar, an embedded
+`recovery-manifest.json`, and the recovery bootstrap at
+`tools/portfolio_lab_recovery.py`. Before it runs that archive-provided
+bootstrap, the wrapper requires `--trusted-sha256`: a lowercase SHA-256
+obtained through an independent trusted channel, such as a signed release
+record or an authenticated out-of-band handoff. It compares that value to the
+archive bytes as well as validating the co-retrieved `.sha256` sidecar. The
+archive and sidecar are not sufficient to authenticate attacker-supplied
+content. The canonical CLI then verifies the full manifest and member digests.
+
+### Portfolio Lab backup (retrieval + canonical verify)
+
+Backup is **retrieval scope only**: the skill retrieves an existing source
+archive from explicit remote/source storage into an explicit local `--dest`,
+then runs canonical `verify`. It does not create the source archive, makes no
+storage-encryption attestation, runs no managed-host discovery, and never
+auto-transfers to cloud storage. A `user@host:path` source is an explicit rsync
+connection to that source, rather than use of the generic `--host` workflow.
+
+```bash
+bash scripts/host-backup-cli.sh --profile portfolio-lab \
+  --source-archive 'backup@storage.example:/mnt/encrypted-backups/portfolio-lab-20260814.portfolio-lab-recovery.tar' \
+  --trusted-sha256 '<independently-trusted-archive-sha256>' \
+  --dest "$HOME/Desktop/backups/portfolio-lab/"
+```
+
+Required flags (all fail closed when missing):
+
+| Flag | Meaning |
+|------|---------|
+| `--source-archive PATH` | Explicit remote/source archive path (local mount path or `user@host:path`); sidecar is `<archive>.sha256` |
+| `--trusted-sha256 HEX` | Lowercase 64-character archive SHA-256 obtained independently of the archive and sidecar |
+| `--dest PATH` | Explicit absolute local retrieval destination (no default is applied) |
+
+Flow (`portfolio-lab-backup.sh`):
+1. rsync the archive **and** its `.sha256` checksum sidecar into `--dest` with
+   resumable partial transfer (`--partial-dir=.rsync-partial`).
+2. Compare the retrieved archive bytes to both the sidecar and the required
+   independently trusted `--trusted-sha256`; abort on either mismatch.
+3. Safety gate (stdlib tarfile, `portfolio_lab_archive.py`): validate every
+   member — no traversal/absolute/symlink/device paths; exact regular-file
+   members `recovery-manifest.json` + `tools/portfolio_lab_recovery.py` — and
+   extract ONLY the exact bootstrap to controlled staging (never full-extract).
+   Unsafe/malformed archives fail closed before any canonical call.
+4. Run the canonical `verify --archive <dest>/<archive>` with the packaged
+   bootstrap.
+
+**Creating the source archive** happens on the source host with the canonical
+CLI — out of this skill's scope. Run `create` as `root`, because it captures,
+stops, and restarts the source Tasker service through `systemctl`.
+`PORTFOLIO_LAB_PROJECT_DIR` selects the project directory for
+`python_runtime.sh`; it does not change recovery CLI flags or defaults. Invoke
+`<repo>/scripts/python_runtime.sh <repo>/scripts/portfolio_lab_recovery.py`
+from that explicit project directory and write to an absolute encrypted storage
+mount path:
+
+```bash
+PORTFOLIO_LAB_PROJECT_DIR=/path/to/portfolio-lab /path/to/portfolio-lab/scripts/python_runtime.sh \
+  /path/to/portfolio-lab/scripts/portfolio_lab_recovery.py \
+  create --app-dir /srv/app --web-root /srv/www --tasker-service portfolio-lab-tasker \
+  --archive /mnt/encrypted-backups/portfolio-lab-YYYYMMDD.portfolio-lab-recovery.tar --storage-encryption-attested
+```
+
+### Portfolio Lab restore
+
+Restore requires an explicit `--target-mode dev|prod`, `--app-dir`,
+`--web-root`, and an independently trusted `--trusted-sha256`. It is a safe
+fresh-target flow: the recovery CLI is **packaged in the archive**, so no
+existing checkout is required on the target. Production restore requires
+`--user root` (or an approved equivalent wrapper) and refuses to mutate targets
+until the archived Tasker service is inactive.
+
+```bash
+# Dev target
+bash scripts/host-restore-cli.sh --archive ./portfolio-lab-20260814.portfolio-lab-recovery.tar \
+  --trusted-sha256 '<independently-trusted-archive-sha256>' \
+  --target devbox --user agent --target-mode dev --app-dir /srv/app --web-root /srv/www \
+  --groups portfolio_lab
+
+# Prod target — stage only; target Tasker must be inactive and activation is manual-only.
+bash scripts/host-restore-cli.sh --archive ./portfolio-lab-20260814.portfolio-lab-recovery.tar \
+  --trusted-sha256 '<independently-trusted-archive-sha256>' \
+  --target prodbox --user root --target-mode prod --app-dir /srv/app --web-root /srv/www \
+  --tasker-service portfolio-lab-tasker --allow-production-paths --groups portfolio_lab
+```
+
+Optional canonical passthroughs: `--tasker-service NAME`,
+`--allow-production-paths` (prod), `--start-dev-api` (dev).
+
+Flow (`portfolio-lab-restore.sh`):
+1. rsync the archive + `.tar.sha256` sidecar to the target (`--partial-dir`, resumable).
+2. Compare the archive bytes **on the target** to both the sidecar and the
+   independently trusted `--trusted-sha256`; abort on either mismatch.
+3. Safety gate (stdlib tarfile, piped to the target): validate every member —
+   no traversal/absolute/symlink/device paths; exact regular-file members
+   `recovery-manifest.json` + `tools/portfolio_lab_recovery.py` — and extract
+   ONLY the exact bootstrap into a fresh `mktemp` staging directory with mode
+   `0700`. The wrapper never full-extracts, so an unsafe/malformed archive
+   cannot mutate app/web or any path outside staging before canonical verification.
+4. Run canonical `verify --archive` on the target with the packaged bootstrap
+   **BEFORE** restore; abort on failure.
+5. Run the canonical restore with the packaged bootstrap:
+   `python3 tools/portfolio_lab_recovery.py restore --archive <remote> --app-dir <dir> --web-root <dir> --target-mode <dev|prod> [passthroughs]`.
+
+**Activation is never automatic.** The wrapper only prints the canonical
+manual `activate-prod` command after restore; it never runs it. Successful
+restores retain their remote staging directory so this command can use the
+verified packaged bootstrap. Remove that directory only after the attended
+activation decision or drill review is complete:
+
+```bash
+ssh <target> 'rm -rf <remote staging>'
+```
+
+```bash
+cd <remote staging>/tools && python3 portfolio_lab_recovery.py activate-prod \
+  --app-dir <dir> --web-root <dir> --tasker-service <svc> \
+  --confirm-authoritative-activation --former-authority-confirmed-stopped <LABEL>
+```
+
+**Safety invariants (enforced):** portfolio-lab restore never restores
+credentials, identities (`ssh`/`tailscale`), whole Caddy config/cert data, or
+agent state (`hermes`); `--restore-identity` is rejected with the
+`portfolio_lab` group; production activation is never automatic. No flag is
+silently ignored on the portfolio-lab paths: backup rejects irrelevant generic
+flags (`--user`, `--hermes-tier`, `--redetect`, `--research`,
+`--save-profile`, `--db-user`, `--db-pass`), restore forwards `--user`
+(target becomes `user@host`) and requires `--trusted-sha256`, rejects
+`--db-user`/`--db-pass`/`--allow-cross-distro`, and `--dry-run` performs no
+ssh/rsync calls at all.
 
 ---
 
@@ -299,6 +483,7 @@ Use `AskUserQuestion` with profile options:
     {"label": "full (Recommended)", "description": "All 9 groups — complete infrastructure backup with SSH identity and Tailscale state"},
     {"label": "quick", "description": "Essential state: Hermes, databases, Caddy, base (skips systemd + apt)"},
     {"label": "minimal", "description": "Hermes agent state only — fastest snapshot"},
+    {"label": "portfolio-lab", "description": "Retrieve or restore the isolated Portfolio Lab recovery bundle without discovery"},
     {"label": "Custom", "description": "Select individual groups manually"}
   ]
 }
@@ -307,6 +492,8 @@ Use `AskUserQuestion` with profile options:
 If a `--profile` flag was passed, skip this step and use the specified profile.
 
 ### Step 4a — Preset profile path (full/quick/minimal)
+
+The `portfolio-lab` preset is handled by the dedicated no-discovery bundle path above; it does not invoke `discover.sh` or `backup-host.sh`.
 
 Resolve the profile via `profiles.sh` and run backup with the resolved groups:
 
@@ -344,6 +531,7 @@ For each detected group, use `AskUserQuestion` (yes/no). Iterate through groups 
 | `other_services` | systemd unit files, service states | hermes-gateway, hermes-dashboard, caddy, filebrowser, obsidian, xvfb, [others] |
 | `apt` | Package list (`apt list --installed`), apt sources | N sources |
 | `wiki` | rclone S3 mount for wiki vault (`~/wiki` backed by cloud:cloud/wiki) | rclone.conf, ~/wiki mount |
+| `portfolio_lab` | Portfolio Lab application bundle — **exclusive**; never selectable alongside other groups | backup: `--profile portfolio-lab`; restore: `--groups portfolio_lab` |
 
 After collecting all answers, run backup-host.sh with the selected groups:
 
@@ -571,10 +759,10 @@ bash scripts/host-backup-cli.sh [options]
 
 | Option | Description |
 |--------|-------------|
-| `--host HOST` | SSH target hostname (required) |
+| `--host HOST` | SSH target hostname (required except for the retrieval-only `portfolio-lab` profile) |
 | `--all` | Back up all available groups |
 | `--groups "caddy_domains,hermes,databases"` | Specific group selection |
-| `--profile NAME` | Use a backup profile (full, quick, minimal, or custom) |
+| `--profile NAME` | Use a backup profile (`full`, `quick`, `minimal`, `portfolio-lab`, or custom) |
 | `--save-profile NAME` | Save current selection as a named profile |
 | `--list-profiles` | List all available profiles and exit |
 | `--hermes-tier minimal\|standard\|full` | Hermes backup tier |
@@ -582,6 +770,9 @@ bash scripts/host-backup-cli.sh [options]
 | `--dry-run` | Preview what would be backed up without doing it |
 | `--redetect` | Re-run discovery instead of using cached manifest |
 | `--research` | Run post-discovery research on detected services |
+| `--source-archive PATH` | Explicit remote/source archive path on storage (required for `portfolio-lab` backup; retrieval + canonical `verify`) |
+| `--trusted-sha256 HEX` | Independently trusted lowercase 64-character archive SHA-256 (required for `portfolio-lab` backup) |
+| `--dest PATH` (portfolio-lab) | Explicit absolute local retrieval destination — no default is applied |
 
 **Hermes tier mapping:**
 
@@ -617,6 +808,13 @@ bash scripts/host-restore-cli.sh [options]
 | `--db-user USER` | Database username for pg_restore/mysql (default: postgres/root) |
 | `--db-pass PASS` | Database password for mysql (passed securely via temp file) |
 | `--allow-cross-distro` | Allow apt restore across different OS (default: skip on mismatch) |
+| `--target-mode dev\|prod` | Explicit target mode (required for `portfolio-lab` restore) |
+| `--app-dir PATH` | Application directory on target (required for `portfolio-lab` restore) |
+| `--web-root PATH` | Web root directory on target (required for `portfolio-lab` restore) |
+| `--trusted-sha256 HEX` | Independently trusted lowercase 64-character archive SHA-256 (required for `portfolio-lab` restore) |
+| `--tasker-service NAME` | Tasker service name (optional; canonical restore flag) |
+| `--allow-production-paths` | Canonical restore flag (`--target-mode prod`; explicit) |
+| `--start-dev-api` | Canonical restore flag (`--target-mode dev`; explicit) |
 
 ```bash
 # Examples
@@ -867,6 +1065,10 @@ For backup archives larger than 32 KB (Caddy config, SSL certs, Hermes zip), use
 6. **Stop gateway before import** — Always stop `hermes-gateway.service` before `hermes import` to avoid file lock conflicts ^[entities/hermes-backup-restore-guide.md]
 7. **sg01 baseline reference** — sg01 provides known-good sizes: state.db ~427 MB, skills ~115 MB, HERMES_HOME ~2.2 GB ^[queries/hermes-backup-validation-restore-preinspection.md]
 8. **Model pinning for cost control** — Pin mechanical SSH tasks to sonnet via backup-worker agent; keep orchestration in main session for user interaction quality
+9. **portfolio-lab is exclusive** — The `portfolio-lab` profile selects ONLY `portfolio_lab`; any mix with generic groups, `--all`, or `--restore-identity` fails closed
+10. **Follow the authoritative recovery CLI contract** — never invent a `backup` subcommand or `--no-activate`/`--activate` on `portfolio_lab_recovery.py`; use canonical `verify --archive` (backup) and canonical `restore --archive --app-dir --web-root --target-mode dev|prod` flags (restore)
+11. **Portfolio Lab backup is retrieval, not discovery or creation** — explicit `--source-archive` + `.tar.sha256` sidecar and independently trusted `--trusted-sha256` into an explicit absolute `--dest` with resumable rsync (`--partial-dir`), then canonical `verify`; creation stays on the source host with canonical `create` (`PORTFOLIO_LAB_PROJECT_DIR=<explicit repo>` selects the `python_runtime.sh` project directory); no attestation claim and no cloud transfer from the retrieval path
+12. **Fresh-target restore executes a packaged bootstrap only after trust and safety gates** — require the independently trusted `--trusted-sha256`, compare it and the sidecar against archive bytes on the target, validate every member (no traversal/absolute/symlink/device paths; exact `recovery-manifest.json` + `tools/portfolio_lab_recovery.py`), extract ONLY the exact bootstrap to controlled staging (never full-extract), then run canonical `verify --archive` on the target BEFORE canonical `restore`; production activation is never automatic — only the manual `activate-prod` command is printed
 
 ## Related
 

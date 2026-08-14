@@ -27,6 +27,8 @@ if [ -z "$MANIFEST" ] || [ ! -f "$MANIFEST" ]; then
   echo "Usage: BACKUP_DIR=/path $0 <manifest.json> [groups...]" >&2
   echo "  Groups: base ssh tailscale caddy_domains hermes databases other_services apt wiki" >&2
   echo "  Default: all groups" >&2
+  echo "  Note: portfolio_lab is handled by host-backup-cli.sh -> portfolio-lab-backup.sh," >&2
+  echo "        not by this SSH-manifest backup script." >&2
   echo "" >&2
   echo "Environment:" >&2
   echo "  BACKUP_DIR     Backup destination (default: ~/Desktop/backups/)" >&2
@@ -344,6 +346,10 @@ else
     # Check if the group is recognized
     case "$g" in
       base|ssh|tailscale|caddy_domains|hermes|databases|other_services|apt|wiki) backup_group "$g" ;;
+      portfolio_lab)
+        echo "Error: portfolio_lab is handled by host-backup-cli.sh (via portfolio-lab-backup.sh); it cannot run through backup-host.sh" >&2
+        exit 1
+        ;;
       *) echo "Warning: Unknown group '$g', skipping" ;;
     esac
   done

@@ -12,6 +12,15 @@ DB_USER=""
 DB_PASS=""
 ALLOW_CROSS_DISTRO=false
 RESTORE_IDENTITY=false
+TARGET_MODE=""
+APP_DIR=""
+WEB_ROOT=""
+TASKER_SERVICE=""
+ALLOW_PRODUCTION_PATHS=false
+START_DEV_API=false
+TRUSTED_SHA256=""
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ── Chunked base64 transfer for targets without rsync/scp (e.g., devsh LXC) ──
 # Usage: devsh_transfer <vm_id> <local_file> <remote_path>
@@ -57,7 +66,28 @@ usage() {
   echo "  --allow-cross-distro  Allow apt restore across different OS (default: skip on mismatch)"
   echo "  --restore-identity    Allow manual restore of ssh/tailscale identity groups"
   echo "                        WARNING: reuses SSH host keys and Tailscale machine identity"
+  echo "  --target-mode dev|prod      Explicit target mode for portfolio-lab restore (required)"
+  echo "  --app-dir PATH              Application directory on target (required for portfolio-lab)"
+  echo "  --web-root PATH             Web root directory on target (required for portfolio-lab)"
+  echo "  --tasker-service NAME       Tasker service name (optional; canonical restore flag)"
+  echo "  --allow-production-paths    Canonical restore flag (target-mode prod; explicit)"
+  echo "  --start-dev-api             Canonical restore flag (target-mode dev; explicit)"
+  echo "  --trusted-sha256 HEX        Independently trusted 64-character archive SHA-256 (required for portfolio-lab)"
+  echo "  Note: portfolio-lab restore never auto-activates production; the canonical"
+  echo "        manual activate-prod command is printed after restore."
+  echo "        --user is honored on the portfolio-lab path (target becomes user@host)."
   exit 1
+}
+
+normalize_groups() {
+  printf '%s' "$1" | tr ',' ' ' | awk '{$1=$1; print}'
+}
+
+safe_user() {
+  [ -z "$RESTORE_USER" ] || [[ "$RESTORE_USER" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+    echo "Error: unsafe --user" >&2
+    exit 1
+  }
 }
 
 while [ $# -gt 0 ]; do
@@ -72,6 +102,13 @@ while [ $# -gt 0 ]; do
     --db-pass) DB_PASS="$2"; shift 2 ;;
     --allow-cross-distro) ALLOW_CROSS_DISTRO=true; shift ;;
     --restore-identity) RESTORE_IDENTITY=true; shift ;;
+    --target-mode) TARGET_MODE="$2"; shift 2 ;;
+    --app-dir) APP_DIR="$2"; shift 2 ;;
+    --web-root) WEB_ROOT="$2"; shift 2 ;;
+    --tasker-service) TASKER_SERVICE="$2"; shift 2 ;;
+    --allow-production-paths) ALLOW_PRODUCTION_PATHS=true; shift ;;
+    --start-dev-api) START_DEV_API=true; shift ;;
+    --trusted-sha256) TRUSTED_SHA256="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
@@ -83,6 +120,93 @@ fi
 
 if [ ! -f "$ARCHIVE" ]; then
   echo "Error: Archive not found: $ARCHIVE"
+  exit 1
+fi
+
+safe_user
+BACKUP_GROUPS=$(normalize_groups "$BACKUP_GROUPS")
+
+# Portfolio Lab recovery archives must never fall through to the generic
+# extractor, which accepts host-wide tarballs. The exact exclusive group is
+# required before the archive is inspected or extracted.
+case "$(basename "$ARCHIVE")" in
+  *.portfolio-lab-recovery.tar)
+    if ! echo "$BACKUP_GROUPS" | tr ',' ' ' | grep -Eq '^portfolio_lab$'; then
+      if echo "$BACKUP_GROUPS" | tr ',' ' ' | grep -qw 'portfolio_lab'; then
+        echo "Error: portfolio_lab cannot be combined with generic groups (use --groups portfolio_lab alone)" >&2
+      else
+        echo "Error: Portfolio Lab recovery archives are only valid with --groups portfolio_lab" >&2
+      fi
+      exit 1
+    fi
+    ;;
+esac
+
+# ── Portfolio-lab exclusive path ─────────────────────────────────────────
+# portfolio-lab selects ONLY the portfolio_lab group and cannot mix with
+# generic host/identity/Caddy/Hermes groups. Restore requires an explicit
+# --target-mode dev|prod + --app-dir/--web-root, uses the canonical recovery
+# CLI packaged in the archive (no existing checkout needed; the wrapper first
+# validates the archive sidecar and member safety, then canonical verification
+# checks the embedded manifest and member digests), and never restores
+# credentials, identities, Caddy config/cert data, or agent state. Production
+# activation is never automatic: the canonical manual activate-prod command is
+# printed after restore.
+if [ -n "$BACKUP_GROUPS" ] && echo "$BACKUP_GROUPS" | grep -qw portfolio_lab; then
+  source "$SCRIPT_DIR/profiles.sh"
+  if ! assert_portfolio_lab_isolated "$BACKUP_GROUPS"; then
+    exit 1
+  fi
+  if $ALL; then
+    echo "Error: --all cannot be combined with --groups portfolio_lab (portfolio-lab is exclusive; selects ONLY portfolio_lab)" >&2
+    exit 1
+  fi
+  if $RESTORE_IDENTITY; then
+    echo "Error: portfolio-lab restore never restores identities; --restore-identity cannot be combined with --groups portfolio_lab" >&2
+    exit 1
+  fi
+  [ -n "$TARGET_MODE" ] || { echo "Error: --target-mode dev|prod is required for portfolio-lab restore (explicit target mode)" >&2; exit 1; }
+  case "$TARGET_MODE" in
+    dev|prod) ;;
+    *) echo "Error: --target-mode must be dev or prod (got '$TARGET_MODE')" >&2; exit 1 ;;
+  esac
+  [ -n "$APP_DIR" ] || { echo "Error: --app-dir is required for portfolio-lab restore (application directory on target)" >&2; exit 1; }
+  [ -n "$WEB_ROOT" ] || { echo "Error: --web-root is required for portfolio-lab restore (web root directory on target)" >&2; exit 1; }
+  [[ "$TRUSTED_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Error: --trusted-sha256 must be 64 lowercase hex from an independently trusted source" >&2; exit 1; }
+  if [ "$TARGET_MODE" = "prod" ] && $START_DEV_API; then
+    echo "Error: --start-dev-api is only valid for dev target mode" >&2
+    exit 1
+  fi
+  if [ "$TARGET_MODE" = "dev" ] && $ALLOW_PRODUCTION_PATHS; then
+    echo "Error: --allow-production-paths is only valid for prod target mode" >&2
+    exit 1
+  fi
+  # Fail closed on generic flags that would otherwise be silently ignored on
+  # the portfolio-lab path.
+  if [ -n "$DB_USER" ] || [ -n "$DB_PASS" ] || $ALLOW_CROSS_DISTRO; then
+    echo "Error: --db-user/--db-pass/--allow-cross-distro are not valid with --groups portfolio_lab" >&2
+    exit 1
+  fi
+  # Match generic restore behavior: an explicit user wins, then an existing
+  # user@host target or SSH alias, otherwise use the non-root agent account.
+  PL_TARGET="$TARGET"
+  if [ -n "$RESTORE_USER" ]; then
+    PL_TARGET="${RESTORE_USER}@${TARGET}"
+  elif [[ "$TARGET" != *@* && "$TARGET" != *-agent ]]; then
+    PL_TARGET="agent@${TARGET}"
+  fi
+  PL_ARGS=(--archive "$ARCHIVE" --trusted-sha256 "$TRUSTED_SHA256" --target "$PL_TARGET" --target-mode "$TARGET_MODE" --app-dir "$APP_DIR" --web-root "$WEB_ROOT")
+  [ -n "$TASKER_SERVICE" ] && PL_ARGS+=(--tasker-service "$TASKER_SERVICE")
+  $ALLOW_PRODUCTION_PATHS && PL_ARGS+=(--allow-production-paths)
+  $START_DEV_API && PL_ARGS+=(--start-dev-api)
+  $DRY_RUN && PL_ARGS+=(--dry-run)
+  exec bash "$SCRIPT_DIR/portfolio-lab-restore.sh" "${PL_ARGS[@]}"
+fi
+
+# Portfolio-lab flags are only valid with the portfolio_lab group.
+if [ -n "$TARGET_MODE" ] || [ -n "$APP_DIR" ] || [ -n "$WEB_ROOT" ] || \
+   [ -n "$TASKER_SERVICE" ] || [ -n "$TRUSTED_SHA256" ] || $ALLOW_PRODUCTION_PATHS || $START_DEV_API; then
+  echo "Error: --target-mode/--app-dir/--web-root/--tasker-service/--trusted-sha256/--allow-production-paths/--start-dev-api are only valid with --groups portfolio_lab" >&2
   exit 1
 fi
 

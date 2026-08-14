@@ -1,6 +1,6 @@
 {
   "name": "host-backup-restore",
-  "version": "3.6.4",
+  "version": "3.7.0",
   "description": "Host-level backup and restore with profile system, model-aware sonnet workers, post-discovery research, skillwiki infrastructure capture, and Hermes module. Supports Caddy domains, databases, systemd services, and Hermes snapshots.",
   "author": {
     "name": "karlorz"
