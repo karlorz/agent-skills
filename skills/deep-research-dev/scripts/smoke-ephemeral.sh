@@ -83,6 +83,7 @@ CWD="${SMOKE_CWD:-$REPO_ROOT}"
 MODEL="${MODEL:-deepseek-v4-flash}"
 PROVENANCE_HELPER="$SCRIPT_DIR/capture-session-provenance.py"
 REPORT_LINTER="$SCRIPT_DIR/lint-report.py"
+USAGE_HELPER="$SCRIPT_DIR/record-usage.py"
 if [[ -n "${DEEP_RESEARCH_DEV_SESSIONS_ROOT:-}" ]]; then
   # A caller-provided sessions root is test-only; snapshot it if available but
   # never create it here. A missing root records unavailable provenance after
@@ -99,6 +100,7 @@ fi
 
 [[ -f "$PROVENANCE_HELPER" ]] || { echo "error: provenance helper missing: $PROVENANCE_HELPER" >&2; exit 3; }
 [[ -f "$REPORT_LINTER" ]] || { echo "error: report linter missing: $REPORT_LINTER" >&2; exit 3; }
+[[ -f "$USAGE_HELPER" ]] || { echo "error: usage helper missing: $USAGE_HELPER" >&2; exit 3; }
 
 EXPECTED_PLUGIN_ROOT="${DEEP_RESEARCH_DEV_PLUGIN_ROOT:-$PLUGIN_ROOT}"
 EXPECTED_PLUGIN_ROOT="$(python3 - "$EXPECTED_PLUGIN_ROOT" <<'PY'
@@ -463,6 +465,42 @@ meta["report_lint_ok"] = lint.get("ok") is True and lint_rc == 0
 meta["report_lint_errors"] = lint.get("errors", [])
 meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
+
+# Host-local usage record. Failure must not change the smoke exit code or
+# mutate the captured report.
+USAGE_STATUS="$(python3 - "$CELL" <<'PY'
+from pathlib import Path
+import re
+import sys
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r"^\*\*Status: (Verified|Partial)\*\*$", text, re.M)
+print(match.group(1) if match else "unknown")
+PY
+)"
+USAGE_ARGS=(
+  --query "$QUERY"
+  --source smoke
+  --invocation-mode unattended
+  --output-mode stdout
+  --outcome "$OUTCOME"
+  --status "$USAGE_STATUS"
+  --duration-s "$DURATION_S"
+  --lint-json "$LINT"
+  --cwd "$CWD"
+  --report-path "$CELL"
+  --smoke-meta "$META"
+)
+if [[ -n "${DEEP_RESEARCH_DEV_USAGE_HOME:-}" ]]; then
+  USAGE_ARGS+=(--home "$DEEP_RESEARCH_DEV_USAGE_HOME")
+fi
+if [[ -n "${PLUGIN_VERSION:-}" ]]; then
+  USAGE_ARGS+=(--plugin-version "$PLUGIN_VERSION")
+fi
+USAGE_RC=0
+python3 "$USAGE_HELPER" "${USAGE_ARGS[@]}" >/dev/null || USAGE_RC=$?
+if [[ "$USAGE_RC" -ne 0 ]]; then
+  echo "warning: usage ledger write failed (exit $USAGE_RC); smoke result unchanged" >&2
+fi
 
 printf 'deep-research-dev smoke complete\n'
 printf '  cell:     %s\n' "$CELL"

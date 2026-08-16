@@ -53,6 +53,14 @@ bundled template is always the base.
   local-record durability, cutoff, status/Coverage consistency, and prohibited
   model-narrated numeric tool counts. `smoke-ephemeral.sh` saves its `lint.json`
   alongside the raw output and records tool counts only in capture metadata.
+- After lint, `scripts/repair-report-structure.py` may apply a structure-only
+  repair (Status then H1, English role tokens, `local-record:` prefix) and the
+  report is re-linted. Leftover errors are recorded; evidence and status are
+  not rewritten.
+- Daily usage is appended by `scripts/record-usage.py` to
+  `~/.grok/deep-research-dev-usage/ledger.jsonl` (truncated query + hash).
+  `scripts/review-usage.py` harvests that ledger plus smoke `meta.json` files
+  into ignored `.superpowers/sdd/deep-research-dev-usage/reviews/`.
 - `--reuse-s-template` is an explicit interactive opt-in: it may reuse only a
   relevant accessible S outline's section order/categories — **structure
   only**. It cannot copy S facts, citations, URLs, sources, or conclusions.

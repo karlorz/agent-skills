@@ -77,6 +77,7 @@ PASS=0
 FAIL=0
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/test-smoke-ephemeral.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
+export DEEP_RESEARCH_DEV_USAGE_HOME="$TMP/usage-home"
 
 ok()  { PASS=$((PASS + 1)); printf 'ok:   %s\n' "$*"; }
 bad() { FAIL=$((FAIL + 1)); printf 'FAIL: %s\n' "$*"; }
@@ -360,7 +361,7 @@ from pathlib import Path
 meta = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 skill = Path(sys.argv[2]).resolve()
 assert Path(meta["plugin_skill"]).resolve() == skill, meta
-assert meta["plugin_version"] == "0.1.0-beta.3", meta
+assert meta["plugin_version"] == "0.1.0-beta.4", meta
 assert meta["plugin_skill_sha256"] == hashlib.sha256(skill.read_bytes()).hexdigest(), meta
 PY
 then

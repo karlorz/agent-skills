@@ -256,7 +256,7 @@ Compose research report with these sections:
    2. <localized topic>
    3. <localized topic>
    ```
-   Use the user's explicit temporal cutoff when supplied; otherwise state the latest date the retained evidence covers. The navigation has 3–4 scope-relevant labels and is not an H2.
+   The second substantive line MUST be the H1. Do not place parenthetical notes, status explanations, or Coverage commentary between `**Status:**` and `# title`. Those notes belong in Coverage and uncertainty or below the identity block. Use the user's explicit temporal cutoff when supplied; otherwise state the latest date the retained evidence covers. The navigation has 3–4 scope-relevant labels and is not an H2.
 1. **TL;DR** -- 3-5 decision-relevant bullets only; do not repeat the same dates, metrics, or caveats in later layers.
 2. **Overview / method** -- one short synthesis of scope and evidence method; do not repeat the TL;DR.
 3. **Timeline** -- use one canonical timeline table for dates. A Mermaid diagram is optional and **visual-only**: it mirrors the table and introduces no additional dates or claims.
@@ -271,7 +271,7 @@ Compose research report with these sections:
 8. **Sources** -- emit a literal `## Sources` heading followed by the complete **immutable source ledger** with the exact six-column header `| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |`. Every retained external third-party claim has its exact URL and a role marking `direct-fetch` or `search-summary only`. These and `local-record:` / `retained-without-citation` are **literal English labels** in every report language; localize only their surrounding explanation. Every `search-summary only` row is disclosed with its `[S<n>]` identifier in Coverage. Local/repository evidence uses `local-record:` in the final cell, either under the ignored run-artifact directory or with `sha256=<64-hex-content-hash>`; never retain a volatile `/tmp` path without that durability proof. In-body `[S<n>]` markers map to one stable row; every row is cited or has `retained-without-citation` in its role. Retain every external material conflict/degradation that survives synthesis; exclude unused/unopened results. Once synthesized, refinement must not trim, delete, renumber, merge, or change ledger rows, URLs, or roles.
 9. **Coverage and uncertainty** -- emit literal `## Coverage and uncertainty` at the end. It contains **only** dropped claims, unusable planned questions, source-plan degradations, synthesis fallbacks, execution-topology notes, topic-inherent unknowns, and evidence gaps. Classify each item as **topic-inherent unknown**, **execution topology**, or **Evidence gap**. `Evidence gap` is the **literal English label** in every report language; localize only its explanatory text. Topic-inherent unknowns and topology are status-neutral. Evidence gaps include a missing source, unresolved material conflict, unsupported retained claim, answer-critical claim without external verification, or required source route failure without a substitute; only evidence gaps support `Partial`. If a `search-summary only` source was retained, explicitly disclose that source identifier and label in Coverage. If no classification remains, state: "All planned questions returned usable structured research, and every retained claim carries non-empty external verification."
 
-Run `skills/deep-research-dev/scripts/lint-report.py` against every generated report before capture review. It validates heading order, ledger/citation mapping, source disclosure, local-record durability, cutoff, status/Coverage consistency, and model-narrated numeric tool counts. Record the result beside the raw report; never rewrite a report to make lint pass.
+Run `skills/deep-research-dev/scripts/lint-report.py` against every generated report before capture review. It validates heading order, ledger/citation mapping, source disclosure, local-record durability, cutoff, status/Coverage consistency, and model-narrated numeric tool counts. If lint reports identity or ledger-label errors, run `scripts/repair-report-structure.py` (structure-only) and re-run `lint-report.py`. The repairer may insert or move the H1 and prefix English role / `local-record:` tokens. Never change Status, claims, URLs, or Coverage to make lint pass. Record leftover errors beside the raw report.
 
 **Report presentation contract.** D defaults to the bundled template at `references/report-presentation-template.md`; no S report search or copy is performed by default. The exact generated-report form is defined in the Phase 3 contract above and validated by `scripts/lint-report.py`: status → localized H1 identity/cutoff/scope → compact navigation → sequential plain-ASCII numbered narrative H2s → the four literal audit headings. Keep TL;DR decision-only, narrative facts single-home, timeline tables canonical, Mermaid visual-only, and Coverage limited to classifications/gaps. `Partial` remains based on evidence gaps, not presentation polish.
 
@@ -355,6 +355,8 @@ Pages created: <list of vault pages, if any>
 Warnings: <any>
 ```
 
+After the summary, run `scripts/record-usage.py` with the query, invocation mode, output mode, status, lint result, and duration if known. Default home is `~/.grok/deep-research-dev-usage/`. Use `--home` only in tests. If the write fails, warn and continue — do not change the research outcome. Never write the usage ledger into a SkillWiki vault.
+
 ## Flags
 
 | Flag | Effect |
@@ -408,3 +410,6 @@ Warnings: <any>
 
 - **references/vault-pipeline.md**: Vault-mode raw capture, validation, transactional page publication, and follow-up queue workflow
 - **references/codex-tools.md**: Codex CLI/App tool mapping (`Agent` → `spawn_agent`/`wait_agent`), `multi_agent` config gate, model-tier fallback, and detached-HEAD sandbox handling
+- **scripts/record-usage.py**: Append one host-local usage record after Phase 6
+- **scripts/repair-report-structure.py**: Structure-only identity/ledger-token repair before re-lint
+- **scripts/review-usage.py**: Harvest the host-local ledger and smoke metas into a daily ignored review

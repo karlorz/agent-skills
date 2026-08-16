@@ -2,6 +2,21 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.1.0-beta.4] - 2026-08-17
+
+- Added a host-local daily usage ledger (`scripts/record-usage.py`) and a
+  harvest review (`scripts/review-usage.py`). Interactive and unattended runs
+  append one JSONL record with a truncated query, query fingerprint, and lint
+  outcome; smoke cells keep writing `meta.json`. Reviews land under ignored
+  `.superpowers/sdd/deep-research-dev-usage/reviews/`. The ledger is never a
+  vault page.
+- Added structure-only report repair (`scripts/repair-report-structure.py`)
+  after lint: insert or move the H1, prefix English role tokens, and prefix
+  `local-record:`. Status, claims, URLs, Coverage, and the `## 1. Findings`
+  fallback are unchanged. A **topic-inherent unknown** still
+  does not by itself require `Partial`. Leftover lint errors stay on the usage
+  record.
+
 ## [0.1.0-beta.3] - 2026-08-13
 
 - Added deterministic generated-report validation for report identity, numbered

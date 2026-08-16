@@ -135,7 +135,7 @@ Compose a research report from ALL sub-agent findings. Structure:
    2. <localized topic>
    3. <localized topic>
    ```
-   Use an explicit user cutoff when available; otherwise declare the latest date retained evidence covers. The navigation is 3–4 labels, not an H2.
+   The second substantive line MUST be the H1. Do not place parenthetical notes, status explanations, or Coverage commentary between `**Status:**` and `# title`. Those notes belong in Coverage and uncertainty or below the identity block. Use an explicit user cutoff when available; otherwise declare the latest date retained evidence covers. The navigation is 3–4 labels, not an H2.
 1. **TL;DR** — only 3–5 decision-relevant bullets.
 2. **Overview / method** — explain scope and approach once; do not repeat the TL;DR.
 3. **Timeline** — one canonical date table. Mermaid is optional and **visual-only**: it mirrors the table and contains no extra dates or claims.
@@ -146,7 +146,7 @@ Compose a research report from ALL sub-agent findings. Structure:
 8. **Sources** — literal `## Sources` with exact immutable six-column ledger `| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |`. External rows use exact URLs and role label `direct-fetch` or `search-summary only`; `direct-fetch`, `search-summary only`, `local-record:`, and `retained-without-citation` are **literal English labels** in every report language, while their surrounding explanation localizes. Every search-summary-only source identifier is disclosed in Coverage. Local/repository rows use `local-record:` and either live below the ignored run-artifact directory or carry `sha256=<64-hex-content-hash>`. Every `[S<n>]` marker maps to one stable row; every row is cited or has `retained-without-citation` in its role. Do not trim/delete/renumber/merge/change ledger rows, URLs, or roles after synthesis.
 9. **Coverage and uncertainty** — literal `## Coverage and uncertainty` at the end. **Coverage contains only** dropped claims, unusable planned output, degradations, fallback, execution topology, topic-inherent unknowns, and evidence gaps. Only an **Evidence gap** supports `Partial`; `Evidence gap` is the **literal English label** in every report language, while its explanatory text localizes. Topic-inherent unknown and execution topology are status-neutral. State retained search-summary-only source identifiers here.
 
-Run `scripts/lint-report.py` against every generated report before capture review. It validates headings, ledger/citation mapping, source disclosure, local-record durability, cutoff, status/Coverage consistency, and model-narrated numeric tool counts. Record its result beside raw output; do not rewrite evidence or status to force a pass.
+Run `scripts/lint-report.py` against every generated report before capture review. It validates headings, ledger/citation mapping, source disclosure, local-record durability, cutoff, status/Coverage consistency, and model-narrated numeric tool counts. If lint reports identity or ledger-label errors, run `scripts/repair-report-structure.py` (structure-only) and re-run `lint-report.py`. The repairer may insert or move the H1 and prefix English role / `local-record:` tokens. Do not rewrite evidence or status to force a pass. Record leftover errors beside raw output.
 
 ### Report presentation contract
 
@@ -228,6 +228,8 @@ Refinement: <"applied (model: sonnet)" or "skipped">
 Output: <path or "terminal">
 Warnings: <any>
 ```
+
+After the summary, run `scripts/record-usage.py` with the query, invocation mode, output mode, status, lint result, and duration if known. Default home is `~/.grok/deep-research-dev-usage/`. Use `--home` only in tests. If the write fails, warn and continue — do not change the research outcome. Never write the usage ledger into a SkillWiki vault.
 
 ## Model Rules (HARD)
 

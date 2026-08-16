@@ -227,6 +227,13 @@ required_fallback_contract = (
     "explicit evidence-gap Coverage entry",
 )
 
+# Daily usage review + structure-only repair (0.1.0-beta.4).
+required_usage_review_contract = (
+    "second substantive line MUST be the H1",
+    "repair-report-structure.py",
+    "record-usage.py",
+)
+
 # Legacy top-N trimming instruction must stay REMOVED from both entrypoints.
 # The old numbered top-N list is gone (the immutable ledger replaced it);
 # the absence assertion below locks in that landed state.
@@ -316,6 +323,11 @@ def main() -> int:
         for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
             if phrase not in text:
                 failures.append(f"{label} missing structured-fallback contract: {phrase!r}")
+
+    for phrase in required_usage_review_contract:
+        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
+            if phrase not in text:
+                failures.append(f"{label} missing usage-review contract: {phrase!r}")
 
     for phrase in required_literal_headings:
         for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):

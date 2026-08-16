@@ -33,10 +33,12 @@ The report begins with these elements in exactly this order:
 
 Use `**Status: Partial**` only for an actual evidence gap. The status header
 is exact; reasons belong in `## Coverage and uncertainty`, not beside the
-status. The H1 makes a copied report self-identifying. The cutoff is the
-user-specified date when one exists; otherwise state the latest date the
-retained evidence is intended to cover. The verification date is when the
-sources were checked.
+status. The second substantive line MUST be the H1. Do not place
+parenthetical notes, status explanations, or Coverage commentary between
+`**Status:**` and `# title`. The H1 makes a copied report self-identifying.
+The cutoff is the user-specified date when one exists; otherwise state the
+latest date the retained evidence is intended to cover. The verification date
+is when the sources were checked.
 
 The compact navigation is not an H2. It is a topic map, not a second summary;
 keep it to three or four labels and omit categories outside the user's scope.

@@ -29,7 +29,7 @@
       "name": "deep-research-dev",
       "source": "./skills/deep-research-dev",
       "description": "Experimental prerelease dev-lane fork of deep-research (base 2.4.3) for controlled evaluation: source-triaged research with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, refinement, and vault integration. Not for production use.",
-      "version": "0.1.0-beta.3",
+      "version": "0.1.0-beta.4",
       "category": "research",
       "keywords": [
         "research",
