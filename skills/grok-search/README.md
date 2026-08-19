@@ -47,6 +47,18 @@ ln -sfn /path/to/agent-skills/skills/grok-search ~/.cursor/plugins/local/grok-se
 
 6. Reload Cursor / start a **new** `agent` session. Desktop should show `grok-search (plugin)` if third-party plugins loaded; CLI should show `grok-search: ready` from the wrapper JSON.
 
+7. **Headless CLI test / daily use** — `agent` does not auto-load plugin MCP; pass the plugin dir and approve MCP:
+
+```bash
+# from the plugin root, or:
+bash scripts/cursor-agent.sh -p --approve-mcps --trust -f \
+  "Use grok-search get_config_info then web_search for AI news this week. No secrets."
+# equivalent:
+agent --plugin-dir ~/.cursor/plugins/local/grok-search --approve-mcps --trust -f -p "..."
+```
+
+Allow MCP tools in `~/.cursor/cli-config.json` permissions, e.g. `Mcp(grok-search, **)` and `Mcp(plugin-grok-search-grok-search, **)`. Ask mode can still reject MCP; use `-f` for unattended probes.
+
 ### Migrate from an existing user MCP install
 
 Daily Claude/Cursor already running a manual `grok-search` user server should **move** that install onto the plugin, not keep both.
