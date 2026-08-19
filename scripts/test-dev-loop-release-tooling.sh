@@ -128,6 +128,7 @@ allowed = {
     "argument-hint",
     "compatibility",
     "description",
+    "disable-model-invocation",
     "license",
     "metadata",
     "name",
