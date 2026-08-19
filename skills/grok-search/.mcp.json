@@ -2,11 +2,9 @@
   "mcpServers": {
     "grok-search": {
       "type": "stdio",
-      "command": "uvx",
+      "command": "bash",
       "args": [
-        "--from",
-        "git+https://github.com/karlorz/GrokSearch@grok-with-tavily",
-        "grok-search"
+        "${CLAUDE_PLUGIN_ROOT}/scripts/run-grok-search.sh"
       ],
       "env": {
         "GUDA_API_KEY": "${GUDA_API_KEY}",
