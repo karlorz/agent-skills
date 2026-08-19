@@ -18,11 +18,14 @@ skill_path = root / "skills" / "grok-search" / "SKILL.md"
 readme_path = root / "README.md"
 manifest_path = root / ".claude-plugin" / "plugin.json"
 
+texts = {}
 for path in (mcp_path, skill_path, readme_path, manifest_path):
-    if not path.is_file():
-        raise SystemExit(f"missing {path}")
+    try:
+        texts[path] = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise SystemExit(f"missing {path}") from None
 
-data = json.loads(mcp_path.read_text(encoding="utf-8"))
+data = json.loads(texts[mcp_path])
 if "mcpServers" not in data or "grok-search" not in data["mcpServers"]:
     raise SystemExit(f"{mcp_path}: missing mcpServers.grok-search")
 server = data["mcpServers"]["grok-search"]
@@ -40,7 +43,7 @@ if set(env) != {"GUDA_API_KEY", "GUDA_BASE_URL"}:
 if env["GUDA_API_KEY"] != "${GUDA_API_KEY}" or env["GUDA_BASE_URL"] != "${GUDA_BASE_URL}":
     raise SystemExit(f"{mcp_path}: env values must be unadorned ${{VAR}} interpolation")
 
-text = skill_path.read_text(encoding="utf-8")
+text = texts[skill_path]
 if not text.startswith("---\n"):
     raise SystemExit(f"{skill_path}: missing frontmatter")
 end = text.find("\n---", 4)
@@ -60,7 +63,7 @@ if "mcp__plugin_" in body:
 if len(text.split()) > 1500:
     raise SystemExit(f"{skill_path}: too long")
 
-blob = "".join(p.read_text(encoding="utf-8") for p in (manifest_path, mcp_path, skill_path, readme_path))
+blob = "".join(texts[p] for p in (manifest_path, mcp_path, skill_path, readme_path))
 for needle in ("search.karldigi.dev", "code.guda.studio", "gsk_", "tvly-", "Bearer "):
     if needle in blob:
         raise SystemExit(f"forbidden token {needle!r} in plugin files")
