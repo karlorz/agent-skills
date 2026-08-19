@@ -131,6 +131,7 @@ def main() -> int:
         remove_cursor_entry(cursor)
         print(f"removed grok-search from {cursor} (backup .bak-grok-search-migrate)")
     print("user grok-search MCP removed; restart Claude/Cursor so plugin MCP can attach")
+    print("Cursor Agent CLI only reads mcp.json; after remove, install the secret-free wrapper from cursor-cli-mcp.example.json or CLI will show no servers")
     return 0
 
 

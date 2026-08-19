@@ -67,7 +67,15 @@ if "mcp__plugin_" in body:
 if len(text.split()) > 1500:
     raise SystemExit(f"{skill_path}: too long")
 
-blob = "".join(texts[p] for p in (manifest_path, mcp_path, skill_path, readme_path))
+example = root / "cursor-cli-mcp.example.json"
+ex = json.loads(example.read_text(encoding="utf-8"))
+ex_server = ex["mcpServers"]["grok-search"]
+if "env" in ex_server:
+    raise SystemExit(f"{example}: must not embed env/secrets")
+if "REPLACE_WITH_PLUGIN_ROOT" not in "".join(ex_server.get("args") or []):
+    raise SystemExit(f"{example}: args must use REPLACE_WITH_PLUGIN_ROOT")
+texts[example] = example.read_text(encoding="utf-8")
+blob = "".join(texts[p] for p in (manifest_path, mcp_path, skill_path, readme_path, example))
 for needle in ("search.karldigi.dev", "code.guda.studio", "gsk_", "tvly-", "Bearer "):
     if needle in blob:
         raise SystemExit(f"forbidden token {needle!r} in plugin files")
