@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "grok-search": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/karlorz/GrokSearch@grok-with-tavily",
+        "grok-search"
+      ],
+      "env": {
+        "GUDA_API_KEY": "${GUDA_API_KEY}",
+        "GUDA_BASE_URL": "${GUDA_BASE_URL}"
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "grok-search",
+  "version": "0.1.0",
+  "description": "Thin marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via stdio MCP.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "grok",
+    "search",
+    "web-search",
+    "research"
+  ],
+  "skills": "./skills/"
+}
