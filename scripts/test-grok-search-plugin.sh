@@ -47,6 +47,18 @@ if set(env) != {"GUDA_API_KEY", "GUDA_BASE_URL"}:
 if env["GUDA_API_KEY"] != "${GUDA_API_KEY}" or env["GUDA_BASE_URL"] != "${GUDA_BASE_URL}":
     raise SystemExit(f"{mcp_path}: env values must be unadorned ${{VAR}} interpolation")
 
+readme_text = texts[readme_path]
+if "plugin-chain" not in readme_text and "plugin-grok-search-grok-search" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention plugin-chain or plugin-grok-search-grok-search")
+if "agent mcp list" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention agent mcp list diagnostic note")
+if "not the proof of install" not in readme_text.lower() and "diagnostic gap" not in readme_text.lower():
+    raise SystemExit(f"{readme_path}: must note agent mcp list is not proof of install / diagnostic gap")
+if "required for `agent mcp list`" in readme_text or "required for agent mcp list" in readme_text:
+    raise SystemExit(f"{readme_path}: mcp.json wrapper must not be marked required")
+if "optional" not in readme_text.lower():
+    raise SystemExit(f"{readme_path}: must describe wrapper as optional")
+
 text = texts[skill_path]
 if not text.startswith("---\n"):
     raise SystemExit(f"{skill_path}: missing frontmatter")

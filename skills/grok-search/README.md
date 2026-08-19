@@ -24,47 +24,32 @@ claude plugin install grok-search@karlorz-agent-skills
 
 ### Cursor (Desktop + Agent CLI)
 
-Cursor Agent CLI (`agent mcp list`) **only** reads `.cursor/mcp.json` and `~/.cursor/mcp.json`. It does **not** load Claude-style plugin MCP. Context7 can still show as a Desktop plugin while CLI stays empty unless JSON is present.
+1. **Prerequisites:** `uv`/`uvx`, Python 3.10+, and environment variables (`GUDA_API_KEY`, `GUDA_BASE_URL`).
+2. **Desktop / Agent settings:** Settings → Rules, Skills, Subagents → enable **Include third-party Plugins, Skills, and other configs**. Reload the window / restart your session.
+3. **Plugin loading:** After marketplace install, grok-search MCP loads automatically in Cursor Agent TUI via the plugin chain (`plugin-grok-search-grok-search`) when third-party / Claude-compat plugins are enabled.
+4. **Diagnostic note on `agent mcp list`:** `agent mcp list` returns empty because it only inspects `~/.cursor/mcp.json` and `.cursor/mcp.json`, not Claude-style plugin `.mcp.json` definitions. This is a diagnostic gap in the CLI listing tool, not proof the plugin is broken. Therefore, `agent mcp list` is not the proof of install.
+5. **Optional headless wrapper (`cursor-cli-mcp.example.json`):** For headless batch commands (`agent -p`) invoked without `--plugin-dir`, you can optionally configure a JSON wrapper pointing `run-grok-search.sh` to `~/.cursor/mcp.json`. This wrapper is purely OPTIONAL and is not required for normal interactive Cursor Agent TUI or plugin-chain usage.
+   Do not auto-write operator configuration paths (`~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, `~/.config/grok-search/mcp.env`); let operators configure them deliberately if needed.
 
-Do this in order (no secrets in JSON):
+## Verify it works
 
-1. **Prereqs:** `uv`/`uvx`, Python 3.10+, and `~/.config/grok-search/mcp.env` from the migrate step below.
-2. **Desktop:** Settings → Rules, Skills, Subagents → enable **Include third-party Plugins, Skills, and other configs**. Reload the window.
-3. **Plugin on disk:** link the plugin so Desktop can chain MCP like Context7:
+To verify that grok-search MCP is active and functioning properly:
 
-```bash
-mkdir -p ~/.cursor/plugins/local
-ln -sfn /path/to/agent-skills/skills/grok-search ~/.cursor/plugins/local/grok-search
-```
+1. In a live Cursor Agent session or Claude Code session, ask the agent to run an MCP tool check:
+   ```text
+   Use grok-search get_config_info and web_search for the latest AI news.
+   ```
+2. Confirm the agent discovers and invokes tools such as `get_config_info` or `web_search`. Live session tool execution is the ground truth, not `agent mcp list`.
+3. If using headless CLI invocations, you can approve MCP tools explicitly:
+   ```bash
+   agent --plugin-dir /path/to/plugin/grok-search --approve-mcps --trust -f -p "Use grok-search get_config_info"
+   ```
 
-4. **Remove legacy user MCP** (keys in `~/.cursor/mcp.json`) so you do not run two servers. Use the migrator below.
-5. **CLI fallback** (required for `agent mcp list` after step 4): copy `cursor-cli-mcp.example.json` to `~/.cursor/mcp.json` and replace `REPLACE_WITH_PLUGIN_ROOT` with the plugin directory. That JSON has **no API keys**; the runner loads `mcp.env`.
+## Migrate from an existing user MCP install
 
-```bash
-# example after linking:
-# args: ["/Users/you/.cursor/plugins/local/grok-search/scripts/run-grok-search.sh"]
-```
+If you previously configured a manual user-level `grok-search` entry in `~/.claude.json` or `~/.cursor/mcp.json`, you can optionally migrate environment settings to avoid running duplicate servers. (This cleanup is optional and not required for a fresh marketplace install.)
 
-6. Reload Cursor / start a **new** `agent` session. Desktop should show `grok-search (plugin)` if third-party plugins loaded; CLI should show `grok-search: ready` from the wrapper JSON.
-
-7. **Headless CLI test / daily use** — `agent` does not auto-load plugin MCP; pass the plugin dir and approve MCP:
-
-```bash
-# from the plugin root, or:
-bash scripts/cursor-agent.sh -p --approve-mcps --trust -f \
-  "Use grok-search get_config_info then web_search for AI news this week. No secrets."
-# equivalent:
-agent --plugin-dir ~/.cursor/plugins/local/grok-search --approve-mcps --trust -f -p "..."
-```
-
-Allow MCP tools in `~/.cursor/cli-config.json` permissions, e.g. `Mcp(grok-search, **)` and `Mcp(plugin-grok-search-grok-search, **)`. Ask mode can still reject MCP; use `-f` for unattended probes.
-
-### Migrate from an existing user MCP install
-
-Daily Claude/Cursor already running a manual `grok-search` user server should **move** that install onto the plugin, not keep both.
-
-1. Install/enable the plugin (above).
-2. Dry-run (prints paths and env **key names** only, never secret values):
+1. Dry-run (prints paths and env key names only, never secret values):
 
 From this repo:
 
@@ -74,13 +59,13 @@ python3 skills/grok-search/scripts/migrate-from-user-mcp.py
 
 After plugin install, run the same script from the plugin cache `scripts/migrate-from-user-mcp.py`.
 
-3. Copy `GUDA_API_KEY`, `GUDA_BASE_URL`, and `GROK_MODEL` from the user MCP into `~/.config/grok-search/mcp.env` (mode 600), then remove the user servers:
+2. Copy `GUDA_API_KEY`, `GUDA_BASE_URL`, and `GROK_MODEL` from the user MCP into `~/.config/grok-search/mcp.env` (mode 600), then remove the user servers:
 
 ```bash
 python3 skills/grok-search/scripts/migrate-from-user-mcp.py --apply-env --remove-user-mcp
 ```
 
-4. Restart Claude Code / Cursor. `claude mcp list` should show `plugin:grok-search:grok-search` (same shape as `plugin:context7:context7`), not a User-config `grok-search`.
+3. Restart Claude Code / Cursor. `claude mcp list` should show `plugin:grok-search:grok-search` without duplicate user-level servers.
 
 The plugin runner sources that env file so GUI Claude does not need the variables in `~/.zshrc`. Do not add a second stdio row to `~/.cursor/mcp.json`.
 
