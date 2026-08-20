@@ -1,0 +1,3 @@
+# Repin the D eval matrix from deepseek-v4-flash to flash-max
+
+The 2026-08-12 scoreboard used parent `-m deepseek-v4-flash` (wire `deepseek-v4-flash-max`). That catalog is being phased out. This cycle recaptures frozen S vs D at K=2 with parent `-m flash-max`. On this host `sonnet` / `haiku` already resolve to `flash-max`, so parent and D workers share one wire family. Old eligible cells become historical only and must not mix into the new median. Rejected: keep deepseek for comparability (pin is retiring); pin grok-4.6 or kimi-k3 (those are operator/default models, not the cheap-tier matrix pin).

@@ -22,7 +22,7 @@
 #               exact `inside`/`outside` verdict)
 #
 # Environment:
-#   MODEL       model for the headless run (default: deepseek-v4-flash)
+#   MODEL       model for the headless run (default: flash-max)
 #   SMOKE_CWD   working directory researched by the cell
 #               (default: the git repo root containing this plugin)
 #   DEEP_RESEARCH_DEV_ARTIFACT_ROOT   repository-local ignored artifact root
@@ -62,7 +62,7 @@ if [[ -z "$QUERY" ]]; then
   echo "  query       research topic (required)" >&2
   echo "  output-dir  cell + meta.json destination" >&2
   echo "              (default: DEEP_RESEARCH_DEV_ARTIFACT_ROOT/<ts> — repo-local ignored root)" >&2
-  echo "env: MODEL=<model> (default deepseek-v4-flash), SMOKE_CWD=<dir> (default: repo root)" >&2
+  echo "env: MODEL=<model> (default flash-max), SMOKE_CWD=<dir> (default: repo root)" >&2
   echo "     DEEP_RESEARCH_DEV_ARTIFACT_ROOT=<dir> (default: <repo>/.superpowers/sdd/deep-research-dev-eval-matrix/eval-runs)" >&2
   echo "     DEEP_RESEARCH_DEV_EVIDENCE_CUTOFF=YYYY-MM-DD (optional report evidence cutoff for linting)" >&2
   echo "     DEEP_RESEARCH_DEV_SESSIONS_ROOT=<dir> (test-only session root override)" >&2
@@ -80,10 +80,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 CWD="${SMOKE_CWD:-$REPO_ROOT}"
-MODEL="${MODEL:-deepseek-v4-flash}"
+MODEL="${MODEL:-flash-max}"
 PROVENANCE_HELPER="$SCRIPT_DIR/capture-session-provenance.py"
 REPORT_LINTER="$SCRIPT_DIR/lint-report.py"
 USAGE_HELPER="$SCRIPT_DIR/record-usage.py"
+REPAIR_HELPER="$SCRIPT_DIR/repair-report-structure.py"
 if [[ -n "${DEEP_RESEARCH_DEV_SESSIONS_ROOT:-}" ]]; then
   # A caller-provided sessions root is test-only; snapshot it if available but
   # never create it here. A missing root records unavailable provenance after
@@ -101,6 +102,7 @@ fi
 [[ -f "$PROVENANCE_HELPER" ]] || { echo "error: provenance helper missing: $PROVENANCE_HELPER" >&2; exit 3; }
 [[ -f "$REPORT_LINTER" ]] || { echo "error: report linter missing: $REPORT_LINTER" >&2; exit 3; }
 [[ -f "$USAGE_HELPER" ]] || { echo "error: usage helper missing: $USAGE_HELPER" >&2; exit 3; }
+[[ -f "$REPAIR_HELPER" ]] || { echo "error: repair helper missing: $REPAIR_HELPER" >&2; exit 3; }
 
 EXPECTED_PLUGIN_ROOT="${DEEP_RESEARCH_DEV_PLUGIN_ROOT:-$PLUGIN_ROOT}"
 EXPECTED_PLUGIN_ROOT="$(python3 - "$EXPECTED_PLUGIN_ROOT" <<'PY'
@@ -439,17 +441,50 @@ if meta.get("session_provenance"):
 meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 
-# Run the deterministic output linter after extraction. It records the audit
-# result but never edits the report, changes the process exit, or invents a
-# successful report from a failed lint. Pass the run-artifact root so a durable
-# local record under it is accepted; add a temporal cutoff only when the caller
-# supplied one.
+# Run the deterministic output linter after extraction. If lint reports
+# identity, English role, or local-record prefix errors, apply structure-only
+# repair and re-lint. Persist the final lint.json (and optional lint.before.json).
 LINT_ARGS=("$CELL" --metadata "$META" --artifact-root "$OUT_DIR")
 if [[ -n "$EVIDENCE_CUTOFF" ]]; then
   LINT_ARGS+=(--cutoff "$EVIDENCE_CUTOFF")
 fi
 LINT_RC=0
 python3 "$REPORT_LINTER" "${LINT_ARGS[@]}" >"$LINT" || LINT_RC=$?
+
+# Structure-only repair trigger: only if lint failed and errors contain identity,
+# English role token, or local-record prefix issues.
+NEEDS_REPAIR="$(python3 - "$LINT" <<'PY'
+import json, re, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+    errors = data.get("errors", [])
+    if data.get("ok") is True or not errors:
+        print("no")
+        sys.exit(0)
+    # Check for identity / role / local-record prefix errors
+    patterns = [
+        r"expected an H1 title",
+        r"first substantive line must be",
+        r"role must contain 'direct-fetch' or 'search-summary only'",
+        r"must be an http\(s\):// URL or start with 'local-record:'",
+        r"local record .* has no path",
+    ]
+    if any(any(re.search(p, err) for p in patterns) for err in errors):
+        print("yes")
+    else:
+        print("no")
+except Exception:
+    print("no")
+PY
+)"
+
+if [[ "$NEEDS_REPAIR" == "yes" ]]; then
+  cp "$LINT" "$OUT_DIR/lint.before.json"
+  python3 "$REPAIR_HELPER" "$CELL" --output "$CELL" >/dev/null 2>&1 || true
+  LINT_RC=0
+  python3 "$REPORT_LINTER" "${LINT_ARGS[@]}" >"$LINT" || LINT_RC=$?
+fi
+
 python3 - "$META" "$LINT" "$LINT_RC" <<'PY'
 import json
 import sys

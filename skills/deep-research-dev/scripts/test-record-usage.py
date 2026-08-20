@@ -30,7 +30,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="test-record-usage-") as temp:
         home = Path(temp) / "usage"
         query = "sk-abcdefghijklmnopqrstuvwxyz012345 " + ("A" * 250)
-        completed = run(
+
+        # 1. --lint-ok false without --lint-json must exit 2 and write no ledger row
+        lint_false_alone = run(
             "--home",
             str(home),
             "--query",
@@ -48,15 +50,45 @@ def main() -> int:
             "--outcome",
             "ok",
         )
-        assert completed.returncode == 0, completed.stderr
+        assert lint_false_alone.returncode == 2, (
+            f"expected exit 2 for --lint-ok false alone, got {lint_false_alone.returncode}"
+        )
         ledger = home / "ledger.jsonl"
+        assert not ledger.exists(), "ledger row must not be written on invalid lint-ok false"
+
+        # 2. Valid run with --plugin-version, --duration-s, and --lint-ok true round-trips
+        completed = run(
+            "--home",
+            str(home),
+            "--query",
+            query,
+            "--source",
+            "phase6",
+            "--invocation-mode",
+            "interactive",
+            "--output-mode",
+            "stdout",
+            "--status",
+            "Verified",
+            "--lint-ok",
+            "true",
+            "--duration-s",
+            "14.5",
+            "--plugin-version",
+            "0.1.0-beta.4",
+            "--outcome",
+            "ok",
+        )
+        assert completed.returncode == 0, completed.stderr
         record = json.loads(ledger.read_text(encoding="utf-8"))
         assert record["schema"] == "deep-research-dev-usage.v1"
         assert record["query_len"] == len(query)
         assert len(record["query_truncated"]) == 200
         assert "sk-abcdefghijklmnopqrstuvwxyz012345" not in record["query_truncated"]
-        assert record["status"] == "Partial"
-        assert record["lint_ok"] is False
+        assert record["status"] == "Verified"
+        assert record["lint_ok"] is True
+        assert record["duration_s"] == 14.5
+        assert record["plugin_version"] == "0.1.0-beta.4"
         assert record["source"] == "phase6"
 
         vault = Path(temp) / "vault"

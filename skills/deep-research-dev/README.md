@@ -119,7 +119,7 @@ checkout's `skills/deep-research-dev/SKILL.md`; `grok plugin install "$PWD"
 wins discovery, the runner exits 3 rather than capturing the wrong version.
 
 The script runs `grok -p "/deep-research-dev:deep-research-dev --ephemeral
---unattended <query> … ===REPORT===" -m "${MODEL:-deepseek-v4-flash}" --yolo
+--unattended <query> … ===REPORT===" -m "${MODEL:-flash-max}" --yolo
 --cwd … --output-format plain` and writes `cell.md` (final report),
 `cell.full.md` (full stream), `meta.json` (timestamps, process outcome, exact
 observed tool counts, and fail-closed session provenance), `provenance.json`,

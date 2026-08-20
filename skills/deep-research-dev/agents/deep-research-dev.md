@@ -229,7 +229,7 @@ Output: <path or "terminal">
 Warnings: <any>
 ```
 
-After the summary, run `scripts/record-usage.py` with the query, invocation mode, output mode, status, lint result, and duration if known. Default home is `~/.grok/deep-research-dev-usage/`. Use `--home` only in tests. If the write fails, warn and continue — do not change the research outcome. Never write the usage ledger into a SkillWiki vault.
+After the summary, run `scripts/record-usage.py` with required argv: `--duration-s` (wall clock seconds from skill start), `--lint-json` (path to post-repair `lint.json`), `--plugin-version` from `.claude-plugin/plugin.json` (e.g. `0.1.0-beta.4`), query, invocation mode, output mode, and status. Default home is `~/.grok/deep-research-dev-usage/`. Use `--home` only in tests. If the write fails, warn and continue — do not change the research outcome. Never write the usage ledger into a SkillWiki vault.
 
 ## Model Rules (HARD)
 

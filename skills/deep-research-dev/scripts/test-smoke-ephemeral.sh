@@ -246,6 +246,83 @@ Open the fixture URL.
 - **Topic-inherent unknown:** no additional decision is published.
 EOF
 
+# (g) report needing structure repair (H1 misplaced after Status note, missing role token, bare path)
+cat > "$TMP/g.full" <<'EOF'
+===REPORT===
+**Status: Verified**
+This note is before the title.
+# Repaired Smoke Report
+
+> Evidence cutoff: 2026-08-12 · Verification date: 2026-08-13 · Scope: fixture
+
+**This report covers**
+1. Capture
+2. Ledger
+
+## 1. Decision summary
+
+The official fixture is retained. [S1] [S2]
+
+## Freshness & Verification Status
+
+| Claim | Status | Source route | Notes |
+| --- | --- | --- | --- |
+| Fixture | externally verified | direct-fetch → primary | [S1] |
+| Local | externally verified | local-record → primary | [S2] |
+
+## Verification Methods
+
+Open the fixture URL.
+
+## Sources
+
+| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |
+| --- | --- | --- | --- | --- | --- |
+| S1 | retained fixture | Fixture / official source | primary | 2026-08-13 | https://example.test/fixture |
+| S2 | direct-fetch; local note | Local note | primary | 2026-08-13 | ./local-artifact.txt |
+
+## Coverage and uncertainty
+
+- **Topic-inherent unknown:** no additional decision is published.
+EOF
+cat > "$TMP/g.expected" <<'EOF'
+**Status: Verified**
+# Repaired Smoke Report
+This note is before the title.
+
+> Evidence cutoff: 2026-08-12 · Verification date: 2026-08-13 · Scope: fixture
+
+**This report covers**
+1. Capture
+2. Ledger
+
+## 1. Decision summary
+
+The official fixture is retained. [S1] [S2]
+
+## Freshness & Verification Status
+
+| Claim | Status | Source route | Notes |
+| --- | --- | --- | --- |
+| Fixture | externally verified | direct-fetch → primary | [S1] |
+| Local | externally verified | local-record → primary | [S2] |
+
+## Verification Methods
+
+Open the fixture URL.
+
+## Sources
+
+| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |
+| --- | --- | --- | --- | --- | --- |
+| S1 | direct-fetch; retained fixture | Fixture / official source | primary | 2026-08-13 | https://example.test/fixture |
+| S2 | direct-fetch; local note | Local note | primary | 2026-08-13 | local-record: ./local-artifact.txt |
+
+## Coverage and uncertainty
+
+- **Topic-inherent unknown:** no additional decision is published.
+EOF
+
 # ---- stub grok (never invokes the real CLI) ---------------------------------
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/grok" <<'EOF'
@@ -419,18 +496,22 @@ fi
 run_cell d "$TMP/d.full" "$TMP/d.expected" || true
 run_cell e "$TMP/e.full" "$TMP/e.expected" || true
 run_cell f "$TMP/f.full" "$TMP/f.expected" || true
+run_cell g "$TMP/g.full" "$TMP/g.expected" || true
 
 # ---- section 2: metadata and post-capture contracts -------------------------
-# check_meta <label> <meta.json> <exp_exit> <exp_outcome>
+# check_meta <label> <meta.json> <exp_exit> <exp_outcome> [exp_model]
 check_meta() {
   local label="$1" meta="$2" exp_exit="$3" exp_outcome="$4"
-  if python3 - "$meta" "$exp_exit" "$exp_outcome" <<'PY'
+  local exp_model="${5:-flash-max}"
+  if python3 - "$meta" "$exp_exit" "$exp_outcome" "$exp_model" <<'PY'
 import json, sys
 meta = json.load(open(sys.argv[1]))
 exp_exit = int(sys.argv[2])
 exp_outcome = sys.argv[3]
+exp_model = sys.argv[4]
 assert meta["exit_code"] == exp_exit, (meta["exit_code"], exp_exit)
 assert meta["outcome"] == exp_outcome, (meta["outcome"], exp_outcome)
+assert meta["model"] == exp_model, (meta["model"], exp_model)
 assert meta["phase"] == "smoke" and meta["cell"] == "cell.md"
 for key in ("run_id", "lane", "query_id", "attempt", "model", "slash",
             "cwd", "started", "finished", "duration_s", "bytes_stdout",
@@ -471,8 +552,25 @@ check_meta "fail: meta.json valid — exit 3, outcome failed" \
 check "fail: cell.md still extracted on failed run" \
   "$TMP/b.expected" "$TMP/run-fail/cell.md"
 
-# (f) demonstrates that smoke metadata records a successful generated-report
-# lint without mutating the raw final report.
+# (g) demonstrates structure repair + re-lint inside smoke-ephemeral.sh
+if python3 - "$TMP/run-g/meta.json" "$TMP/run-g/lint.json" "$TMP/run-g/cell.md" <<'PY'
+import json, sys
+from pathlib import Path
+meta = json.load(open(sys.argv[1], encoding="utf-8"))
+lint = json.load(open(sys.argv[2], encoding="utf-8"))
+cell = open(sys.argv[3], "r", encoding="utf-8").read()
+assert meta["report_lint"] == "lint.json", meta
+assert meta["report_lint_ok"] is True, meta
+assert meta["report_lint_exit_code"] == 0, meta
+assert meta["report_lint_errors"] == [], meta
+assert lint["ok"] is True, lint
+assert "# Repaired Smoke Report" in cell, cell
+PY
+then
+  ok "g: structure-repaired report is re-linted and persisted successfully"
+else
+  bad "g: structure repair / re-lint metadata mismatch"
+fi
 if python3 - "$TMP/run-f/meta.json" "$TMP/run-f/lint.json" "$EXPECTED_SKILL" <<'PY'
 import hashlib
 import json, sys

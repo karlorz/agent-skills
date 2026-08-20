@@ -44,3 +44,19 @@ _Avoid_: lint rewrite, evidence repair, making lint pass
 **Promotion**:
 Copying measured D behavior into S after D beats S on the locked eval matrix. Marketplace presence of a D beta is not promotion.
 _Avoid_: migration, ship it, replace S
+
+**Wiki corpus comparison**:
+Counting vault query/raw pages tagged or ingested as deep-research. It is not a promotion signal because D and S share `ingested_by: "deep-research"`.
+_Avoid_: A/B evidence, merge bar, eval matrix
+
+**Historical cell**:
+An eligible eval cell captured under a retired model pin (`deepseek-v4-flash` / `deepseek-v4-flash-max`). Directional only; it must not enter a new median or winner rule.
+_Avoid_: baseline, current scoreboard
+
+**Matrix model pin**:
+The parent catalog id for S/D recapture. This cycle: `flash-max`. Smoke `meta.json` must still record the observed wire `actual_model`.
+_Avoid_: host default, `deepseek-v4-flash`, grok-4.6 as the matrix pin
+
+**Capture-validity harden**:
+Making a run scorable: one plugin winner, recorded duration, persisted lint errors, correct plugin version. Not a report-quality rewrite.
+_Avoid_: promotion, evidence repair, making lint pass by changing claims
