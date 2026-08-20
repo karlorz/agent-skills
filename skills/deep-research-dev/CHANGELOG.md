@@ -4,18 +4,26 @@ All notable changes to this skill are documented in this file.
 
 ## [0.1.0-beta.4] - 2026-08-17
 
+- Made `agents/deep-research-dev.md` a thin host adapter that reads and follows
+  canonical orchestrator `skills/deep-research-dev/SKILL.md` (and stops if
+  unreadable) instead of duplicating the Phase 1–6 research workflow.
 - Added a host-local daily usage ledger (`scripts/record-usage.py`) and a
   harvest review (`scripts/review-usage.py`). Interactive and unattended runs
   append one JSONL record with a truncated query, query fingerprint, and lint
-  outcome; smoke cells keep writing `meta.json`. Reviews land under ignored
+  outcome; smoke cells keep writing `meta.json`. Phase 6 requires duration-s,
+  lint-json, and discovered plugin-version arguments. Reviews land under ignored
   `.superpowers/sdd/deep-research-dev-usage/reviews/`. The ledger is never a
   vault page.
 - Added structure-only report repair (`scripts/repair-report-structure.py`)
   after lint: insert or move the H1, prefix English role tokens, and prefix
-  `local-record:`. Status, claims, URLs, Coverage, and the `## 1. Findings`
-  fallback are unchanged. A **topic-inherent unknown** still
-  does not by itself require `Partial`. Leftover lint errors stay on the usage
-  record.
+  `local-record:`. Smoke runner applies structure-only repair before final lint
+  and defaults to matrix model pin `flash-max`. Status, claims, URLs,
+  Coverage, and the `## 1. Findings` fallback are unchanged. A
+  **topic-inherent unknown** still does not by itself require `Partial`.
+  Leftover lint errors stay on the usage record.
+- Report lint (P1): skip a leading closed YAML frontmatter document and ignore
+  H2s after `## Coverage and uncertainty`, so published vault query pages can
+  be re-linted without failing on `title:` / `## Related Notes`.
 
 ## [0.1.0-beta.3] - 2026-08-13
 

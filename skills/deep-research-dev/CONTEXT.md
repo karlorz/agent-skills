@@ -44,3 +44,36 @@ _Avoid_: lint rewrite, evidence repair, making lint pass
 **Promotion**:
 Copying measured D behavior into S after D beats S on the locked eval matrix. Marketplace presence of a D beta is not promotion.
 _Avoid_: migration, ship it, replace S
+
+**Wiki corpus comparison**:
+Counting vault query/raw pages tagged or ingested as deep-research. It is not a promotion signal because D and S share `ingested_by: "deep-research"`.
+_Avoid_: A/B evidence, merge bar, eval matrix
+
+**Historical cell**:
+An eligible eval cell captured under a retired model pin (`deepseek-v4-flash` / `deepseek-v4-flash-max`). Directional only; it must not enter a new median or winner rule.
+_Avoid_: baseline, current scoreboard
+
+**Matrix model pin**:
+The parent catalog id for S/D recapture. This cycle: `flash-max`. Smoke `meta.json` must still record the observed wire `actual_model`.
+_Avoid_: host default, `deepseek-v4-flash`, grok-4.6 as the matrix pin
+
+**Capture-validity harden**:
+Making a run scorable: one plugin winner, recorded duration, persisted lint errors, correct plugin version. Not a report-quality rewrite.
+_Avoid_: promotion, evidence repair, making lint pass by changing claims
+
+**Orchestrator module**:
+The single canonical Phase 1–6 research workflow defined in `skills/deep-research-dev/SKILL.md`. It owns the source-triage, claim discipline, synthesis, refinement, routing, and reporting recipes.
+_Avoid_: agent twin, dual-file workflow, skill-only feature
+
+**Host adapter**:
+The thin entrypoint in `agents/deep-research-dev.md` that Reads and follows `skills/deep-research-dev/SKILL.md` rather than duplicating the research workflow.
+_Avoid_: agent twin, standalone agent recipe, fork of SKILL.md
+
+**Light lookup**:
+A single-fact freshness question (latest version, one changelog line). Callers use grok-search, not D.
+_Avoid_: `--depth fast` as a synonym, shrinking D, D-internal grok-search-only fast path (rejected this cycle)
+
+**Usage writer**:
+`scripts/record-usage.py`. Smoke and Phase 6 are callers, not writers.
+_Avoid_: write-usage.sh, dual ledger modules
+

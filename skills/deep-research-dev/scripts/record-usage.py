@@ -109,7 +109,7 @@ def lint_fields(args: argparse.Namespace) -> tuple[bool | None, list[str]]:
     if args.lint_ok == "true":
         return True, []
     if args.lint_ok == "false":
-        return False, []
+        raise UsageError("--lint-ok false requires --lint-json to provide lint errors")
     return None, []
 
 

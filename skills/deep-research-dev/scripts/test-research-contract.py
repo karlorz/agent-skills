@@ -35,6 +35,7 @@ _README_MD = _SCRIPTS_DIR / ".." / "README.md"
 _CHANGELOG_MD = _SCRIPTS_DIR / ".." / "CHANGELOG.md"
 _TEMPLATE_MD = _SCRIPTS_DIR / ".." / "references" / "report-presentation-template.md"
 _CODEX_TOOLS_MD = _SCRIPTS_DIR / ".." / "references" / "codex-tools.md"
+_SMOKE_SH = _SCRIPTS_DIR / "smoke-ephemeral.sh"
 
 
 def _read(path: Path) -> str:
@@ -68,13 +69,20 @@ required_skill = (
     "**Status: Partial**",
 )
 
-# Anchors that must appear in the direct agent (deep-research-dev.md).
-required_agent = (
-    "same selected source plan sequentially inline",
-    "not itself a source-plan degradation",
-    "must not be omitted after discovery to obtain Verified",
-    "**Status: Verified**",
-    "**Status: Partial**",
+# Anchors that must appear in the direct agent adapter (deep-research-dev.md).
+# The direct agent is a thin host adapter that points to the SKILL.md orchestrator.
+required_agent_adapter = (
+    "skills/deep-research-dev/SKILL.md",
+    "do not invent a shorter",
+    "STOP",
+)
+
+# Recipe phrases unique to the former twin that must NOT appear in the
+# thin host adapter agent.md.
+prohibited_agent_recipe = (
+    "Phase 1: Topic Analysis (you, inline)",
+    "Pass A — Consolidation",
+    "Deep Research Complete",
 )
 
 # Additional strict-policy anchors that must remain in the skill text.
@@ -240,6 +248,21 @@ required_usage_review_contract = (
 legacy_trim_phrase = "Trim sources to top 5-7 most authoritative"
 
 
+# Caller seam anchors (Task 2): named caller recommendations in SKILL.md.
+required_caller_seam = (
+    "Prefer /grok-search",
+    "If D is invoked anyway",
+)
+
+# Usage writer contract (Task 3): smoke-ephemeral.sh must pass required argv
+# unconditionally without gating --plugin-version on an if guard.
+required_smoke_usage_argv = (
+    '--duration-s "$DURATION_S"',
+    '--lint-json "$LINT"',
+    '--plugin-version "$PLUGIN_VERSION"',
+)
+prohibited_smoke_usage_guard = 'if [[ -n "${PLUGIN_VERSION:-}" ]]; then'
+
 # ── Changelog helpers ────────────────────────────────────────────────────────
 
 def _current_release_entry(changelog_text: str) -> tuple[str, str]:
@@ -271,21 +294,22 @@ def main() -> int:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing: {phrase!r}")
 
-    for phrase in required_agent:
+    for phrase in required_agent_adapter:
         if phrase not in agent_text:
-            failures.append(f"agent.md missing: {phrase!r}")
+            failures.append(f"agent.md missing adapter anchor: {phrase!r}")
+
+    for phrase in prohibited_agent_recipe:
+        if phrase in agent_text:
+            failures.append(f"agent.md still contains former twin recipe: {phrase!r}")
 
     for phrase in required_skill_policy:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing policy: {phrase!r}")
 
-    # Strict Partial semantics must be present in BOTH entrypoints. The
-    # template is intentionally the canonical detailed matrix; the agent and
-    # skill must retain the same categories in their compact recipe.
-    for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-        for phrase in required_status_semantics:
-            if _normalize_whitespace(phrase) not in _normalize_whitespace(text):
-                failures.append(f"{label} missing status-semantics anchor: {phrase!r}")
+    # Strict Partial semantics must be present in SKILL.md and template.
+    for phrase in required_status_semantics:
+        if _normalize_whitespace(phrase) not in _normalize_whitespace(skill_text):
+            failures.append(f"SKILL.md missing status-semantics anchor: {phrase!r}")
 
     template_text = _read(_TEMPLATE_MD)
     for phrase in required_status_semantics:
@@ -298,19 +322,17 @@ def main() -> int:
         if phrase not in template_text:
             failures.append(f"report template missing structured-fallback contract: {phrase!r}")
 
-    # Landed presentation contract — must be present in both entrypoints.
+    # Landed presentation contract — present in SKILL.md.
     for phrase in required_landed_contract:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-            if phrase not in text:
-                failures.append(f"{label} missing landed-contract anchor: {phrase!r}")
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing landed-contract anchor: {phrase!r}")
 
     for phrase in required_generated_report_contract:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-            if phrase not in text:
-                failures.append(f"{label} missing generated-report contract: {phrase!r}")
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing generated-report contract: {phrase!r}")
 
     for phrase in required_literal_machine_tokens:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text), ("report template", template_text)):
+        for label, text in (("SKILL.md", skill_text), ("report template", template_text)):
             if phrase not in text:
                 failures.append(f"{label} missing literal machine-token contract: {phrase!r}")
 
@@ -320,45 +342,49 @@ def main() -> int:
                 failures.append(f"{label} still contains model-narrated count form: {phrase!r}")
 
     for phrase in required_fallback_contract:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-            if phrase not in text:
-                failures.append(f"{label} missing structured-fallback contract: {phrase!r}")
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing structured-fallback contract: {phrase!r}")
 
     for phrase in required_usage_review_contract:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-            if phrase not in text:
-                failures.append(f"{label} missing usage-review contract: {phrase!r}")
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing usage-review contract: {phrase!r}")
+
+    for phrase in required_caller_seam:
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing caller-seam anchor: {phrase!r}")
+
+    smoke_text = _read(_SMOKE_SH)
+    for phrase in required_smoke_usage_argv:
+        if phrase not in smoke_text:
+            failures.append(f"smoke-ephemeral.sh missing required usage argv anchor: {phrase!r}")
+    if prohibited_smoke_usage_guard in smoke_text:
+        failures.append(
+            f"smoke-ephemeral.sh must not conditionally guard --plugin-version with {prohibited_smoke_usage_guard!r}"
+        )
 
     for phrase in required_literal_headings:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-            if phrase not in text:
-                failures.append(f"{label} missing literal audit heading: {phrase!r}")
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing literal audit heading: {phrase!r}")
 
     # Numbered Phase 3 item 6 must instruct emitting the literal
-    # "## Verification Methods" audit heading in BOTH entrypoints.
+    # "## Verification Methods" audit heading in SKILL.md.
     for phrase in required_verification_methods_emission:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-            if phrase not in text:
-                failures.append(
-                    f"{label} missing Verification Methods literal-heading instruction: {phrase!r}"
-                )
+        if phrase not in skill_text:
+            failures.append(
+                f"SKILL.md missing Verification Methods literal-heading instruction: {phrase!r}"
+            )
 
-    # Mode parity: slash-skill detection and question gate include --ephemeral;
-    # direct agent interactive detection excludes it too.
+    # Mode parity: slash-skill detection and question gate include --ephemeral.
     for phrase in required_mode_parity:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing mode-parity phrase: {phrase!r}")
-    if "no `--unattended` / `--ephemeral` / smoke flags" not in agent_text:
-        failures.append("agent.md missing mode-parity phrase for --ephemeral")
 
-    # Plain ASCII ordinal narrative H2 headings — must be instructed in BOTH
-    # entrypoints regardless of report language.
+    # Plain ASCII ordinal narrative H2 headings — must be instructed in SKILL.md.
     for phrase in required_plain_ordinal_narrative:
-        for label, text in (("SKILL.md", skill_text), ("agent.md", agent_text)):
-            if phrase not in text:
-                failures.append(
-                    f"{label} missing plain-ordinal narrative anchor: {phrase!r}"
-                )
+        if phrase not in skill_text:
+            failures.append(
+                f"SKILL.md missing plain-ordinal narrative anchor: {phrase!r}"
+            )
 
     # README documentation alignment — the plugin README must describe the
     # plain ASCII ordinal narrative H2 contract and distinguish localized

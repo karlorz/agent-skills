@@ -19,6 +19,11 @@ controlled evaluation, but it is not a production replacement for
 - New flags `--unattended`, `--depth fast|default|thorough`, and the
   interactive-only `--reuse-s-template` (see Report presentation below) on top
   of the 2.4.3 flag set (`--ephemeral`, `--save`, `--vault`, `--no-refine`, …).
+- **When not to use D**: for a single latest-version / one-URL fact or quick
+  factual lookup, prefer `/grok-search` (or the grok-search MCP) instead of D.
+  Use D when requiring a Status/ledger/Coverage report, multi-claim comparison,
+  or vault persistence. If D is invoked anyway, it runs the full orchestrator
+  without skipping.
 
 ## Report presentation (output contract)
 
@@ -119,7 +124,7 @@ checkout's `skills/deep-research-dev/SKILL.md`; `grok plugin install "$PWD"
 wins discovery, the runner exits 3 rather than capturing the wrong version.
 
 The script runs `grok -p "/deep-research-dev:deep-research-dev --ephemeral
---unattended <query> … ===REPORT===" -m "${MODEL:-deepseek-v4-flash}" --yolo
+--unattended <query> … ===REPORT===" -m "${MODEL:-flash-max}" --yolo
 --cwd … --output-format plain` and writes `cell.md` (final report),
 `cell.full.md` (full stream), `meta.json` (timestamps, process outcome, exact
 observed tool counts, and fail-closed session provenance), `provenance.json`,
