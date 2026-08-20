@@ -4,6 +4,9 @@ All notable changes to this skill are documented in this file.
 
 ## [0.1.0-beta.4] - 2026-08-17
 
+- Made `agents/deep-research-dev.md` a thin host adapter that reads and follows
+  canonical orchestrator `skills/deep-research-dev/SKILL.md` (and stops if
+  unreadable) instead of duplicating the Phase 1–6 research workflow.
 - Added a host-local daily usage ledger (`scripts/record-usage.py`) and a
   harvest review (`scripts/review-usage.py`). Interactive and unattended runs
   append one JSONL record with a truncated query, query fingerprint, and lint

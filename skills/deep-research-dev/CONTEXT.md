@@ -60,3 +60,11 @@ _Avoid_: host default, `deepseek-v4-flash`, grok-4.6 as the matrix pin
 **Capture-validity harden**:
 Making a run scorable: one plugin winner, recorded duration, persisted lint errors, correct plugin version. Not a report-quality rewrite.
 _Avoid_: promotion, evidence repair, making lint pass by changing claims
+
+**Orchestrator module**:
+The single canonical Phase 1–6 research workflow defined in `skills/deep-research-dev/SKILL.md`. It owns the source-triage, claim discipline, synthesis, refinement, routing, and reporting recipes.
+_Avoid_: agent twin, dual-file workflow, skill-only feature
+
+**Host adapter**:
+The thin entrypoint in `agents/deep-research-dev.md` that Reads and follows `skills/deep-research-dev/SKILL.md` rather than duplicating the research workflow.
+_Avoid_: agent twin, standalone agent recipe, fork of SKILL.md
