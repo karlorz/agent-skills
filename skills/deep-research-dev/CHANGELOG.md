@@ -2,6 +2,19 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.1.0-beta.5] - 2026-08-21
+
+- Thin host adapter: `agents/deep-research-dev.md` reads
+  `skills/deep-research-dev/SKILL.md` and stops if that file is unreadable,
+  instead of duplicating the Phase 1–6 recipe.
+- Named light-lookup caller: prefer `/grok-search` for a single fact; if D is
+  invoked anyway, run the full orchestrator. `--depth fast` is unchanged.
+- Smoke usage always passes `--duration-s`, `--lint-json`, and
+  `--plugin-version` to `scripts/record-usage.py` (no wrapper).
+- Status semantics and fallback are unchanged: a **topic-inherent unknown**
+  **does not by itself require `Partial`**. The deterministic fallback remains
+  `## 1. Findings`.
+
 ## [0.1.0-beta.4] - 2026-08-17
 
 - Made `agents/deep-research-dev.md` a thin host adapter that reads and follows

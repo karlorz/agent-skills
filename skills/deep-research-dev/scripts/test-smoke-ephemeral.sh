@@ -437,8 +437,10 @@ import sys
 from pathlib import Path
 meta = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 skill = Path(sys.argv[2]).resolve()
+plugin_json = skill.parents[2] / ".claude-plugin" / "plugin.json"
+expected_version = json.loads(plugin_json.read_text(encoding="utf-8"))["version"]
 assert Path(meta["plugin_skill"]).resolve() == skill, meta
-assert meta["plugin_version"] == "0.1.0-beta.4", meta
+assert meta["plugin_version"] == expected_version, meta
 assert meta["plugin_skill_sha256"] == hashlib.sha256(skill.read_bytes()).hexdigest(), meta
 PY
 then
