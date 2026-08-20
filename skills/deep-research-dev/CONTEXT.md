@@ -68,3 +68,7 @@ _Avoid_: agent twin, dual-file workflow, skill-only feature
 **Host adapter**:
 The thin entrypoint in `agents/deep-research-dev.md` that Reads and follows `skills/deep-research-dev/SKILL.md` rather than duplicating the research workflow.
 _Avoid_: agent twin, standalone agent recipe, fork of SKILL.md
+
+**Light lookup**:
+A single-fact freshness question (latest version, one changelog line). Callers use grok-search, not D.
+_Avoid_: `--depth fast` as a synonym, shrinking D, D-internal grok-search-only fast path (rejected this cycle)

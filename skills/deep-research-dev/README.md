@@ -19,6 +19,11 @@ controlled evaluation, but it is not a production replacement for
 - New flags `--unattended`, `--depth fast|default|thorough`, and the
   interactive-only `--reuse-s-template` (see Report presentation below) on top
   of the 2.4.3 flag set (`--ephemeral`, `--save`, `--vault`, `--no-refine`, …).
+- **When not to use D**: for a single latest-version / one-URL fact or quick
+  factual lookup, prefer `/grok-search` (or the grok-search MCP) instead of D.
+  Use D when requiring a Status/ledger/Coverage report, multi-claim comparison,
+  or vault persistence. If D is invoked anyway, it runs the full orchestrator
+  without skipping.
 
 ## Report presentation (output contract)
 

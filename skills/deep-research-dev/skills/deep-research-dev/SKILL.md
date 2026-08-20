@@ -113,10 +113,11 @@ deep-research-dev@karlorz-agent-skills --json`.
 - Topic involves libraries, frameworks, GitHub repos, or general concepts
 - User mentions "research", "investigate", "compare", "analyze", or "deep dive"
 - Topic involves "latest", current behavior, versions, releases, changelogs, marketplace state, package metadata, GitHub issues/PRs, or other externally mutable facts
+- Caller needs a Status/ledger/Coverage report, multi-claim comparison, or vault persistence of research
 - **Periodic coverage sweep**: an automated collector (e.g., nightly GitHub Search pipeline) has gone quiet or missed a major release. Use deep-research-dev's grok-search MCP to find blog-first announcements, org-launched repos with short names, and non-English ecosystems that keyword search structurally misses. See `references/vault-pipeline.md` "Worked Example: Coverage-Sweep Pattern" for the prompt template and expected artifacts.
 
 Do NOT use for:
-- Quick factual lookups (use direct web search or docs lookup)
+- Quick factual lookups or single-fact freshness questions (latest version, one changelog line) — **Prefer /grok-search** (or grok-search MCP) for a single latest-version / one-URL fact. If D is invoked anyway, run the full orchestrator (no skip).
 - Single-source questions (use Context7, local files, or web search directly)
 - Fully local, non-freshness-sensitive answers when ordinary local file inspection is enough; read local files directly and note that external verification was intentionally skipped
 

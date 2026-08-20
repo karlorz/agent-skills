@@ -247,6 +247,12 @@ required_usage_review_contract = (
 legacy_trim_phrase = "Trim sources to top 5-7 most authoritative"
 
 
+# Caller seam anchors (Task 2): named caller recommendations in SKILL.md.
+required_caller_seam = (
+    "Prefer /grok-search",
+    "If D is invoked anyway",
+)
+
 # ── Changelog helpers ────────────────────────────────────────────────────────
 
 def _current_release_entry(changelog_text: str) -> tuple[str, str]:
@@ -332,6 +338,10 @@ def main() -> int:
     for phrase in required_usage_review_contract:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing usage-review contract: {phrase!r}")
+
+    for phrase in required_caller_seam:
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing caller-seam anchor: {phrase!r}")
 
     for phrase in required_literal_headings:
         if phrase not in skill_text:
