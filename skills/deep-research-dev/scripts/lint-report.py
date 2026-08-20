@@ -126,6 +126,21 @@ def emit(result):
     sys.stdout.write(json.dumps(result) + "\n")
 
 
+def strip_leading_yaml_frontmatter(text):
+    """Drop a leading closed YAML document so published vault pages lint as reports.
+
+    Only the opening ``---`` / closing ``---`` pair at the start of the file is
+    removed. Unclosed frontmatter is left unchanged.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return text
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return "\n".join(lines[index + 1 :])
+    return text
+
+
 def is_substantive(line):
     s = line.strip()
     if not s:
@@ -189,7 +204,7 @@ def coverage_has_evidence_gap(coverage_text):
 
 def validate_report(text, metadata, args):
     errors = []
-    structural_text = strip_fenced_code(text)
+    structural_text = strip_fenced_code(strip_leading_yaml_frontmatter(text))
     lines = structural_text.splitlines()
 
     # -- Status header and H1 -------------------------------------------------
@@ -225,7 +240,12 @@ def validate_report(text, metadata, args):
     audit_seen = []
     expected_num = 1
     numbering_broken = False
+    coverage_passed = False
     for _, heading in h2s:
+        if heading == "Coverage and uncertainty":
+            coverage_passed = True
+        if coverage_passed and heading not in AUDIT_HEADINGS:
+            continue
         if heading in AUDIT_HEADINGS:
             audit_seen.append(heading)
         elif not numbering_broken:

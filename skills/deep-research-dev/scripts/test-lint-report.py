@@ -296,6 +296,30 @@ def main() -> int:
         narrated_count.write_text(report(include_tool_count=True), encoding="utf-8")
         assert_invalid(narrated_count, "numeric tool-count claim")
 
+        wrapped = root / "vault-wrapped.md"
+        wrapped.write_text(
+            "---\n"
+            'title: "Published query"\n'
+            "created: 2026-08-20\n"
+            "type: query\n"
+            "---\n\n"
+            + report()
+            + "\n## Related Notes\n\n- [[queries/example]]\n",
+            encoding="utf-8",
+        )
+        assert_valid(wrapped, "--metadata", str(metadata), "--cutoff", "2026-08-12")
+
+        yaml_only = root / "yaml-only.md"
+        yaml_only.write_text("---\ntitle: no report\n---\n\nJust prose.\n", encoding="utf-8")
+        assert_invalid(yaml_only, "first substantive line must be exactly")
+
+        related_mid = root / "related-mid.md"
+        related_mid.write_text(
+            report(extra_h2="## Related Notes\n\n- [[queries/example]]\n"),
+            encoding="utf-8",
+        )
+        assert_invalid(related_mid, "unnumbered H2 is not an audit heading")
+
     print("report lint: ok")
     return 0
 

@@ -18,6 +18,9 @@ All notable changes to this skill are documented in this file.
   Coverage, and the `## 1. Findings` fallback are unchanged. A
   **topic-inherent unknown** still does not by itself require `Partial`.
   Leftover lint errors stay on the usage record.
+- Report lint (P1): skip a leading closed YAML frontmatter document and ignore
+  H2s after `## Coverage and uncertainty`, so published vault query pages can
+  be re-linted without failing on `title:` / `## Related Notes`.
 
 ## [0.1.0-beta.3] - 2026-08-13
 
