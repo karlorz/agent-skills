@@ -1054,6 +1054,16 @@ else
   bad "r9: stub grok invoked despite nonexistent vault override"
 fi
 
+# Static assertions: smoke-ephemeral.sh must unconditionally pass required usage argv.
+if grep -Fq -e '--duration-s "$DURATION_S"' "$SMOKE" \
+  && grep -Fq -e '--lint-json "$LINT"' "$SMOKE" \
+  && grep -Fq -e '--plugin-version "$PLUGIN_VERSION"' "$SMOKE" \
+  && ! grep -Fq -e 'if [[ -n "${PLUGIN_VERSION:-}" ]]; then' "$SMOKE"; then
+  ok "static: smoke-ephemeral.sh passes required usage argv unconditionally"
+else
+  bad "static: smoke-ephemeral.sh missing required usage argv or gates --plugin-version with if guard"
+fi
+
 # ---- summary ----------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]

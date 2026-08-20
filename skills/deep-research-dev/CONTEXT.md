@@ -72,3 +72,8 @@ _Avoid_: agent twin, standalone agent recipe, fork of SKILL.md
 **Light lookup**:
 A single-fact freshness question (latest version, one changelog line). Callers use grok-search, not D.
 _Avoid_: `--depth fast` as a synonym, shrinking D, D-internal grok-search-only fast path (rejected this cycle)
+
+**Usage writer**:
+`scripts/record-usage.py`. Smoke and Phase 6 are callers, not writers.
+_Avoid_: write-usage.sh, dual ledger modules
+

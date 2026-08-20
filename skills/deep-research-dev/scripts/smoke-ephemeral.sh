@@ -521,15 +521,13 @@ USAGE_ARGS=(
   --status "$USAGE_STATUS"
   --duration-s "$DURATION_S"
   --lint-json "$LINT"
+  --plugin-version "$PLUGIN_VERSION"
   --cwd "$CWD"
   --report-path "$CELL"
   --smoke-meta "$META"
 )
 if [[ -n "${DEEP_RESEARCH_DEV_USAGE_HOME:-}" ]]; then
   USAGE_ARGS+=(--home "$DEEP_RESEARCH_DEV_USAGE_HOME")
-fi
-if [[ -n "${PLUGIN_VERSION:-}" ]]; then
-  USAGE_ARGS+=(--plugin-version "$PLUGIN_VERSION")
 fi
 USAGE_RC=0
 python3 "$USAGE_HELPER" "${USAGE_ARGS[@]}" >/dev/null || USAGE_RC=$?

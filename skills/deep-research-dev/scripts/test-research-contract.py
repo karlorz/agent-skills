@@ -35,6 +35,7 @@ _README_MD = _SCRIPTS_DIR / ".." / "README.md"
 _CHANGELOG_MD = _SCRIPTS_DIR / ".." / "CHANGELOG.md"
 _TEMPLATE_MD = _SCRIPTS_DIR / ".." / "references" / "report-presentation-template.md"
 _CODEX_TOOLS_MD = _SCRIPTS_DIR / ".." / "references" / "codex-tools.md"
+_SMOKE_SH = _SCRIPTS_DIR / "smoke-ephemeral.sh"
 
 
 def _read(path: Path) -> str:
@@ -253,6 +254,15 @@ required_caller_seam = (
     "If D is invoked anyway",
 )
 
+# Usage writer contract (Task 3): smoke-ephemeral.sh must pass required argv
+# unconditionally without gating --plugin-version on an if guard.
+required_smoke_usage_argv = (
+    '--duration-s "$DURATION_S"',
+    '--lint-json "$LINT"',
+    '--plugin-version "$PLUGIN_VERSION"',
+)
+prohibited_smoke_usage_guard = 'if [[ -n "${PLUGIN_VERSION:-}" ]]; then'
+
 # ── Changelog helpers ────────────────────────────────────────────────────────
 
 def _current_release_entry(changelog_text: str) -> tuple[str, str]:
@@ -342,6 +352,15 @@ def main() -> int:
     for phrase in required_caller_seam:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing caller-seam anchor: {phrase!r}")
+
+    smoke_text = _read(_SMOKE_SH)
+    for phrase in required_smoke_usage_argv:
+        if phrase not in smoke_text:
+            failures.append(f"smoke-ephemeral.sh missing required usage argv anchor: {phrase!r}")
+    if prohibited_smoke_usage_guard in smoke_text:
+        failures.append(
+            f"smoke-ephemeral.sh must not conditionally guard --plugin-version with {prohibited_smoke_usage_guard!r}"
+        )
 
     for phrase in required_literal_headings:
         if phrase not in skill_text:
