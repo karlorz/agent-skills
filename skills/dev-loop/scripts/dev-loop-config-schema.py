@@ -100,6 +100,7 @@ TOP_LEVEL_SCHEMA = mapping(
         ),
         "worktree_policy": mapping(
             {
+                "enabled": BOOLEAN,
                 "required": BOOLEAN,
                 "release_branch": NULLABLE_STRING,
                 "feature_branch_pattern": NULLABLE_STRING,
@@ -340,6 +341,7 @@ TOP_LEVEL_SCHEMA = mapping(
                 "auto_merge": BOOLEAN,
                 "merge_method": STRING,
                 "require_work_item_approval": BOOLEAN,
+                "allow_local_merge": BOOLEAN,
             }
         ),
         "notes": mapping({}, additional=JSON_VALUE),

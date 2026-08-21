@@ -61,6 +61,9 @@ merge_policy:
   auto_merge: false
   merge_method: squash
   require_work_item_approval: true
+  allow_local_merge: true
+worktree_policy:
+  enabled: true
 ```
 EOF
 
@@ -69,7 +72,29 @@ echo "$OUT_VALID" | node -e '
 const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
 const codes = j.findings.map((f) => f.code);
 if (codes.includes("invalid_merge_strategy")) throw new Error("repo-policy must be accepted");
+if (codes.includes("invalid_allow_local_merge_type")) throw new Error("boolean allow_local_merge must be accepted");
 process.stdout.write("ok-merge-policy\n");
+'
+
+ALLOW_LOCAL_MERGE_BAD="$TMP/allow-local-merge-bad"
+mkdir -p "$ALLOW_LOCAL_MERGE_BAD/.claude"
+cat > "$ALLOW_LOCAL_MERGE_BAD/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: allow-local-merge-bad
+release_branch: main
+prd_layer: manual
+knowledge_layer: none
+merge_policy:
+  allow_local_merge: "true"
+```
+EOF
+OUT_ALLOW_LOCAL_MERGE_BAD="$(node "$LINT_JS" --repo "$ALLOW_LOCAL_MERGE_BAD" --format json --no-write 2>/dev/null)" || true
+echo "$OUT_ALLOW_LOCAL_MERGE_BAD" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+const codes = j.findings.map((f) => f.code);
+if (!codes.includes("invalid_allow_local_merge_type")) throw new Error("string allow_local_merge must be rejected with invalid_allow_local_merge_type: " + JSON.stringify(j.findings));
+if (j.overall.state !== "blocked") throw new Error("invalid allow_local_merge type must block");
+process.stdout.write("ok-allow-local-merge-type-bad\n");
 '
 
 WORKFLOW_BAD="$TMP/workflow-bad"

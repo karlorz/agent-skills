@@ -1128,6 +1128,7 @@ node "$ROOT/scripts/check-plugin-release-drift.js" --repo "$ROOT" --skill dev-lo
 bash "$ROOT/scripts/test-plugin-release-drift.sh"
 bash "$ROOT/scripts/test-dev-loop-config-schema.sh"
 bash "$ROOT/scripts/test-dev-loop-workflow-profile.sh"
+bash "$ROOT/scripts/test-dev-loop-isolation-landing.sh"
 bash "$ROOT/scripts/test-dev-loop-write-preflight.sh"
 bash "$ROOT/scripts/test-dev-loop-verification-dispatch.sh"
 bash "$ROOT/scripts/test-dev-loop-config-lint.sh"

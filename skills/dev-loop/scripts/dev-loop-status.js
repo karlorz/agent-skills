@@ -12,6 +12,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
+const { parseMergePolicy } = require("./dev-loop-isolation-landing.js");
 const { compareSupportedSemver, parseSupportedSemver } = require("./dev-loop-version.js");
 const { pipelineSteps, resolveWorkflowProfile } = require("./dev-loop-workflow-profile.js");
 
@@ -203,21 +204,7 @@ function gitLines(repo, args) {
 }
 
 function parseMergePolicyFromConfig(config) {
-  const defaults = {
-    strategy: "repo-policy",
-    auto_merge: false,
-    merge_method: "squash",
-    require_work_item_approval: true,
-  };
-  const policy = config?.merge_policy || {};
-  const configuredStrategy = policy.strategy || defaults.strategy;
-  return {
-    strategy: configuredStrategy === "branch-policy" ? "repo-policy" : configuredStrategy,
-    auto_merge: policy.auto_merge ?? defaults.auto_merge,
-    merge_method: policy.merge_method || defaults.merge_method,
-    require_work_item_approval:
-      policy.require_work_item_approval ?? defaults.require_work_item_approval,
-  };
+  return parseMergePolicy(config);
 }
 
 function collectChangedFiles(repo) {

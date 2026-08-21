@@ -340,6 +340,13 @@ function lint(repo) {
       message: `merge_policy.merge_method must be one of: ${[...MERGE_METHODS].join(", ")}`,
     });
   }
+  if (mergePolicy && Object.hasOwn(mergePolicy, "allow_local_merge") && typeof mergePolicy.allow_local_merge !== "boolean") {
+    findings.push({
+      severity: "error",
+      code: "invalid_allow_local_merge_type",
+      message: "merge_policy.allow_local_merge must be a boolean",
+    });
+  }
   if (mergePolicy?.auto_merge && !mergePolicy.require_work_item_approval) {
     findings.push({
       severity: "error",

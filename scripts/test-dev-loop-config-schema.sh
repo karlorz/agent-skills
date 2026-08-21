@@ -159,6 +159,17 @@ workflow_profile:
 ```
 EOF
 
+cat > "$TMP/isolation-landing.md" <<'EOF'
+# Isolation and Landing Policy keys
+
+```yaml
+worktree_policy:
+  enabled: false
+merge_policy:
+  allow_local_merge: true
+```
+EOF
+
 assert_contract_fields() {
   local output="$1"
   node - "$output" <<'NODE'
@@ -402,6 +413,28 @@ assert.ok(
   JSON.stringify(result.errors),
 );
 process.stdout.write("ok-workflow-profile-type\n");
+NODE
+
+ISOLATION_OUT="$TMP/isolation-landing.json"
+python3 "$SCHEMA" --file "$TMP/isolation-landing.md" >"$ISOLATION_OUT" ||
+  fail "valid isolation landing fixture was rejected"
+assert_contract_fields "$ISOLATION_OUT"
+node - "$ISOLATION_OUT" <<'NODE'
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+
+const result = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+assert.deepEqual(result.config, {
+  worktree_policy: {
+    enabled: false,
+  },
+  merge_policy: {
+    allow_local_merge: true,
+  },
+});
+assert.deepEqual(result.errors, []);
+assert.deepEqual(result.warnings, []);
+process.stdout.write("ok-isolation-landing-keys\n");
 NODE
 
 UNAVAILABLE_OUT="$TMP/parser-unavailable.json"
