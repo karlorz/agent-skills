@@ -783,8 +783,8 @@ prd_disciplines:
 │  2b. GRILL    <Interview backend> → sharpen requirements    │
 │  3. SPEC      <PRD skill> → spec.md at vault path           │
 │  4. PLAN      <PRD skill> → plan.md at vault path           │
-│  5. EXECUTE   sdd-execute-worker or <PRD execution skill>   │
-│               → implement                                   │
+│  5. EXECUTE   isolate (using-git-worktrees / .worktrees)    │
+│               → sdd-execute-worker in worktree cwd          │
 │  6. REVIEW    simplify-worker or Skill(simplify:simplify)  │
 │               → fix findings                              │
 │  6b. MERGE    PR from feature branch → main (if branch ≠   │
@@ -953,7 +953,7 @@ prd_disciplines:
      `REQUIRED_CHECKS = []`.
      **Resolve merge authority separately** — parse `merge_policy` with
      fail-closed defaults:
-     `{strategy: repo-policy, auto_merge: false, merge_method: squash,
+     `{strategy: repo-policy, auto_merge: false, allow_local_merge: false, merge_method: squash,
      require_work_item_approval: true}`. Store the normalized result as `MERGE_POLICY` independently of `CI_DISCOVERY`;
      CI existence or health never grants merge authority. `strategy` is
      `repo-policy` (`branch-policy` compatibility alias) or `pull-request`;
@@ -961,6 +961,12 @@ prd_disciplines:
      `auto_merge: true` requires `require_work_item_approval: true`, and the
      active work-item spec must carry `merge_auto_approved: true` before the
      runtime gate may enable auto-merge.
+     **Resolve WORKTREE_POLICY** — parse `worktree_policy.enabled` (default
+     `true` when absent or when the block is absent). Store `{enabled}`.
+     Shared helper: `skills/dev-loop/scripts/dev-loop-isolation-landing.js`
+     (`parseWorktreePolicy`, `parseMergePolicy`). Do not run the helper as a
+     required shell step; agents may use the same defaults if they parse
+     YAML themselves.
      **Resolve `critical_paths`** — parse into `CRITICAL_PATHS` dict (name →
      `{code, vault, history_pins}`). Absent or empty → `{}` (equal priority).
      Schema: see `templates/project-config.md` § Critical paths. Setup flow:
@@ -1498,6 +1504,13 @@ fact-checked. Output specs must include a `## Sources Used` section if
 (manual pipeline — user drives implementation).
 
 **If `execute` step IS in the active pipeline template:**
+
+**Isolate workspace (before invoking the execute skill):**
+- Invoke `using-git-worktrees`. Do not ask for consent (declared default).
+- Skip creating isolation when any of: already a linked worktree (`GIT_DIR != GIT_COMMON` and not a submodule); detached HEAD (Codex App sandbox — stay; existing handoff contract); `WORKTREE_POLICY.enabled` is false; vault-only, git-only, or trivial cycle with no product-repo edits.
+- Otherwise create isolation: prefer native harness / spawn isolation / Orca worktree when available; else `git worktree add .worktrees/<work-slug> -b <work-slug>` after `git check-ignore` confirms `.worktrees` is ignored. If not ignored, add it to `.gitignore` and commit that first.
+- Never nest worktrees.
+- Then invoke the registered execute skill / `dev-loop:sdd-execute-worker` with cwd set to that worktree. Keep existing sonnet / sdd-execute-worker rules unchanged.
 
 - **`execute` in PRD_CAPS:** Invoke the registered execute skill with
   `plan.md` (or `spec.md` if no plan). When the backend is

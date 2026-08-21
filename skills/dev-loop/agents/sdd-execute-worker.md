@@ -58,6 +58,8 @@ contract for worker sandboxes that cannot read the installed skill file.
 
 ## Dev-loop Hard Rules
 
+- Run in the caller-supplied product worktree cwd; do not create another
+  nested worktree.
 - Preserve caller scope. Do not expand beyond the supplied work item, plan, or
   spec.
 - When the upstream skill dispatches execution subagents, add
