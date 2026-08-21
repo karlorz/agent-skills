@@ -44,6 +44,8 @@ the independent health and lifecycle fields.
 
 - Would pick: {{would_pick}}
 - Pipeline: {{pipeline_steps}}
+- Isolation: enabled={{isolation_enabled}}, action={{isolation_action}} ({{isolation_reason}})
+- Landing route: {{landing_route}} (allow_local_merge: {{allow_local_merge}})
 - Merge route: {{merge_strategy}} — {{merge_route_reason}}
 - Auto-merge eligible: {{auto_merge_eligible}}
 - Failed auto-merge gates: {{auto_merge_failed_gates}}

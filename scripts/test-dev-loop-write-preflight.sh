@@ -232,4 +232,102 @@ PUSH_EXIT=$?
 set -e
 [[ "$PUSH_EXIT" -eq 1 ]] || fail "release push must refuse"
 
+# --- Local merge landing route tests ---
+LM_REPO="$TMP/lm-repo"
+init_repo "$LM_REPO"
+mkdir -p "$LM_REPO/.claude"
+cat >"$LM_REPO/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: preflight-fixture
+release_branch: main
+branch_policy:
+  require_feature_branch: true
+  direct_push_to_release_branch: false
+merge_policy:
+  strategy: repo-policy
+  allow_local_merge: true
+```
+EOF
+
+# Create a feature branch so it exists locally
+git -C "$LM_REPO" checkout -b feat/my-feature >/dev/null 2>&1
+echo "feature work" > "$LM_REPO/feature.txt"
+git -C "$LM_REPO" add feature.txt
+git -C "$LM_REPO" commit -m "feature commit" >/dev/null 2>&1
+git -C "$LM_REPO" checkout main >/dev/null 2>&1
+
+# (a) repo-policy + allow_local_merge true + --intent push --landing-route local-merge-then-push on main is allowed
+OUT_LM_OK="$(node "$PREFLIGHT" --repo "$LM_REPO" --intent push --landing-route local-merge-then-push --format json)"
+echo "$OUT_LM_OK" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+if (j.allowed !== true) throw new Error(`landing-route local-merge-then-push must allow push on main: ${JSON.stringify(j)}`);
+if (j.permissions.may_push !== true) throw new Error("may_push must be true");
+process.stdout.write("ok-landing-route-allowed\n");
+'
+
+# (b) same without --landing-route still refuses on main
+set +e
+OUT_LM_NO_FLAG="$(node "$PREFLIGHT" --repo "$LM_REPO" --intent push --format json)"
+LM_NO_FLAG_EXIT=$?
+set -e
+[[ "$LM_NO_FLAG_EXIT" -eq 1 ]] || fail "push without landing-route must exit 1, got $LM_NO_FLAG_EXIT"
+echo "$OUT_LM_NO_FLAG" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+if (j.allowed !== false) throw new Error("push without landing-route must refuse on main");
+if (!j.refusals.some((r) => r.code === "release_branch_write_refused" || r.code === "feature_branch_required")) {
+  throw new Error(`expected release refuse: ${JSON.stringify(j.refusals)}`);
+}
+process.stdout.write("ok-landing-route-refuse-without-flag\n");
+'
+
+# (c) strategy: pull-request still refuses with the flag
+LM_PR_REPO="$TMP/lm-pr-repo"
+init_repo "$LM_PR_REPO"
+mkdir -p "$LM_PR_REPO/.claude"
+cat >"$LM_PR_REPO/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: preflight-fixture
+release_branch: main
+branch_policy:
+  require_feature_branch: true
+  direct_push_to_release_branch: false
+merge_policy:
+  strategy: pull-request
+  allow_local_merge: true
+```
+EOF
+set +e
+OUT_LM_PR="$(node "$PREFLIGHT" --repo "$LM_PR_REPO" --intent push --landing-route local-merge-then-push --format json)"
+LM_PR_EXIT=$?
+set -e
+[[ "$LM_PR_EXIT" -eq 1 ]] || fail "pull-request strategy with landing-route must exit 1, got $LM_PR_EXIT"
+echo "$OUT_LM_PR" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+if (j.allowed !== false) throw new Error("pull-request strategy with landing-route must refuse");
+process.stdout.write("ok-landing-route-strategy-pr-refuse\n");
+'
+
+# (d) --from-branch missing -> local_merge_source_missing
+set +e
+OUT_MISSING_FROM="$(node "$PREFLIGHT" --repo "$LM_REPO" --intent push --landing-route local-merge-then-push --from-branch non-existent-branch --format json)"
+MISSING_FROM_EXIT=$?
+set -e
+[[ "$MISSING_FROM_EXIT" -eq 1 ]] || fail "missing from-branch must exit 1, got $MISSING_FROM_EXIT"
+echo "$OUT_MISSING_FROM" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+if (j.allowed !== false) throw new Error("missing from-branch must refuse");
+if (!j.refusals.some((r) => r.code === "local_merge_source_missing")) {
+  throw new Error(`expected local_merge_source_missing refusal: ${JSON.stringify(j.refusals)}`);
+}
+process.stdout.write("ok-landing-route-missing-from-branch\n");
+'
+
+# (e) --from-branch existing -> allowed
+OUT_EXISTING_FROM="$(node "$PREFLIGHT" --repo "$LM_REPO" --intent push --landing-route local-merge-then-push --from-branch feat/my-feature --format json)"
+echo "$OUT_EXISTING_FROM" | node -e '
+const j=JSON.parse(require("fs").readFileSync(0,"utf8"));
+if (j.allowed !== true) throw new Error(`existing from-branch must allow: ${JSON.stringify(j)}`);
+process.stdout.write("ok-landing-route-existing-from-branch\n");
+'
+
 printf 'test-dev-loop-write-preflight: all checks passed\n'

@@ -12,7 +12,12 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
-const { parseMergePolicy } = require("./dev-loop-isolation-landing.js");
+const {
+  parseMergePolicy,
+  parseWorktreePolicy,
+  resolveIsolationPlan,
+  resolveLandingRoute,
+} = require("./dev-loop-isolation-landing.js");
 const { compareSupportedSemver, parseSupportedSemver } = require("./dev-loop-version.js");
 const { pipelineSteps, resolveWorkflowProfile } = require("./dev-loop-workflow-profile.js");
 
@@ -950,6 +955,20 @@ function buildReport(opts) {
 
   const branch = gitLines(repo, ["rev-parse", "--abbrev-ref", "HEAD"])[0] || "unknown";
   const onRelease = branch === releaseBranch;
+  const gitDirRaw = gitLines(repo, ["rev-parse", "--git-dir"])[0] || "";
+  const commonRaw = gitLines(repo, ["rev-parse", "--git-common-dir"])[0] || "";
+  const gitDir = gitDirRaw ? path.resolve(repo, gitDirRaw) : "";
+  const commonDir = commonRaw ? path.resolve(repo, commonRaw) : "";
+  const isLinkedWorktree = Boolean(gitDir && commonDir && gitDir !== commonDir);
+  const isDetached = !branch || branch === "HEAD" || branch === "unknown";
+
+  const worktreePolicy = parseWorktreePolicy(flat);
+  const isolationPlan = resolveIsolationPlan({
+    worktree_enabled: worktreePolicy.enabled,
+    is_linked_worktree: isLinkedWorktree,
+    is_detached: isDetached,
+  });
+
   const ciConfigured = flat.ci_configured === true;
   const release = releasePreview(repo, flat);
   const browserVerify = browserVerifyPreview(repo, flat, depsInline.missing_optional);
@@ -968,6 +987,15 @@ function buildReport(opts) {
   const mergePolicy = parseMergePolicyFromConfig(flat);
   const selectedWork = workReadiness.find((work) => work.id === wouldPick);
   const workItemApproved = selectedWork?.merge_auto_approved === true;
+
+  const landingRoute = resolveLandingRoute({
+    allow_local_merge: mergePolicy.allow_local_merge,
+    orchestration: opts.orchestration,
+    unattended: opts.orchestration === "goal",
+    merge_auto_approved: workItemApproved,
+    strategy: mergePolicy.strategy,
+  });
+
   const routeBlocked = mergePolicy.strategy === "pull-request" && onRelease;
   const wouldCreatePr = !routeBlocked && !onRelease;
   const wouldPushDirect = !routeBlocked && !wouldCreatePr;
@@ -1091,6 +1119,15 @@ function buildReport(opts) {
         would_run: ciConfigured,
         reason: ciConfigured ? `ci_configured: true` : "ci_configured false or absent",
       },
+      isolation: {
+        enabled: worktreePolicy.enabled,
+        action: isolationPlan.action,
+        reason: isolationPlan.reason,
+      },
+      landing: {
+        allow_local_merge: mergePolicy.allow_local_merge,
+        route: landingRoute,
+      },
       merge: {
         strategy: mergePolicy.strategy,
         would_create_pr: wouldCreatePr,
@@ -1196,10 +1233,18 @@ function renderMarkdown(json) {
   lines.push("## What `/dev-loop` Would Do Next");
   lines.push(`- Would pick: ${json.pipeline_preview.would_pick || "none"}`);
   lines.push(`- Steps: ${json.pipeline_preview.steps.join(" → ") || "(manual)"}`);
+  if (json.pipeline_preview.isolation) {
+    const iso = json.pipeline_preview.isolation;
+    lines.push(`- Isolation: enabled=${iso.enabled}, action=${iso.action}${iso.reason ? ` (${iso.reason})` : ""}`);
+  }
   lines.push(
     `- Browser verification: ${json.pipeline_preview.browser_verify.would_run ? "yes" : "no"} — ${json.pipeline_preview.browser_verify.reason}`,
   );
   lines.push(`- CI gate: ${json.pipeline_preview.ci_gate.would_run} — ${json.pipeline_preview.ci_gate.reason}`);
+  if (json.pipeline_preview.landing) {
+    const lnd = json.pipeline_preview.landing;
+    lines.push(`- Landing route: ${lnd.route} (allow_local_merge: ${lnd.allow_local_merge})`);
+  }
   lines.push(
     `- PR vs direct push: ${json.pipeline_preview.merge.would_create_pr ? "would open PR" : "would push direct"} — ${json.pipeline_preview.merge.reason}`,
   );

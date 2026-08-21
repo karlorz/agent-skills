@@ -199,12 +199,16 @@ Options:
 - **PR with approved auto-merge** — require feature-branch PRs, set
   `auto_merge: true`, and keep `require_work_item_approval: true`.
 
+Worktree isolation defaults to on (`worktree_policy.enabled: true`); projects may opt out with `worktree_policy.enabled: false`.
+`allow_local_merge` defaults to `false` (PR route from feature branches); set `true` to allow local merge finishing.
+
 Never offer repository-wide auto-merge without per-work-item approval. Emit:
 
 ```yaml
 merge_policy:
   strategy: repo-policy
   auto_merge: false
+  allow_local_merge: false
   merge_method: squash
   require_work_item_approval: true
 ```

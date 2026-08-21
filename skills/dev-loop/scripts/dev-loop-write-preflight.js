@@ -13,6 +13,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { parseDevLoopConfig } = require("./dev-loop-config-schema.js");
+const { LANDING_ROUTES, parseMergePolicy } = require("./dev-loop-isolation-landing.js");
 
 const SCHEMA_VERSION = "dev-loop-write-preflight.v1";
 
@@ -23,6 +24,8 @@ function usage() {
     "Options:",
     "  --format <json|markdown>   Output format (default: json)",
     "  --intent <write|commit|push>  Intended mutation (default: write)",
+    "  --landing-route <route>    Landing route (e.g. local-merge-then-push)",
+    "  --from-branch <name>       Source feature branch for local merge validation",
     "  --sandbox-owner <token>    Expected task-sandbox owner token",
     "  --no-write                 Alias for default (preflight never writes)",
     "  --help                     Show this help",
@@ -33,7 +36,9 @@ function parseArgs(argv) {
   const opts = {
     errors: [],
     format: "json",
+    fromBranch: "",
     intent: "write",
+    landingRoute: "",
     repo: "",
     sandboxOwner: "",
   };
@@ -44,7 +49,14 @@ function parseArgs(argv) {
       continue;
     }
     if (arg === "--no-write") continue;
-    if (arg === "--format" || arg === "--intent" || arg === "--repo" || arg === "--sandbox-owner") {
+    if (
+      arg === "--format" ||
+      arg === "--intent" ||
+      arg === "--repo" ||
+      arg === "--sandbox-owner" ||
+      arg === "--landing-route" ||
+      arg === "--from-branch"
+    ) {
       const value = argv[i + 1];
       if (!value || value.startsWith("--")) {
         opts.errors.push(`${arg} requires a value`);
@@ -54,6 +66,8 @@ function parseArgs(argv) {
       if (arg === "--format") opts.format = value;
       else if (arg === "--intent") opts.intent = value;
       else if (arg === "--repo") opts.repo = value;
+      else if (arg === "--landing-route") opts.landingRoute = value;
+      else if (arg === "--from-branch") opts.fromBranch = value;
       else opts.sandboxOwner = value;
       continue;
     }
@@ -65,6 +79,9 @@ function parseArgs(argv) {
   }
   if (!["write", "commit", "push"].includes(opts.intent)) {
     opts.errors.push("--intent must be write, commit, or push");
+  }
+  if (opts.landingRoute && !LANDING_ROUTES.includes(opts.landingRoute)) {
+    opts.errors.push(`--landing-route must be one of: ${LANDING_ROUTES.join(", ")}`);
   }
   return opts;
 }
@@ -115,7 +132,7 @@ function defaultPolicy(config) {
   const branch = config.branch_policy || {};
   const worktree = config.worktree_policy || {};
   const sandbox = config.task_sandbox || {};
-  const merge = config.merge_policy || {};
+  const merge = parseMergePolicy(config);
   return {
     release_branch: releaseBranch,
     direct_push_to_release_branch:
@@ -132,6 +149,8 @@ function defaultPolicy(config) {
     sandbox_owner: sandbox.owner || "",
     sandbox_root: sandbox.root || "",
     ownership_file: sandbox.ownership_file || ".dev-loop-sandbox-owner",
+    merge_strategy: merge.strategy,
+    allow_local_merge: merge.allow_local_merge === true,
   };
 }
 
@@ -236,7 +255,7 @@ function probeSandbox(repo, policy, expectedOwner) {
   };
 }
 
-function evaluateWritePermission(identity, policy, sandbox, intent) {
+function evaluateWritePermission(identity, policy, sandbox, intent, landingContext = {}) {
   const refusals = [];
   const permissions = {
     may_write: true,
@@ -276,7 +295,22 @@ function evaluateWritePermission(identity, policy, sandbox, intent) {
   const onRelease =
     identity.branch !== null && identity.branch === policy.release_branch;
 
-  if (onRelease && !policy.direct_push_to_release_branch) {
+  const isLocalMergePush =
+    landingContext.landingRoute === "local-merge-then-push" &&
+    policy.allow_local_merge === true &&
+    policy.merge_strategy === "repo-policy";
+
+  if (landingContext.fromBranch) {
+    if (landingContext.fromBranchExists === false) {
+      refusals.push({
+        code: "local_merge_source_missing",
+        detail: `local merge source branch ${landingContext.fromBranch} does not exist`,
+      });
+      permissions.may_push = false;
+    }
+  }
+
+  if (onRelease && !policy.direct_push_to_release_branch && !isLocalMergePush) {
     refusals.push({
       code: "release_branch_write_refused",
       detail: `policy forbids commit/push on release branch ${policy.release_branch}`,
@@ -293,14 +327,14 @@ function evaluateWritePermission(identity, policy, sandbox, intent) {
       });
       permissions.may_commit = false;
       permissions.may_push = false;
-    } else if (onRelease) {
+    } else if (onRelease && !isLocalMergePush) {
       refusals.push({
         code: "feature_branch_required",
         detail: `on release branch ${policy.release_branch}; switch to a feature branch`,
       });
       permissions.may_commit = false;
       permissions.may_push = false;
-    } else if (!matchesFeaturePattern(identity.branch, policy.feature_branch_pattern)) {
+    } else if (!onRelease && !matchesFeaturePattern(identity.branch, policy.feature_branch_pattern)) {
       refusals.push({
         code: "feature_branch_pattern_mismatch",
         detail: `branch ${identity.branch} does not match ${policy.feature_branch_pattern}`,
@@ -368,7 +402,17 @@ function buildReport(opts) {
   }
 
   const sandbox = probeSandbox(opts.repo, policy, opts.sandboxOwner);
-  const decision = evaluateWritePermission(probed.identity, policy, sandbox, opts.intent);
+  let fromBranchExists = null;
+  if (opts.fromBranch) {
+    const showRef = git(opts.repo, ["show-ref", "--verify", `refs/heads/${opts.fromBranch}`]);
+    fromBranchExists = showRef.ok;
+  }
+  const landingContext = {
+    landingRoute: opts.landingRoute,
+    fromBranch: opts.fromBranch,
+    fromBranchExists,
+  };
+  const decision = evaluateWritePermission(probed.identity, policy, sandbox, opts.intent, landingContext);
 
   return {
     schema_version: SCHEMA_VERSION,

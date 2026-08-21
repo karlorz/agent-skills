@@ -982,15 +982,31 @@ CI gate; `degraded`, `broken`, missing, and unknown results fail closed.
 - You want dev-loop to monitor specific checks regardless of branch protection
 - You have workflows that are required but not enforced by branch protection
 
+## Worktree policy (optional)
+
+Controls whether dev-loop creates an isolated git worktree before running
+EXECUTE (step 5).
+
+- `enabled: true` (default when absent): isolates implementation in a dedicated
+  worktree (e.g. `.worktrees/<work-slug>`) via `using-git-worktrees`.
+- `enabled: false`: opts out of worktree isolation and restores in-place EXECUTE
+  in the root working copy.
+
+```yaml
+worktree_policy:
+  enabled: true                        # default: true. Set false for in-place EXECUTE.
+```
+
 ## Merge policy
 
-Controls repository routing and auto-merge authority independently from CI
+Controls repository routing, finishing, and auto-merge authority independently from CI
 discovery. Omitting the block applies the fail-closed defaults shown below.
 
 ```yaml
 merge_policy:
   strategy: repo-policy                # repo-policy | branch-policy alias | pull-request
-  auto_merge: false                    # explicit repository capability switch
+  auto_merge: false                    # explicit repository capability switch (GitHub PR auto-merge)
+  allow_local_merge: false             # default: false. Set true to allow local finishing menu / landing
   merge_method: squash                 # squash | merge | rebase
   require_work_item_approval: true     # required whenever auto_merge is true
 ```
@@ -1000,8 +1016,14 @@ merge_policy:
 - `branch-policy` is accepted as a compatibility alias for `repo-policy`.
 - `pull-request` refuses a release-branch commit/push and requires work to be
   performed on a feature branch so a PR can be created.
-- `auto_merge: true` does not authorize any individual work item. The active
-  `spec.md` must also contain `merge_auto_approved: true`.
+- `auto_merge: true` configures GitHub PR auto-merge on the created PR. It does
+  not authorize any individual work item — the active `spec.md` must also contain
+  `merge_auto_approved: true`.
+- `allow_local_merge` controls local finishing and landing. Absent or `false`
+  (default) always uses the PR route from a feature branch. `true` enables the
+  attended finishing menu (Option 1: merge locally, Option 2: push & open PR,
+  Option 3: keep branch/worktree) or unattended `local-merge-then-push` when
+  `merge_auto_approved: true` and `strategy: repo-policy`.
 - `require_work_item_approval` must remain `true` when auto-merge is enabled.
   Config lint rejects the unsafe combination.
 - Auto-merge is eligible only for a PR with repository authorization,
@@ -1079,6 +1101,7 @@ ci_discovery: runtime
 merge_policy:
   strategy: repo-policy
   auto_merge: false
+  allow_local_merge: false
   merge_method: squash
   require_work_item_approval: true
 

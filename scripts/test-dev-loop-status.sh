@@ -66,6 +66,10 @@ if (j.pipeline_preview.merge.strategy !== "repo-policy") throw new Error("repo-p
 if (j.pipeline_preview.merge.auto_merge_configured !== false) throw new Error("auto merge must default off");
 if (j.pipeline_preview.merge.auto_merge_eligible !== false) throw new Error("auto merge must fail closed");
 if ((j.pipeline_preview.merge.failed_gates || []).includes("ci_configured")) throw new Error("CI configuration is not merge authority");
+if (j.pipeline_preview.isolation?.enabled !== true) throw new Error(`isolation.enabled default true: ${JSON.stringify(j.pipeline_preview.isolation)}`);
+if (j.pipeline_preview.isolation?.action !== "create") throw new Error(`isolation.action create: ${JSON.stringify(j.pipeline_preview.isolation)}`);
+if (j.pipeline_preview.landing?.allow_local_merge !== false) throw new Error(`landing.allow_local_merge default false: ${JSON.stringify(j.pipeline_preview.landing)}`);
+if (j.pipeline_preview.landing?.route !== "pull-request") throw new Error(`landing.route pull-request: ${JSON.stringify(j.pipeline_preview.landing)}`);
 if (j.workflow_profile.profile !== "native") throw new Error(`missing policy must resolve native: ${JSON.stringify(j.workflow_profile)}`);
 if (j.workflow_profile.mode !== "adaptive" || j.workflow_profile.authority !== "builtin_adaptive") throw new Error(`missing policy authority: ${JSON.stringify(j.workflow_profile)}`);
 if (j.workflow_profile.prompts !== false) throw new Error("resolver must never prompt");
@@ -661,6 +665,79 @@ if (merge.would_create_pr !== false || merge.would_push_direct !== false) throw 
 if (merge.auto_merge_eligible !== false) throw new Error("unknown CI health must fail closed");
 if (!(merge.failed_gates || []).includes("ci_health:healthy")) throw new Error("expected exact healthy CI gate");
 process.stdout.write("ok-readiness\n");
+'
+
+# --- Isolation & Landing preview combinations ---
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-local-merge
+release_branch: main
+knowledge_layer: none
+prd_layer: manual
+merge_policy:
+  strategy: repo-policy
+  allow_local_merge: true
+worktree_policy:
+  enabled: true
+```
+EOF
+
+# Attended + allow_local_merge: true -> attended-menu
+OUT_ATTENDED_LM="$(node "$STATUS_JS" --repo "$TMP" --project test-local-merge --format json --no-write 2>/dev/null)" || fail "attended local-merge status failed"
+echo "$OUT_ATTENDED_LM" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.pipeline_preview.landing?.allow_local_merge !== true) throw new Error("landing.allow_local_merge must be true");
+if (j.pipeline_preview.landing?.route !== "attended-menu") throw new Error(`attended landing route must be attended-menu, got ${j.pipeline_preview.landing?.route}`);
+if (j.pipeline_preview.isolation?.enabled !== true) throw new Error("isolation enabled");
+if (j.pipeline_preview.isolation?.action !== "create") throw new Error("isolation action create");
+process.stdout.write("ok-landing-attended-menu\n");
+'
+
+# Goal / unattended + allow_local_merge: true + without work-item merge_auto_approved -> pull-request
+OUT_GOAL_NO_APPROVE="$(node "$STATUS_JS" --repo "$TMP" --project test-local-merge --format json --no-write --orchestration goal 2>/dev/null)" || fail "goal no-approve status failed"
+echo "$OUT_GOAL_NO_APPROVE" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.pipeline_preview.landing?.route !== "pull-request") throw new Error(`unattended without work-item approval must be pull-request, got ${j.pipeline_preview.landing?.route}`);
+process.stdout.write("ok-landing-goal-no-approval\n");
+'
+
+# Goal / unattended + allow_local_merge: true + with work-item merge_auto_approved -> local-merge-then-push
+cat > "$TMP/.claude/dev-loop.config.md" <<EOF
+\`\`\`yaml
+slug: agent-skills
+release_branch: main
+knowledge_layer: skillwiki
+vault: $VAULT
+merge_policy:
+  strategy: repo-policy
+  allow_local_merge: true
+\`\`\`
+EOF
+
+OUT_GOAL_APPROVED="$(node "$STATUS_JS" --repo "$TMP" --vault "$VAULT" --project agent-skills --format json --no-write --orchestration goal 2>/dev/null)" || fail "goal approved status failed"
+echo "$OUT_GOAL_APPROVED" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.pipeline_preview.landing?.route !== "local-merge-then-push") throw new Error(`unattended with work-item approval must be local-merge-then-push, got ${j.pipeline_preview.landing?.route}`);
+process.stdout.write("ok-landing-goal-approved\n");
+'
+
+# Disabled isolation
+cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
+```yaml
+slug: test-no-worktree
+release_branch: main
+knowledge_layer: none
+worktree_policy:
+  enabled: false
+```
+EOF
+OUT_NO_WT="$(node "$STATUS_JS" --repo "$TMP" --project test-no-worktree --format json --no-write 2>/dev/null)" || fail "disabled worktree status failed"
+echo "$OUT_NO_WT" | node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.pipeline_preview.isolation?.enabled !== false) throw new Error("isolation enabled false");
+if (j.pipeline_preview.isolation?.action !== "skip") throw new Error("isolation action skip");
+if (j.pipeline_preview.isolation?.reason !== "disabled") throw new Error(`isolation reason disabled, got ${j.pipeline_preview.isolation?.reason}`);
+process.stdout.write("ok-isolation-disabled\n");
 '
 
 BEFORE="$(git -C "$ROOT" status --porcelain 2>/dev/null | grep -v 'dev-loop/status' || true)"

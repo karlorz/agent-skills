@@ -264,7 +264,7 @@ valid `prd_layer` / `prd_pipeline` / `knowledge_layer`, vault when skillwiki,
 
 **Config migrate (read-only):** `node skills/dev-loop/scripts/dev-loop-config-migrate.js --repo <cwd>` — compares legacy top-level `vault:` to `knowledge_backends.skillwiki.vault`; suggests YAML fragments (`dev-loop-config-migrate.v1`). Reports under `.claude/dev-loop/migrate/` unless `--no-write`.
 
-**Write preflight (read-only):** `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent commit|push|write` — deterministic git common-dir/worktree identity, branch, detached HEAD, submodule state, and task-sandbox ownership. Exit 0 only when the intended mutation is allowed; refuses release-branch commits/pushes when repository policy forbids them (`dev-loop-write-preflight.v1`).
+**Write preflight (read-only):** `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent commit|push|write [--landing-route <route>] [--from-branch <name>]` — deterministic git common-dir/worktree identity, branch, detached HEAD, submodule state, and task-sandbox ownership. Exit 0 only when the intended mutation is allowed; refuses release-branch commits/pushes when repository policy forbids them (`dev-loop-write-preflight.v1`).
 
 **Verification + dispatch (read-only):** `node skills/dev-loop/scripts/dev-loop-verification-dispatch.js --repo <cwd>` — typed verification commands vs scripts (with timeouts) and capability-driven spawn/wait/cleanup/model/isolation plans. Non-Claude platforms must not require Claude-only tools (`dev-loop-verification-dispatch.v1`).
 
@@ -1697,7 +1697,7 @@ Landing routes may be resolved via `resolveLandingRoute` in `skills/dev-loop/scr
      - Merge feature branch into local `release_branch` (e.g. `git checkout <release_branch> && git merge <feature-branch>`).
      - Re-run configured `e2e_scripts` (or the project test command).
      - If tests fail: STOP immediately. Leave the worktree and branch intact for diagnosis; do NOT push.
-     - If green and `MERGE_POLICY.strategy` is `repo-policy`: run write-preflight `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent push`, then `git push origin <release_branch>`.
+     - If green and `MERGE_POLICY.strategy` is `repo-policy`: run write-preflight `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent push --landing-route local-merge-then-push`, then `git push origin <release_branch>`.
      - If green and `MERGE_POLICY.strategy` is `pull-request`: do not push `release_branch`; still requires a PR.
      - **Never force-push.**
      - Clean up worktree and branch per `finishing-a-development-branch` (only `.worktrees` / worktrees owned by dev-loop).
@@ -1705,7 +1705,7 @@ Landing routes may be resolved via `resolveLandingRoute` in `skills/dev-loop/scr
    - **If the user picks Option 3 (keep):** Leave worktree and feature branch intact; finish cycle without merge/PR.
 
 3. **Unattended / `non_interactive_goal`:**
-   No interactive menu. Keep the **PR route** below unless **both** `allow_local_merge: true` AND the active work-item `spec.md` has `merge_auto_approved: true`. When both are true and `MERGE_POLICY.strategy` is `repo-policy`, execute the local-merge-then-push flow (merge into local `release_branch`, re-run `e2e_scripts`/tests, gate on write-preflight `--intent push`, then `git push origin <release_branch>`). If tests fail, stop and leave worktree/branch. If `strategy` is `pull-request`, fall back to the PR route.
+   No interactive menu. Keep the **PR route** below unless **both** `allow_local_merge: true` AND the active work-item `spec.md` has `merge_auto_approved: true`. When both are true and `MERGE_POLICY.strategy` is `repo-policy`, execute the local-merge-then-push flow (merge into local `release_branch`, re-run `e2e_scripts`/tests, gate on write-preflight `--intent push --landing-route local-merge-then-push`, then `git push origin <release_branch>`). If tests fail, stop and leave worktree/branch. If `strategy` is `pull-request`, fall back to the PR route.
 
 **When the resolved route is a PR:**
 
