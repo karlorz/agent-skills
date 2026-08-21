@@ -64,7 +64,7 @@
       "name": "dev-loop",
       "source": "./skills/dev-loop",
       "description": "Adaptive dev cycle engine with SkillWiki vault, preflight prep, investigate, office-hours, config-lint, and cross-harness verification. Pass `high` for aggressive mode.",
-      "version": "1.26.31",
+      "version": "1.26.32",
       "category": "automation",
       "keywords": [
         "dev-loop",

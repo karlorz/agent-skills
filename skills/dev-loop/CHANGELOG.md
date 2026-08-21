@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.26.32] - 2026-08-21
+
+- Attended local-merge (finishing menu option 1) is refused when `merge_policy.strategy` is `pull-request`; stay on the feature-branch PR route instead of checking out `release_branch`.
+
 ## [1.26.31] - 2026-08-21
 
 - EXECUTE isolates into a git worktree by default (`worktree_policy.enabled` absent → true). MERGE landing stays PR+CI unless `merge_policy.allow_local_merge` is true; attended sessions then get the finishing menu (local merge, PR, keep). Status previews isolation and landing independently. Write-preflight allows post-merge push on the release branch only with `--landing-route local-merge-then-push`. Opt out of isolation with `worktree_policy.enabled: false`. `auto_merge` remains GitHub PR auto-merge.
