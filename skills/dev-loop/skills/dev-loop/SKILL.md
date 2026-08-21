@@ -1694,13 +1694,14 @@ Landing routes may be resolved via `resolveLandingRoute` in `skills/dev-loop/scr
    3. Keep branch / worktree
    Wait for the human choice.
    - **If the user picks Option 1 (merge locally):**
-     - Merge feature branch into local `release_branch` (e.g. `git checkout <release_branch> && git merge <feature-branch>`).
-     - Re-run configured `e2e_scripts` (or the project test command).
-     - If tests fail: STOP immediately. Leave the worktree and branch intact for diagnosis; do NOT push.
-     - If green and `MERGE_POLICY.strategy` is `repo-policy`: run write-preflight `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent push --landing-route local-merge-then-push`, then `git push origin <release_branch>`.
-     - If green and `MERGE_POLICY.strategy` is `pull-request`: do not push `release_branch`; still requires a PR.
-     - **Never force-push.**
-     - Clean up worktree and branch per `finishing-a-development-branch` (only `.worktrees` / worktrees owned by dev-loop).
+     - If `MERGE_POLICY.strategy` is `pull-request`: refuse the local merge and do not checkout `<release_branch>`. Report that pull-request strategy forbids merging onto the release branch, then proceed as Option 2 (push and open PR from current feature branch).
+     - If `MERGE_POLICY.strategy` is `repo-policy`:
+       - Merge feature branch into local `release_branch` (e.g. `git checkout <release_branch> && git merge <feature-branch>`).
+       - Re-run configured `e2e_scripts` (or the project test command).
+       - If tests fail: STOP immediately. Leave the worktree and branch intact for diagnosis; do NOT push.
+       - If green: run write-preflight `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent push --landing-route local-merge-then-push`, then `git push origin <release_branch>`.
+       - **Never force-push.**
+       - Clean up worktree and branch per `finishing-a-development-branch` (only `.worktrees` / worktrees owned by dev-loop).
    - **If the user picks Option 2 (push and open PR):** Proceed to the **PR route** below.
    - **If the user picks Option 3 (keep):** Leave worktree and feature branch intact; finish cycle without merge/PR.
 
@@ -2541,7 +2542,7 @@ platform's supported plugin installer/update path and restart the session.
     MERGE step always commits code changes (regardless of branch). By default,
     it creates a PR (feature branch) or pushes directly (release branch). A feature
     branch may be merged into the local release branch ONLY on the opt-in
-    `allow_local_merge` path after tests pass and write-preflight validates the push.
+    `allow_local_merge` path under `strategy: repo-policy` after tests pass and write-preflight validates the push.
     It never force-pushes. This preserves branch protection, CI gates, and review workflows.
 22. **`release_policy` is opt-in.** Projects without the `release_policy`
     block see no behavior change (pre-1.19.0 manual-bump flow preserved).
