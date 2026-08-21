@@ -1678,8 +1678,34 @@ release branch. Message format: conventional commit from work item title.
 
 #### 6b-2: Push + PR (conditional on merge policy and branch)
 
-When the resolved route is direct, run `git push` and report that the change
+When the resolved route is direct (on `release_branch`), run `git push` and report that the change
 landed on `release_branch` without a PR.
+
+**Landing route resolution (when on a feature branch):**
+Landing routes may be resolved via `resolveLandingRoute` in `skills/dev-loop/scripts/dev-loop-isolation-landing.js`:
+
+1. **Default / when `MERGE_POLICY.allow_local_merge` is false:**
+   Keep current routes: direct push on `release_branch`, PR from feature branch. Follow the **PR route** below.
+
+2. **Attended finishing menu (`allow_local_merge: true` AND attended / not `non_interactive_goal`):**
+   After 6b-1 commit and tests pass, invoke `finishing-a-development-branch` and present its exact 3-option menu:
+   1. Merge locally into `<release_branch>`
+   2. Push and open PR
+   3. Keep branch / worktree
+   Wait for the human choice.
+   - **If the user picks Option 1 (merge locally):**
+     - Merge feature branch into local `release_branch` (e.g. `git checkout <release_branch> && git merge <feature-branch>`).
+     - Re-run configured `e2e_scripts` (or the project test command).
+     - If tests fail: STOP immediately. Leave the worktree and branch intact for diagnosis; do NOT push.
+     - If green and `MERGE_POLICY.strategy` is `repo-policy`: run write-preflight `node skills/dev-loop/scripts/dev-loop-write-preflight.js --repo <cwd> --intent push`, then `git push origin <release_branch>`.
+     - If green and `MERGE_POLICY.strategy` is `pull-request`: do not push `release_branch`; still requires a PR.
+     - **Never force-push.**
+     - Clean up worktree and branch per `finishing-a-development-branch` (only `.worktrees` / worktrees owned by dev-loop).
+   - **If the user picks Option 2 (push and open PR):** Proceed to the **PR route** below.
+   - **If the user picks Option 3 (keep):** Leave worktree and feature branch intact; finish cycle without merge/PR.
+
+3. **Unattended / `non_interactive_goal`:**
+   No interactive menu. Keep the **PR route** below unless **both** `allow_local_merge: true` AND the active work-item `spec.md` has `merge_auto_approved: true`. When both are true and `MERGE_POLICY.strategy` is `repo-policy`, execute the local-merge-then-push flow (merge into local `release_branch`, re-run `e2e_scripts`/tests, gate on write-preflight `--intent push`, then `git push origin <release_branch>`). If tests fail, stop and leave worktree/branch. If `strategy` is `pull-request`, fall back to the PR route.
 
 **When the resolved route is a PR:**
 
@@ -2262,8 +2288,8 @@ the pipeline:
 6. **SIMPLIFY** — mandatory for code changes; **skip for git-only or
    vault-only work** (nothing to review).
 6b. **MERGE** — skip for vault-only work. For code changes:
-   commit always, then push directly on release_branch or create PR
-   on a feature branch.
+   commit always, then push directly on release_branch, create PR
+   on a feature branch, or use opt-in `allow_local_merge` landing.
 7. **E2E / PUSH** — if applicable.
 
 Retro and consolidation steps are unchanged. The fast-path is a
@@ -2321,7 +2347,7 @@ setup.
 |------|-----------|------|------|
 | REVIEW | `simplify:simplify` code review | MERGE (if code changed) | Fix issues, re-run |
 | MERGE | On release_branch | `git push` directly | — |
-| MERGE | On feature branch | Push + create PR | — |
+| MERGE | On feature branch | Push + create PR (or opt-in local merge if `allow_local_merge` enabled) | — |
 | MERGE (CI observation) | `CI_DISCOVERY != none` | Spawn ci-health-worker; report health independently | Missing/unknown cannot satisfy auto-merge |
 | MERGE (auto) | Policy enabled + item approved + CI exactly healthy | Enable configured auto-merge method | Leave PR open and report every failed gate |
 | E2E | `e2e_scripts` non-empty | DEPLOY (if applicable) | Fix, re-run from SIMPLIFY |
@@ -2511,12 +2537,12 @@ platform's supported plugin installer/update path and restart the session.
     parent model. If `CLAUDE_CODE_SUBAGENT_MODEL`
     is set to a non-empty value, it globally overrides per-agent model
     parameters — it must remain empty (`""`) for this rule to work.
-21. **MERGE commits code, then creates PRs or pushes directly.** The
-    MERGE step always commits code changes (regardless of branch), then
-    either creates a PR (feature branch) or pushes directly (release
-    branch). It never force-pushes or directly merges a feature branch
-    into the release branch. This preserves branch protection, CI gates,
-    and review workflows.
+21. **MERGE commits code, then creates PRs, pushes directly, or executes opt-in local merge.** The
+    MERGE step always commits code changes (regardless of branch). By default,
+    it creates a PR (feature branch) or pushes directly (release branch). A feature
+    branch may be merged into the local release branch ONLY on the opt-in
+    `allow_local_merge` path after tests pass and write-preflight validates the push.
+    It never force-pushes. This preserves branch protection, CI gates, and review workflows.
 22. **`release_policy` is opt-in.** Projects without the `release_policy`
     block see no behavior change (pre-1.19.0 manual-bump flow preserved).
     When the block is present with `auto_bump: true`, PUSH gates on
