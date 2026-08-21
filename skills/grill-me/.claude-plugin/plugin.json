@@ -1,6 +1,6 @@
 {
   "name": "grill-me",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Relentless plan/design interview skills adapted from Matt Pocock's grilling, with inline cross-platform question style.",
   "author": {
     "name": "karlorz"
@@ -16,7 +16,8 @@
     "cross-platform",
     "ask-question",
     "codex",
-    "antigravity"
+    "antigravity",
+    "cursor"
   ],
   "skills": "./skills/"
 }

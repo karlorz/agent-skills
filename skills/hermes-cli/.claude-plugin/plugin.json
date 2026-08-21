@@ -1,6 +1,6 @@
 {
   "name": "hermes-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Hermes Agent CLI commands reference \u2014 full terminal command surface for hermes-agent by NousResearch",
   "author": {
     "name": "karlorz"

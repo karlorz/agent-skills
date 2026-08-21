@@ -20,6 +20,8 @@ optional=0
 warn=0
 fail=0
 stale_cursor_pack=0
+skills_unresolved=0
+enabled=()
 
 row() {
   local status="$1" name="$2" detail="$3"
@@ -244,6 +246,159 @@ else
   row "FAIL" "agent-skills.cache" "missing $AGENT_SKILLS_CACHE"
 fi
 
+# --- Cursor one-level skills discoverability for every enabled Claude plugin ---
+# Cursor scans immediate children of plugin.json "skills" (default ./skills/).
+# skills="./" with only nested skills/<name>/SKILL.md is skipped on import.
+if command -v python3 >/dev/null 2>&1 && (( ${#enabled[@]} > 0 )); then
+  while IFS=$'\t' read -r status name detail; do
+    [[ -n "${status:-}" ]] || continue
+    row "$status" "$name" "$detail"
+    if [[ "$status" == "WARN" && "$name" == "plugin.skills_unresolved" ]]; then
+      skills_unresolved=$((skills_unresolved + 1))
+    fi
+  done < <(python3 - "$HOME_DIR" "${enabled[@]}" <<'PY'
+import json, sys
+from pathlib import Path
+
+home = Path(sys.argv[1])
+enabled = sys.argv[2:]
+cache_root = home / ".claude" / "plugins" / "cache"
+mkt_root = home / ".claude" / "plugins" / "marketplaces"
+installed_path = home / ".claude" / "plugins" / "installed_plugins.json"
+installed = {}
+if installed_path.is_file():
+    try:
+        blob = json.loads(installed_path.read_text(encoding="utf-8"))
+        for key, recs in (blob.get("plugins") or {}).items():
+            if recs and isinstance(recs, list) and recs[0].get("installPath"):
+                installed[key] = Path(recs[0]["installPath"])
+    except Exception:
+        pass
+
+
+def skill_dirs_at(base: Path):
+    if not base.is_dir():
+        return []
+    names = []
+    for child in sorted(base.iterdir()):
+        if child.is_dir() and (child / "SKILL.md").is_file():
+            names.append(child.name)
+    return names
+
+
+def latest_version_dir(plugin_cache: Path):
+    if not plugin_cache.is_dir():
+        return None
+    versions = [p for p in plugin_cache.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    if not versions:
+        return None
+    def key(p):
+        parts = []
+        for bit in p.name.replace("-", ".").split("."):
+            parts.append(int(bit) if bit.isdigit() else bit)
+        return parts
+    try:
+        return sorted(versions, key=key)[-1]
+    except Exception:
+        return sorted(versions, key=lambda p: p.name)[-1]
+
+
+def marketplace_skills_field(marketplace: str, plugin: str):
+    root = mkt_root / marketplace
+    mfile = root / ".claude-plugin" / "marketplace.json"
+    source = None
+    if mfile.is_file():
+        try:
+            data = json.loads(mfile.read_text(encoding="utf-8"))
+            for entry in data.get("plugins") or []:
+                if isinstance(entry, dict) and entry.get("name") == plugin:
+                    source = entry.get("source")
+                    break
+        except Exception:
+            source = None
+    if not source:
+        nested = root / "skills" / plugin / ".claude-plugin" / "plugin.json"
+        if nested.is_file():
+            try:
+                return json.loads(nested.read_text(encoding="utf-8")).get("skills")
+            except Exception:
+                return None
+        return None
+    src_path = (root / source).resolve()
+    pj = src_path / ".claude-plugin" / "plugin.json"
+    if pj.is_file():
+        try:
+            return json.loads(pj.read_text(encoding="utf-8")).get("skills")
+        except Exception:
+            return None
+    return None
+
+
+def emit(status, name, detail):
+    print(f"{status}\t{name}\t{detail}")
+
+
+for key in enabled:
+    if "@" not in key:
+        continue
+    plugin, marketplace = key.split("@", 1)
+    plugin_root = installed.get(key)
+    if plugin_root is None:
+        plugin_root = latest_version_dir(cache_root / marketplace / plugin)
+    if plugin_root is None or not plugin_root.is_dir():
+        emit("INFO", f"plugin.cache.{plugin}", f"{key} enabled but no cache dir")
+        continue
+    pj = plugin_root / ".claude-plugin" / "plugin.json"
+    declared = None
+    if pj.is_file():
+        try:
+            declared = json.loads(pj.read_text(encoding="utf-8")).get("skills")
+        except Exception:
+            declared = None
+    if not isinstance(declared, str) or not declared.strip():
+        at_skills = skill_dirs_at(plugin_root / "skills")
+        at_root = skill_dirs_at(plugin_root)
+        if at_skills or at_root:
+            loc = "./skills/" if at_skills else "./"
+            found = at_skills or at_root
+            emit("PASS", f"plugin.skills.{plugin}", f"{key} default {loc} -> {','.join(found)}")
+        else:
+            emit("INFO", f"plugin.skills.{plugin}", f"{key} has no skills component")
+        continue
+    rel = declared[2:] if declared.startswith("./") else declared
+    rel = rel.rstrip("/") or "."
+    scan = plugin_root if rel in (".", "") else plugin_root / rel
+    found = skill_dirs_at(scan)
+    nested = skill_dirs_at(plugin_root / "skills")
+    if found:
+        emit("PASS", f"plugin.skills.{plugin}", f"{key} {declared} -> {','.join(found)}")
+    elif nested:
+        emit(
+            "WARN",
+            "plugin.skills_unresolved",
+            f"{key} skills={declared!r} has no SKILL.md one level under that path; "
+            f"Cursor import skips it. Nested skills/ has {','.join(nested)}. "
+            f"Reinstall/update the Claude plugin cache (do not convert/symlink).",
+        )
+    else:
+        emit("INFO", f"plugin.skills.{plugin}", f"{key} skills={declared!r} but no SKILL.md found")
+
+    mkt_skills = marketplace_skills_field(marketplace, plugin)
+    if (
+        isinstance(mkt_skills, str)
+        and isinstance(declared, str)
+        and mkt_skills.rstrip("/") != declared.rstrip("/")
+    ):
+        emit(
+            "WARN",
+            "plugin.cache_stale",
+            f"{key} cache skills={declared!r} != marketplace source {mkt_skills!r}; "
+            f"reinstall/update Claude plugin so Cursor can import",
+        )
+PY
+)
+fi
+
 # --- grok-search MCP rows ---
 grok_mcp_found=0
 # 1. Claude cache
@@ -327,7 +482,9 @@ fi
 echo
 echo "Summary: PASS=${pass}  INFO=${info}  OPTIONAL=${optional}  WARN=${warn}  FAIL=${fail}"
 echo
-if [[ "$fail" -eq 0 ]]; then
+if [[ "$fail" -eq 0 && "$skills_unresolved" -gt 0 ]]; then
+  echo "Verdict: Claude plugin cache exists, but Cursor import will skip ${skills_unresolved} plugin(s) with unresolved skills paths. Reinstall/update those Claude plugins."
+elif [[ "$fail" -eq 0 ]]; then
   echo "Verdict: Claude plugin cache / enabledPlugins look healthy."
 else
   echo "Verdict: FAIL rows need investigation before any dual-path links."
@@ -351,6 +508,13 @@ if [[ "$claude_settings_ok" -eq 1 && "$skillwiki_cache_ok" -eq 1 && -d "$AGENT_S
   echo "Suggested dual-path links are withheld by default (Claude discovery healthy; no convert needed)."
 else
   echo "Suggested dual-path links are available only when Claude settings/cache discovery fails."
+fi
+
+if [[ "$skills_unresolved" -gt 0 ]]; then
+  echo
+  echo "Cursor import skip: ${skills_unresolved} enabled plugin(s) declare a skills path with no SKILL.md one level down."
+  echo "Fix: reinstall/update that plugin in Claude Code so cache plugin.json uses \"./skills/\" (or flatten SKILL.md to the declared path)."
+  echo "Do not convert or symlink into ~/.cursor/plugins/local for this packaging skip."
 fi
 
 exit 0

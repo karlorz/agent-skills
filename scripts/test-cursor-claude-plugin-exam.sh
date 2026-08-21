@@ -200,4 +200,201 @@ if echo "$OUT_C" | grep -qi "suggest.*write.*mcp.json"; then
 fi
 echo "Case C passed"
 
+# ==============================================================================
+# Case D — enabled grill-me cache declares skills="./" with nested-only SKILL.md
+# Cursor one-level scan skips this; exam must WARN (not PASS as a healthy cache).
+# Break this catches: dropping the unresolved-skills check, or treating a
+# version directory as PASS when plugin.json skills="./" has no root SKILL.md.
+# ==============================================================================
+FAKE_HOME_D="$(mktemp -d "${TMPDIR:-/tmp}/audit-test-D.XXXXXX")"
+trap 'rm -rf "$FAKE_HOME_A" "$FAKE_HOME_B" "$FAKE_HOME_B2" "$FAKE_HOME_C" "$FAKE_HOME_D"' EXIT
+
+mkdir -p "$FAKE_HOME_D/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skillwiki"
+mkdir -p "$FAKE_HOME_D/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/.claude-plugin"
+mkdir -p "$FAKE_HOME_D/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/.claude-plugin"
+mkdir -p "$FAKE_HOME_D/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/skills/grill-me"
+cat > "$FAKE_HOME_D/.claude/settings.json" <<'JSON'
+{
+  "enabledPlugins": {
+    "skillwiki@llm-wiki": true,
+    "grill-me@karlorz-agent-skills": true
+  }
+}
+JSON
+cat > "$FAKE_HOME_D/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/.claude-plugin/plugin.json" <<'JSON'
+{
+  "name": "skillwiki",
+  "version": "0.10.56",
+  "skills": "./"
+}
+JSON
+cat > "$FAKE_HOME_D/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skillwiki/SKILL.md" <<'MD'
+---
+name: using-skillwiki
+---
+MD
+cat > "$FAKE_HOME_D/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/.claude-plugin/plugin.json" <<'JSON'
+{
+  "name": "grill-me",
+  "version": "1.0.0",
+  "skills": "./"
+}
+JSON
+cat > "$FAKE_HOME_D/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/skills/grill-me/SKILL.md" <<'MD'
+---
+name: grill-me
+---
+MD
+
+OUT_D="$(HOME="$FAKE_HOME_D" bash "$AUDIT_SCRIPT")"
+
+if ! echo "$OUT_D" | grep -q "WARN.*plugin.skills_unresolved"; then
+  fail "Case D: expected WARN plugin.skills_unresolved for nested-only skills=\"./\""
+fi
+if ! echo "$OUT_D" | grep -q "grill-me@karlorz-agent-skills"; then
+  fail "Case D: WARN must name grill-me@karlorz-agent-skills"
+fi
+if echo "$OUT_D" | grep -q "WARN.*plugin.skills_unresolved.*skillwiki@"; then
+  fail "Case D: skillwiki skills=\"./\" with root using-skillwiki/SKILL.md must not be unresolved"
+fi
+if echo "$OUT_D" | grep -q "ln -sfn"; then
+  fail "Case D: must not suggest convert/symlink for a cache packaging skip"
+fi
+if ! echo "$OUT_D" | grep -q "Cursor import will skip"; then
+  fail "Case D: verdict should say Cursor import will skip unresolved skills plugins"
+fi
+echo "Case D passed"
+
+# ==============================================================================
+# Case E — healthy grill-me cache with skills="./skills/" must not WARN skip
+# Break this catches: treating every nested skills/ layout as unresolved.
+# ==============================================================================
+FAKE_HOME_E="$(mktemp -d "${TMPDIR:-/tmp}/audit-test-E.XXXXXX")"
+trap 'rm -rf "$FAKE_HOME_A" "$FAKE_HOME_B" "$FAKE_HOME_B2" "$FAKE_HOME_C" "$FAKE_HOME_D" "$FAKE_HOME_E"' EXIT
+
+mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skillwiki"
+mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/.claude-plugin"
+mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/.claude-plugin"
+mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/skills/grill-me"
+cat > "$FAKE_HOME_E/.claude/settings.json" <<'JSON'
+{
+  "enabledPlugins": {
+    "skillwiki@llm-wiki": true,
+    "grill-me@karlorz-agent-skills": true
+  }
+}
+JSON
+cat > "$FAKE_HOME_E/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/.claude-plugin/plugin.json" <<'JSON'
+{
+  "name": "skillwiki",
+  "version": "0.10.56",
+  "skills": "./"
+}
+JSON
+cat > "$FAKE_HOME_E/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skillwiki/SKILL.md" <<'MD'
+---
+name: using-skillwiki
+---
+MD
+cat > "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/.claude-plugin/plugin.json" <<'JSON'
+{
+  "name": "grill-me",
+  "version": "1.0.1",
+  "skills": "./skills/"
+}
+JSON
+cat > "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/skills/grill-me/SKILL.md" <<'MD'
+---
+name: grill-me
+---
+MD
+
+OUT_E="$(HOME="$FAKE_HOME_E" bash "$AUDIT_SCRIPT")"
+
+if echo "$OUT_E" | grep -q "WARN.*plugin.skills_unresolved"; then
+  fail "Case E: healthy skills=\"./skills/\" must not WARN plugin.skills_unresolved"
+fi
+if ! echo "$OUT_E" | grep -q "PASS.*plugin.skills.grill-me"; then
+  fail "Case E: expected PASS plugin.skills.grill-me"
+fi
+echo "Case E passed"
+
+# ==============================================================================
+# Case F — cache skills="./" vs marketplace source skills="./skills/"
+# Break this catches: not comparing Claude cache plugin.json to marketplace clone.
+# ==============================================================================
+FAKE_HOME_F="$(mktemp -d "${TMPDIR:-/tmp}/audit-test-F.XXXXXX")"
+trap 'rm -rf "$FAKE_HOME_A" "$FAKE_HOME_B" "$FAKE_HOME_B2" "$FAKE_HOME_C" "$FAKE_HOME_D" "$FAKE_HOME_E" "$FAKE_HOME_F"' EXIT
+
+mkdir -p "$FAKE_HOME_F/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skillwiki"
+mkdir -p "$FAKE_HOME_F/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/.claude-plugin"
+mkdir -p "$FAKE_HOME_F/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/.claude-plugin"
+mkdir -p "$FAKE_HOME_F/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/skills/grill-me"
+mkdir -p "$FAKE_HOME_F/.claude/plugins/marketplaces/karlorz-agent-skills/skills/grill-me/.claude-plugin"
+mkdir -p "$FAKE_HOME_F/.claude/plugins/marketplaces/karlorz-agent-skills/.claude-plugin"
+cat > "$FAKE_HOME_F/.claude/settings.json" <<'JSON'
+{
+  "enabledPlugins": {
+    "skillwiki@llm-wiki": true,
+    "grill-me@karlorz-agent-skills": true
+  }
+}
+JSON
+cat > "$FAKE_HOME_F/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/.claude-plugin/plugin.json" <<'JSON'
+{
+  "name": "skillwiki",
+  "version": "0.10.56",
+  "skills": "./"
+}
+JSON
+cat > "$FAKE_HOME_F/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skillwiki/SKILL.md" <<'MD'
+---
+name: using-skillwiki
+---
+MD
+cat > "$FAKE_HOME_F/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/.claude-plugin/plugin.json" <<'JSON'
+{
+  "name": "grill-me",
+  "version": "1.0.0",
+  "skills": "./"
+}
+JSON
+cat > "$FAKE_HOME_F/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.0/skills/grill-me/SKILL.md" <<'MD'
+---
+name: grill-me
+---
+MD
+cat > "$FAKE_HOME_F/.claude/plugins/marketplaces/karlorz-agent-skills/.claude-plugin/marketplace.json" <<'JSON'
+{
+  "name": "karlorz-agent-skills",
+  "plugins": [
+    {
+      "name": "grill-me",
+      "source": "./skills/grill-me",
+      "version": "1.0.0"
+    }
+  ]
+}
+JSON
+cat > "$FAKE_HOME_F/.claude/plugins/marketplaces/karlorz-agent-skills/skills/grill-me/.claude-plugin/plugin.json" <<'JSON'
+{
+  "name": "grill-me",
+  "version": "1.0.0",
+  "skills": "./skills/"
+}
+JSON
+
+OUT_F="$(HOME="$FAKE_HOME_F" bash "$AUDIT_SCRIPT")"
+
+if ! echo "$OUT_F" | grep -q "WARN.*plugin.skills_unresolved"; then
+  fail "Case F: expected WARN plugin.skills_unresolved"
+fi
+if ! echo "$OUT_F" | grep -q "WARN.*plugin.cache_stale"; then
+  fail "Case F: expected WARN plugin.cache_stale when cache skills differs from marketplace source"
+fi
+if ! echo "$OUT_F" | grep -q "./skills/"; then
+  fail "Case F: stale-cache WARN should mention marketplace ./skills/"
+fi
+echo "Case F passed"
+
 printf 'test-cursor-claude-plugin-exam: all checks passed\n'

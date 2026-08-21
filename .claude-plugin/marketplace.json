@@ -132,7 +132,7 @@
       "name": "hermes-cli",
       "source": "./skills/hermes-cli",
       "description": "Hermes Agent CLI commands reference \u2014 full terminal command surface for hermes-agent by NousResearch",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "category": "reference",
       "keywords": [
         "hermes",
@@ -204,7 +204,7 @@
       "name": "grill-me",
       "source": "./skills/grill-me",
       "description": "Relentless plan/design interview skills adapted from Matt Pocock's grilling, with inline cross-platform question style.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "category": "productivity",
       "keywords": [
         "grill-me",
@@ -217,7 +217,8 @@
         "ask-question",
         "codex",
         "antigravity",
-        "ask-user-question"
+        "ask-user-question",
+        "cursor"
       ]
     },
     {
