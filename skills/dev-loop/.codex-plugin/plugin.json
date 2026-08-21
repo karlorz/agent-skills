@@ -1,6 +1,6 @@
 {
   "name": "dev-loop",
-  "version": "1.26.32",
+  "version": "1.26.33",
   "description": "Adaptive dev cycle engine with SkillWiki vault, preflight prep, investigate, office-hours, config-lint, and cross-harness verification. Pass `high` for aggressive mode.",
   "author": {
     "name": "karlorz"

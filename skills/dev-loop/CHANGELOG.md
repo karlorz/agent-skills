@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.26.33] - 2026-08-21
+
+- `/dev-loop setup` Section F2 now interviews isolation and landing separately. Recommended defaults: isolate on (`worktree_policy.enabled: true`) and PR from a feature branch (`allow_local_merge: false`). Offers an attended local-merge menu for owned repos. No longer recommends direct push on the release branch.
+
 ## [1.26.32] - 2026-08-21
 
 - Attended local-merge (finishing menu option 1) is refused when `merge_policy.strategy` is `pull-request`; stay on the feature-branch PR route instead of checking out `release_branch`.
