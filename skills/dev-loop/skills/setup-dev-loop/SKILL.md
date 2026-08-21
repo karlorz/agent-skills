@@ -182,27 +182,46 @@ After generating the workflow:
 - Set `ci_configured: true` in the `dev-loop.config.md` output
 - Set `ci_workflow: .github/workflows/ci.yml` in the config
 
-**Section F2 — Merge authority.**
+**Section F2 — Isolation and merge landing.**
 
-After CI setup, ask separately:
+> Explainer: Execution isolation and branch landing are independent. Isolation defaults to on (running EXECUTE in a worktree), so a typical cycle leaves a feature branch. Note that `auto_merge` is GitHub and `allow_local_merge` is local finishing.
 
-> "How should completed code reach the release branch, and may dev-loop ever
-> enable auto-merge? Auto-merge still requires explicit approval on each work
-> item's spec and an exact healthy CI result."
+Ask two questions in this section:
+
+**Question 1 — Isolation**
+
+> "Should dev-loop isolate code execution into a temporary git worktree by default?"
+
+Default posture: propose `Isolate (recommended)`.
 
 Options:
+- **Isolate (recommended)** — `worktree_policy.enabled: true`. Typical cycle leaves a feature branch. EXECUTE does not ask for consent.
+- **Work in place** — `worktree_policy.enabled: false`. Restores in-place EXECUTE.
 
-- **Branch policy, manual merge (recommended)** — direct push on the release
-  branch, PR on feature branches, and `auto_merge: false`.
-- **PR required, manual merge** — require feature-branch PRs and set
-  `auto_merge: false`.
-- **PR with approved auto-merge** — require feature-branch PRs, set
-  `auto_merge: true`, and keep `require_work_item_approval: true`.
+Always emit:
 
-Worktree isolation defaults to on (`worktree_policy.enabled: true`); projects may opt out with `worktree_policy.enabled: false`.
-`allow_local_merge` defaults to `false` (PR route from feature branches); set `true` to allow local merge finishing.
+```yaml
+worktree_policy:
+  enabled: true
+```
 
-Never offer repository-wide auto-merge without per-work-item approval. Emit:
+(`enabled: false` only if they picked Work in place.)
+
+**Question 2 — Landing**
+
+> "How should completed code reach the release branch, and may dev-loop ever enable auto-merge? Auto-merge still requires explicit approval on each work item's spec and an exact healthy CI result."
+
+Default posture: propose `PR from feature branch (recommended)` (fail-closed plugin landing). Do not recommend direct push on main.
+
+Options:
+- **PR from feature branch (recommended)** — `strategy: repo-policy`, `allow_local_merge: false`, `auto_merge: false`. Direct push only if already on `release_branch`.
+- **Attended local-merge menu** — `strategy: repo-policy`, `allow_local_merge: true`, `auto_merge: false`. After tests: finishing-a-development-branch 1 local merge then push, 2 PR+CI, 3 keep. For owned repos without branch protection.
+- **PR required** — `strategy: pull-request`, `allow_local_merge: false`, `auto_merge: false`.
+- **PR with approved auto-merge** — `strategy: pull-request`, `auto_merge: true`, `require_work_item_approval: true`, `allow_local_merge: false`.
+
+Never offer repository-wide GitHub auto-merge without per-work-item approval.
+
+Default emitted merge_policy YAML (when they accept recommended landing):
 
 ```yaml
 merge_policy:
@@ -213,8 +232,7 @@ merge_policy:
   require_work_item_approval: true
 ```
 
-Change `strategy` or `auto_merge` only to reflect the selected option. CI
-discovery fields remain unchanged by this answer.
+Change `strategy`, `auto_merge`, `allow_local_merge`, or `worktree_policy.enabled` only to reflect the selected options. CI discovery fields remain unchanged by this answer.
 
 **Section G — Critical paths.**
 
@@ -598,7 +616,7 @@ pre-1.19.0 behavior. Schema reference: `templates/project-config.md`
 ### 3. Confirm and write
 
 Show the user a draft of `./.claude/dev-loop.config.md` covering all sections
-(workflow profile, PRD provider, knowledge, release, interview, glossary, CI setup, merge authority,
+(workflow profile, PRD provider, knowledge, release, interview, glossary, CI setup, isolation and merge landing,
 critical paths, fact-check tier, idle deep-research, browser verification,
 reactive debugging, discipline path scoping, release policy). Let them edit
 before writing.
@@ -618,8 +636,7 @@ Tell the user:
 - To change config later, edit `./.claude/dev-loop.config.md` directly
 - If Section F was completed: CI workflow written to `.github/workflows/ci.yml`, `ci_configured: true` in config
 - If Section F was skipped: set `ci_configured: false` — dev-loop MERGE step will warn about missing CI
-- Section F2 always emits a separate `merge_policy` block; default to manual
-  merge and require explicit per-work-item approval if auto-merge is enabled
+- Section F2 always emits `worktree_policy` and `merge_policy` blocks; isolation defaults to on (`worktree_policy.enabled: true`) and landing defaults to PR (`strategy: repo-policy`, `allow_local_merge: false`) unless they picked the local-merge menu or another option
 - If Section G was completed: `critical_paths:` block in config with 1-3 named hot-spots
 - If Section G was skipped: `critical_paths: {}` (empty, engine uses equal priority)
 - If Section H was completed: `fact_check:` block with source order, web tools, and evidence contract
