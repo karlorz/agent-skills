@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.26.31] - 2026-08-21
+
+- EXECUTE isolates into a git worktree by default (`worktree_policy.enabled` absent → true). MERGE landing stays PR+CI unless `merge_policy.allow_local_merge` is true; attended sessions then get the finishing menu (local merge, PR, keep). Status previews isolation and landing independently. Write-preflight allows post-merge push on the release branch only with `--landing-route local-merge-then-push`. Opt out of isolation with `worktree_policy.enabled: false`. `auto_merge` remains GitHub PR auto-merge.
+
 ## [1.26.30] - 2026-08-10
 
 - bump-version.sh maintains CHANGELOG.md per skill instead of inserting v<semver>: markers into description fields. Descriptions simplified to stable 50-200 char text. Version markers migrated from descriptions to CHANGELOG.md files.
