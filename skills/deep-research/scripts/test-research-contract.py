@@ -210,18 +210,69 @@ required_scratch_pipeline = (
     "SCRATCH_PARENT=\"${TMPDIR:-/tmp}/deep-research\"",
     "mkdir -p \"$SCRATCH_PARENT\"",
     "SCRATCH=\"$(mktemp -d \"$SCRATCH_PARENT/run.XXXXXX\")\"",
-    "FALLBACK_INPUT=\"$SCRATCH/fallback-input.json\"",
-    "FALLBACK=\"$SCRATCH/fallback.md\"",
-    "CANDIDATE=\"$SCRATCH/candidate.md\"",
-    "LINT_JSON=\"$SCRATCH/lint.json\"",
-    "SELECTION_JSON=\"$SCRATCH/selection.json\"",
-    "FINAL_REPORT=\"$SCRATCH/final-report.md\"",
-    "python3 \"$DEEP_RESEARCH_PLUGIN_ROOT/scripts/build-fallback-report.py\" \"$FALLBACK_INPUT\" --output \"$FALLBACK\" --artifact-root \"$SCRATCH\"",
-    "python3 \"$DEEP_RESEARCH_PLUGIN_ROOT/scripts/select-report-candidate.py\" --candidate \"$CANDIDATE\" --fallback \"$FALLBACK\" --output \"$FINAL_REPORT\" --lint-json \"$LINT_JSON\" --selection-json \"$SELECTION_JSON\" --artifact-root \"$SCRATCH\"",
     "skillwiki path --plain",
     "never write scratch artifacts into the vault",
     "fail closed",
 )
+
+
+def _check_containment_guarded_execution(skill_text: str) -> list[str]:
+    """Verify scratch artifact definition and tooling execution are strictly inside the outside branch."""
+    failures: list[str] = []
+    guard_start = 'if [ "$CONTAINMENT_VERDICT" = "outside" ]; then'
+    if guard_start not in skill_text:
+        failures.append(
+            f"SKILL.md missing explicit outside-verdict branch: {guard_start!r}"
+        )
+        return failures
+
+    after_if = skill_text.split(guard_start, 1)[1]
+    if "\n  else\n" not in after_if and "\nelse\n" not in after_if:
+        failures.append("SKILL.md missing 'else' branch for vault containment guard")
+        return failures
+
+    split_marker = "\n  else\n" if "\n  else\n" in after_if else "\nelse\n"
+    then_part, after_else = after_if.split(split_marker, 1)
+
+    fi_marker = "\n  fi\n" if "\n  fi\n" in after_else else "\nfi\n"
+    if fi_marker not in after_else:
+        failures.append("SKILL.md missing 'fi' closing vault containment guard")
+        return failures
+
+    else_part, after_fi = after_else.split(fi_marker, 1)
+
+    required_in_outside_branch = (
+        'FALLBACK_INPUT="$SCRATCH/fallback-input.json"',
+        'FALLBACK="$SCRATCH/fallback.md"',
+        'CANDIDATE="$SCRATCH/candidate.md"',
+        'LINT_JSON="$SCRATCH/lint.json"',
+        'SELECTION_JSON="$SCRATCH/selection.json"',
+        'FINAL_REPORT="$SCRATCH/final-report.md"',
+        'python3 "$DEEP_RESEARCH_PLUGIN_ROOT/scripts/build-fallback-report.py"',
+        'python3 "$DEEP_RESEARCH_PLUGIN_ROOT/scripts/select-report-candidate.py"',
+    )
+    for anchor in required_in_outside_branch:
+        if anchor not in then_part:
+            failures.append(
+                f"SKILL.md outside branch missing guarded scratch definition/invocation: {anchor!r}"
+            )
+
+    required_in_else_branch = (
+        'echo "Vault boundary check failed or unresolved ($CONTAINMENT_VERDICT); failing closed from scratch tooling to in-context fallback" >&2',
+    )
+    for anchor in required_in_else_branch:
+        if anchor not in else_part:
+            failures.append(
+                f"SKILL.md else branch missing fail-closed fallback warning: {anchor!r}"
+            )
+
+    # Scratch execution must not fall through past fi
+    if "build-fallback-report.py" in after_fi.split("```", 1)[0]:
+        failures.append("SKILL.md has build-fallback-report.py unguarded after fi")
+    if "select-report-candidate.py" in after_fi.split("```", 1)[0]:
+        failures.append("SKILL.md has select-report-candidate.py unguarded after fi")
+
+    return failures
 
 prohibited_scratch_patterns = (
     "<scratch>",
@@ -321,6 +372,8 @@ def main() -> int:
     for phrase in required_scratch_pipeline:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing scratch pipeline ref: {phrase!r}")
+
+    failures.extend(_check_containment_guarded_execution(skill_text))
 
     for phrase in prohibited_scratch_patterns:
         if phrase in skill_text:

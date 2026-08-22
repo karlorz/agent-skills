@@ -277,20 +277,20 @@ else:
 PY
 )" || CONTAINMENT_VERDICT="error"
 
-  if [ "$CONTAINMENT_VERDICT" != "outside" ]; then
+  if [ "$CONTAINMENT_VERDICT" = "outside" ]; then
+    FALLBACK_INPUT="$SCRATCH/fallback-input.json"
+    FALLBACK="$SCRATCH/fallback.md"
+    CANDIDATE="$SCRATCH/candidate.md"
+    LINT_JSON="$SCRATCH/lint.json"
+    SELECTION_JSON="$SCRATCH/selection.json"
+    FINAL_REPORT="$SCRATCH/final-report.md"
+
+    python3 "$DEEP_RESEARCH_PLUGIN_ROOT/scripts/build-fallback-report.py" "$FALLBACK_INPUT" --output "$FALLBACK" --artifact-root "$SCRATCH"
+    python3 "$DEEP_RESEARCH_PLUGIN_ROOT/scripts/select-report-candidate.py" --candidate "$CANDIDATE" --fallback "$FALLBACK" --output "$FINAL_REPORT" --lint-json "$LINT_JSON" --selection-json "$SELECTION_JSON" --artifact-root "$SCRATCH"
+  else
     echo "Vault boundary check failed or unresolved ($CONTAINMENT_VERDICT); failing closed from scratch tooling to in-context fallback" >&2
     # Fail closed from durable scratch tooling and keep valid Partial fallback in context; never guess outside-vault safety.
   fi
-
-  FALLBACK_INPUT="$SCRATCH/fallback-input.json"
-  FALLBACK="$SCRATCH/fallback.md"
-  CANDIDATE="$SCRATCH/candidate.md"
-  LINT_JSON="$SCRATCH/lint.json"
-  SELECTION_JSON="$SCRATCH/selection.json"
-  FINAL_REPORT="$SCRATCH/final-report.md"
-
-  python3 "$DEEP_RESEARCH_PLUGIN_ROOT/scripts/build-fallback-report.py" "$FALLBACK_INPUT" --output "$FALLBACK" --artifact-root "$SCRATCH"
-  python3 "$DEEP_RESEARCH_PLUGIN_ROOT/scripts/select-report-candidate.py" --candidate "$CANDIDATE" --fallback "$FALLBACK" --output "$FINAL_REPORT" --lint-json "$LINT_JSON" --selection-json "$SELECTION_JSON" --artifact-root "$SCRATCH"
   ```
   If terminal or filesystem execution is unavailable, or if vault containment checking fails, fail closed from durable scratch tooling, persist the structured Partial fallback in memory context, and evaluate the candidate/repair/fallback selection ladder without claiming tool execution.
   **Safety invariant**: never write scratch artifacts into the vault; temporary scratch clean-up is best-effort only after final delivery, not before selection.
