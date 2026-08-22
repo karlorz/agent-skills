@@ -26,7 +26,6 @@ from pathlib import Path
 DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 REF_RE = re.compile(r"^S([0-9]+)$")
 SHA256_RE = re.compile(r"sha256=([0-9a-fA-F]{64})(?![0-9a-fA-F])")
-ROLE_TOKENS = ("direct-fetch", "search-summary only", "retained-without-citation")
 SOURCE_TYPES = ("primary", "secondary", "repository", "other")
 
 LEDGER_HEADER = (
