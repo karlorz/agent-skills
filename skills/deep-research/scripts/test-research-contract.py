@@ -217,7 +217,7 @@ required_scratch_pipeline = (
 
 
 def _check_containment_guarded_execution(skill_text: str) -> list[str]:
-    """Verify scratch artifact definition and tooling execution are strictly inside the outside branch."""
+    """Verify scratch artifact definition, directory creation, and tooling execution are strictly inside the outside branch."""
     failures: list[str] = []
     guard_start = 'if [ "$CONTAINMENT_VERDICT" = "outside" ]; then'
     if guard_start not in skill_text:
@@ -226,7 +226,19 @@ def _check_containment_guarded_execution(skill_text: str) -> list[str]:
         )
         return failures
 
-    after_if = skill_text.split(guard_start, 1)[1]
+    before_guard, after_if = skill_text.split(guard_start, 1)
+
+    # Side-effecting scratch creations must NOT occur before containment check
+    prohibited_before_guard = (
+        'mkdir -p "$SCRATCH_PARENT"',
+        'SCRATCH="$(mktemp -d "$SCRATCH_PARENT/run.XXXXXX")"',
+    )
+    for anchor in prohibited_before_guard:
+        if anchor in before_guard:
+            failures.append(
+                f"SKILL.md side-effecting command executed before containment guard: {anchor!r}"
+            )
+
     if "\n  else\n" not in after_if and "\nelse\n" not in after_if:
         failures.append("SKILL.md missing 'else' branch for vault containment guard")
         return failures
@@ -242,6 +254,8 @@ def _check_containment_guarded_execution(skill_text: str) -> list[str]:
     else_part, after_fi = after_else.split(fi_marker, 1)
 
     required_in_outside_branch = (
+        'mkdir -p "$SCRATCH_PARENT"',
+        'SCRATCH="$(mktemp -d "$SCRATCH_PARENT/run.XXXXXX")"',
         'FALLBACK_INPUT="$SCRATCH/fallback-input.json"',
         'FALLBACK="$SCRATCH/fallback.md"',
         'CANDIDATE="$SCRATCH/candidate.md"',

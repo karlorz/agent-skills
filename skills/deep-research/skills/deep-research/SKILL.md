@@ -244,16 +244,14 @@ Identify answer-critical claims **before gathering evidence** — during Phase 1
   ```bash
   DEEP_RESEARCH_PLUGIN_ROOT="/absolute/resolved/plugin/root"
   SCRATCH_PARENT="${TMPDIR:-/tmp}/deep-research"
-  mkdir -p "$SCRATCH_PARENT"
-  SCRATCH="$(mktemp -d "$SCRATCH_PARENT/run.XXXXXX")"
 
   # Resolve SkillWiki vault safely before writing.
   # If `skillwiki path --plain` is available, normalize/resolve it;
   # otherwise use the known active vault root from session context when present.
   VAULT_ROOT="$(skillwiki path --plain 2>/dev/null || true)"
 
-  # Run Python containment guard to ensure SCRATCH is strictly outside the vault.
-  CONTAINMENT_VERDICT="$(python3 - "$SCRATCH" "$VAULT_ROOT" <<'PY'
+  # Run Python containment guard to ensure SCRATCH_PARENT is strictly outside the vault.
+  CONTAINMENT_VERDICT="$(python3 - "$SCRATCH_PARENT" "$VAULT_ROOT" <<'PY'
 from pathlib import Path
 import sys
 scratch_arg = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -278,6 +276,8 @@ PY
 )" || CONTAINMENT_VERDICT="error"
 
   if [ "$CONTAINMENT_VERDICT" = "outside" ]; then
+    mkdir -p "$SCRATCH_PARENT"
+    SCRATCH="$(mktemp -d "$SCRATCH_PARENT/run.XXXXXX")"
     FALLBACK_INPUT="$SCRATCH/fallback-input.json"
     FALLBACK="$SCRATCH/fallback.md"
     CANDIDATE="$SCRATCH/candidate.md"
