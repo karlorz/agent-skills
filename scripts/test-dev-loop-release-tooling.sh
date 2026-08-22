@@ -857,11 +857,9 @@ run_deep_research_freshness_contract_checks() {
   assert_not_contains "deep-research old direct publish sequence" "$vault_pipeline" 'write the typed page, validate it, update index.md, then log.md'
   assert_contains "deep-research skill delegates publisher" "$skill_body" 'page publish'
 
-  assert_contains "deep-research agent source triage" "$agent_body" "Phase 1.5: Source Triage"
-  assert_contains "deep-research agent grok-search freshness" "$agent_body" "grok-search"
-  assert_contains "deep-research agent freshness status section" "$agent_body" "Freshness & Verification Status"
-  assert_contains "deep-research agent local inline triage" "$agent_body" "local triage inline"
-  assert_contains "deep-research agent delegates publisher" "$agent_body" 'page publish'
+  assert_contains "deep-research agent reads canonical skill" "$agent_body" 'skills/deep-research/SKILL.md'
+  assert_contains "deep-research agent fail closed" "$agent_body" 'do not invent a shorter'
+  assert_not_contains "deep-research agent former twin recipe removed" "$agent_body" 'Phase 1.5: Source Triage'
   assert_not_contains "deep-research agent no mandatory web search" "$agent_body" "always spawn at least 1"
 }
 
