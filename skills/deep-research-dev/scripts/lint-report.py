@@ -184,16 +184,20 @@ def strip_fenced_code(text):
 def local_record_inside_artifact_root(record, artifact_root):
     if not artifact_root:
         return False
-    root = os.path.abspath(os.path.normpath(artifact_root))
-    path = record.strip()
-    if not path:
-        return False
-    if not os.path.isabs(path):
-        path = os.path.join(root, os.path.normpath(path))
-    path = os.path.abspath(os.path.normpath(path))
     try:
-        return os.path.commonpath([root, path]) == root
-    except ValueError:
+        from pathlib import Path
+        root_path = Path(artifact_root).resolve()
+        if not root_path.is_dir():
+            return False
+        rec_path = Path(record.strip())
+        if not rec_path.is_absolute():
+            rec_path = (root_path / rec_path).resolve()
+        else:
+            rec_path = rec_path.resolve()
+        if not rec_path.is_file():
+            return False
+        return rec_path.is_relative_to(root_path)
+    except (OSError, ValueError, RuntimeError):
         return False
 
 
@@ -427,7 +431,7 @@ def validate_report(text, metadata, args):
                         )
                     else:
                         errors.append(
-                            f"local record {row['ref']} is outside the artifact root "
+                            f"local record {row['ref']} is outside the artifact root or does not exist as a regular file "
                             f"without sha256 (expected a 'sha256=' + 64-hex hash): {url!r}"
                         )
         else:

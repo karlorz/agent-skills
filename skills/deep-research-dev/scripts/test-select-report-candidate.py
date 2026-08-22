@@ -166,6 +166,10 @@ def main() -> int:
         sel = json.loads(sel_path.read_text(encoding="utf-8"))
         assert sel["selected"] == "repaired"
         assert sel["repair_attempted"] is True
+        assert sel.get("repair_result") is not None, "repair_result must be persisted in selection.json"
+        assert sel["repair_result"]["ok"] is True
+        assert sel["repair_result"]["_returncode"] == 0
+        assert len(sel["repair_result"]["repairs"]) > 0
         assert sel["candidate_lint"]["ok"] is False
         assert len(sel["candidate_lint"]["errors"]) > 0
         assert sel["repaired_lint"]["ok"] is True
@@ -176,7 +180,31 @@ def main() -> int:
         out_content = out_path.read_text(encoding="utf-8")
         assert "direct-fetch; primary evidence" in out_content
 
+
+        # Case 2b: Repair attempted but repairer failed / produced invalid repaired report -> fallback selected
+        # A report that triggers is_repairable but has irrecoverable errors (e.g. missing audit headings or broken dates)
+        # so invoke_repair succeeds or fails, but repaired output fails linting -> selects fallback
+        repair_fail_cand = (
+            "**Status: Verified**\n\n"
+            "A note before H1 that is not an H1.\n\n"
+            "## 1. Decision summary\n\n"
+            "Claim without required audit sections.\n"
+        )
+        cand_path.write_text(repair_fail_cand, encoding="utf-8")
+        fall_path.write_text(valid_fallback_text(), encoding="utf-8")
+        res = invoke_selector(cand_path, fall_path, out_path, lint_path, sel_path)
+        assert res.returncode == 0, f"case 2b failed: {res.stderr}"
+        sel = json.loads(sel_path.read_text(encoding="utf-8"))
+        assert sel["selected"] == "fallback"
+        assert sel["repair_attempted"] is True
+        assert sel.get("repair_result") is not None
+        assert sel["repaired_lint"]["ok"] is False
+        assert sel["fallback_lint"]["ok"] is True
+        assert sel["final_lint_ok"] is True
+        assert out_path.read_text(encoding="utf-8") == fall_path.read_text(encoding="utf-8")
+
         # Case 3: Q3-shaped malformed candidate selects valid prebuilt fallback ("fallback")
+
         cand_path.write_text(q3_malformed_report_text(), encoding="utf-8")
         fall_path.write_text(valid_fallback_text(), encoding="utf-8")
         res = invoke_selector(cand_path, fall_path, out_path, lint_path, sel_path)

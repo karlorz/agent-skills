@@ -231,6 +231,36 @@ def main() -> int:
         lint_art = invoke_lint(output_path, cutoff="2026-08-12", artifact_root=artifact_dir)
         assert lint_art["ok"] is True, f"artifact-root fallback report failed linting: {lint_art}"
 
+        # Important 2: Builder durable unhashed local records test cases
+        # Nonexistent local record
+        nonexistent_artifact = valid_input_payload()
+        nonexistent_artifact["ledger_rows"][0]["record"] = f"local-record: {artifact_dir / 'nonexistent.json'}"
+        input_path.write_text(json.dumps(nonexistent_artifact), encoding="utf-8")
+        res_nonexistent = invoke_builder(input_path, output_path, "--artifact-root", str(artifact_dir))
+        assert res_nonexistent.returncode != 0, "expected failure for nonexistent local-record in builder"
+
+        # Directory local record
+        dir_artifact = valid_input_payload()
+        sub_dir = artifact_dir / "sub_dir"
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        dir_artifact["ledger_rows"][0]["record"] = f"local-record: {sub_dir}"
+        input_path.write_text(json.dumps(dir_artifact), encoding="utf-8")
+        res_dir = invoke_builder(input_path, output_path, "--artifact-root", str(artifact_dir))
+        assert res_dir.returncode != 0, "expected failure for directory local-record in builder"
+
+        # Symlink escape local record
+        outside_file = root / "outside_builder.txt"
+        outside_file.write_text("builder secret", encoding="utf-8")
+        escape_symlink = artifact_dir / "escape_link.json"
+        if not escape_symlink.exists():
+            escape_symlink.symlink_to(outside_file)
+        escape_artifact = valid_input_payload()
+        escape_artifact["ledger_rows"][0]["record"] = f"local-record: {escape_symlink}"
+        input_path.write_text(json.dumps(escape_artifact), encoding="utf-8")
+        res_escape = invoke_builder(input_path, output_path, "--artifact-root", str(artifact_dir))
+        assert res_escape.returncode != 0, "expected failure for symlink escape local-record in builder"
+
+
         # 5. Reject unresolved claim ref
         bad_data = valid_input_payload()
         bad_data["claims"].append({"text": "Unresolved claim.", "refs": ["S99"]})
@@ -265,6 +295,25 @@ def main() -> int:
         input_path.write_text(json.dumps(bad_data), encoding="utf-8")
         res = invoke_builder(input_path, output_path)
         assert res.returncode != 0, "expected failure on malformed record/url"
+
+        # 10. Strict schema: reject unknown top-level keys, unknown claim keys, unknown ledger keys
+        bad_top = valid_input_payload()
+        bad_top["extra_key"] = "unexpected"
+        input_path.write_text(json.dumps(bad_top), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode != 0, "expected failure for unknown top-level key"
+
+        bad_claim = valid_input_payload()
+        bad_claim["claims"][0]["extra_claim_key"] = "unexpected"
+        input_path.write_text(json.dumps(bad_claim), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode != 0, "expected failure for unknown claim key"
+
+        bad_row = valid_input_payload()
+        bad_row["ledger_rows"][0]["extra_row_key"] = "unexpected"
+        input_path.write_text(json.dumps(bad_row), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode != 0, "expected failure for unknown ledger_rows key"
 
     return 0
 

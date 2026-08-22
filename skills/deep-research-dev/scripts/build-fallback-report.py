@@ -53,16 +53,19 @@ def escape_markdown_cell(text: str) -> str:
 def local_record_inside_artifact_root(record: str, artifact_root: str | None) -> bool:
     if not artifact_root:
         return False
-    root = os.path.abspath(os.path.normpath(artifact_root))
-    path = record.strip()
-    if not path:
-        return False
-    if not os.path.isabs(path):
-        path = os.path.join(root, os.path.normpath(path))
-    path = os.path.abspath(os.path.normpath(path))
     try:
-        return os.path.commonpath([root, path]) == root
-    except ValueError:
+        root_path = Path(artifact_root).resolve()
+        if not root_path.is_dir():
+            return False
+        rec_path = Path(record.strip())
+        if not rec_path.is_absolute():
+            rec_path = (root_path / rec_path).resolve()
+        else:
+            rec_path = rec_path.resolve()
+        if not rec_path.is_file():
+            return False
+        return rec_path.is_relative_to(root_path)
+    except (OSError, ValueError, RuntimeError):
         return False
 
 
@@ -73,6 +76,23 @@ def validate_input(data: dict, artifact_root: str | None = None) -> dict:
     # The builder always emits Partial; reject any input providing or requesting a status field
     if "status" in data:
         raise ValueError("status field is not allowed; fallback report is always Partial")
+
+    # Enforce exact allowed top-level keys
+    allowed_top_keys = {
+        "title",
+        "evidence_cutoff",
+        "verification_date",
+        "scope",
+        "navigation",
+        "claims",
+        "verification_methods",
+        "ledger_rows",
+        "evidence_gap_reason",
+        "freshness_rows",
+    }
+    unknown_top = set(data.keys()) - allowed_top_keys
+    if unknown_top:
+        raise ValueError(f"Unknown top-level keys: {sorted(unknown_top)}")
 
     # Required string fields
     for field in ("title", "evidence_cutoff", "verification_date", "scope", "evidence_gap_reason"):
@@ -99,11 +119,15 @@ def validate_input(data: dict, artifact_root: str | None = None) -> dict:
         raise ValueError("ledger_rows must be a nonempty list")
 
     ledger_keys = ("ref", "role", "publisher_title", "source_type", "accessed", "record")
+    exact_ledger_key_set = set(ledger_keys)
     seen_refs = set()
     validated_ledger = []
     for idx, row in enumerate(ledger_rows):
         if not isinstance(row, dict):
             raise ValueError(f"ledger_rows[{idx}] must be an object")
+        unknown_row_keys = set(row.keys()) - exact_ledger_key_set
+        if unknown_row_keys:
+            raise ValueError(f"ledger_rows[{idx}] contains unknown keys: {sorted(unknown_row_keys)}")
         for key in ledger_keys:
             val = row.get(key)
             if not isinstance(val, str) or not val.strip():
@@ -135,7 +159,7 @@ def validate_input(data: dict, artifact_root: str | None = None) -> dict:
                     if "sha256=" in local_body:
                         raise ValueError(f"local record {ref} has a malformed sha256= hash (expected exactly 64 hex characters)")
                     else:
-                        raise ValueError(f"local record {ref} is outside the artifact root without sha256 (expected a 'sha256=' + 64-hex hash): {record!r}")
+                        raise ValueError(f"local record {ref} is outside the artifact root or does not exist as a regular file without sha256 (expected a 'sha256=' + 64-hex hash): {record!r}")
         else:
             raise ValueError(f"ledger row {ref} record must be http(s):// or start with 'local-record:', got {record!r}")
 
@@ -157,11 +181,15 @@ def validate_input(data: dict, artifact_root: str | None = None) -> dict:
     if not isinstance(claims, list) or not claims:
         raise ValueError("claims must be a nonempty list")
 
+    exact_claim_key_set = {"text", "refs"}
     validated_claims = []
     cited_refs = set()
     for idx, claim in enumerate(claims):
         if not isinstance(claim, dict):
             raise ValueError(f"claims[{idx}] must be an object")
+        unknown_claim_keys = set(claim.keys()) - exact_claim_key_set
+        if unknown_claim_keys:
+            raise ValueError(f"claims[{idx}] contains unknown keys: {sorted(unknown_claim_keys)}")
         text = claim.get("text")
         if not isinstance(text, str) or not text.strip():
             raise ValueError(f"claims[{idx}].text must be a nonempty string")

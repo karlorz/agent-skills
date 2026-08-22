@@ -262,7 +262,7 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
-        assert_invalid(volatile_local, "outside the artifact root without sha256")
+        assert_invalid(volatile_local, "outside the artifact root")
 
         hashed_local = root / "hashed-local.md"
         hashed_local.write_text(
@@ -286,7 +286,66 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        # Create evidence/schedule.xlsx so it exists as a regular file
+        valid_evidence = root / "evidence" / "schedule.xlsx"
+        valid_evidence.parent.mkdir(parents=True, exist_ok=True)
+        valid_evidence.write_text("dummy xlsx data", encoding="utf-8")
         assert_valid(artifact_local, "--artifact-root", str(root))
+
+        # Important 2: Durable unhashed local records test cases
+        # 1. Nonexistent path inside artifact root
+        nonexistent_local = root / "nonexistent-local.md"
+        nonexistent_local.write_text(
+            report(
+                sources=(
+                    "| S1 | local-record: captured spreadsheet | Publisher / schedule | primary | 2026-08-13 | local-record: evidence/nonexistent.xlsx |"
+                )
+            ),
+            encoding="utf-8",
+        )
+        assert_invalid(nonexistent_local, "outside the artifact root or does not exist as a regular file", "--artifact-root", str(root))
+
+        # 2. Directory inside artifact root (not a regular file)
+        evidence_dir = root / "evidence_dir"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        dir_local = root / "dir-local.md"
+        dir_local.write_text(
+            report(
+                sources=(
+                    "| S1 | local-record: captured directory | Publisher / schedule | primary | 2026-08-13 | local-record: evidence_dir |"
+                )
+            ),
+            encoding="utf-8",
+        )
+        assert_invalid(dir_local, "outside the artifact root or does not exist as a regular file", "--artifact-root", str(root))
+
+        # 3. Symlink escape pointing outside artifact root
+        outside_file = root.parent / "outside_secret.txt"
+        outside_file.write_text("secret", encoding="utf-8")
+        escape_symlink = root / "escape_link.txt"
+        if not escape_symlink.exists():
+            escape_symlink.symlink_to(outside_file)
+        escape_local = root / "escape-local.md"
+        escape_local.write_text(
+            report(
+                sources=(
+                    "| S1 | local-record: symlink escape | Publisher / schedule | primary | 2026-08-13 | local-record: escape_link.txt |"
+                )
+            ),
+            encoding="utf-8",
+        )
+        assert_invalid(escape_local, "outside the artifact root", "--artifact-root", str(root))
+
+        # 4. Valid contained regular file passes
+        assert_valid(artifact_local, "--artifact-root", str(root))
+
+        # 5. Nonexistent artifact root directory
+        assert_invalid(artifact_local, "outside the artifact root", "--artifact-root", str(root / "nonexistent_root_dir"))
+
+        # Hashed local records remain durable without requiring local existence
+        assert_valid(hashed_local, "--artifact-root", str(root))
+
+
 
         mismatched_cutoff = root / "mismatched-cutoff.md"
         mismatched_cutoff.write_text(report(cutoff="2026-08-13"), encoding="utf-8")

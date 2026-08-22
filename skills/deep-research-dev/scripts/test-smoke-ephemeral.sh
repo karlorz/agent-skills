@@ -295,7 +295,7 @@ The official fixture is retained. [S1] [S2]
 | Claim | Status | Source route | Notes |
 | --- | --- | --- | --- |
 | Fixture | externally verified | direct-fetch → primary | [S1] |
-| Local | externally verified | local-record → primary | [S2] |
+| Local | externally verified | direct-fetch → secondary | [S2] |
 
 ## Verification Methods
 
@@ -306,7 +306,7 @@ Open the fixture URL.
 | Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |
 | --- | --- | --- | --- | --- | --- |
 | S1 | retained fixture | Fixture / official source | primary | 2026-08-13 | https://example.test/fixture |
-| S2 | direct-fetch; local note | Local note | primary | 2026-08-13 | ./local-artifact.txt |
+| S2 | local note | Local note | secondary | 2026-08-13 | https://example.test/local-note |
 
 ## Coverage and uncertainty
 
@@ -332,7 +332,7 @@ The official fixture is retained. [S1] [S2]
 | Claim | Status | Source route | Notes |
 | --- | --- | --- | --- |
 | Fixture | externally verified | direct-fetch → primary | [S1] |
-| Local | externally verified | local-record → primary | [S2] |
+| Local | externally verified | direct-fetch → secondary | [S2] |
 
 ## Verification Methods
 
@@ -343,7 +343,7 @@ Open the fixture URL.
 | Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |
 | --- | --- | --- | --- | --- | --- |
 | S1 | direct-fetch; retained fixture | Fixture / official source | primary | 2026-08-13 | https://example.test/fixture |
-| S2 | direct-fetch; local note | Local note | primary | 2026-08-13 | local-record: ./local-artifact.txt |
+| S2 | direct-fetch; local note | Local note | secondary | 2026-08-13 | https://example.test/local-note |
 
 ## Coverage and uncertainty
 

@@ -146,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_path": str(output_path),
         "selected": None,
         "repair_attempted": False,
+        "repair_result": None,
         "candidate_lint": None,
         "repaired_lint": None,
         "fallback_lint": None,
@@ -180,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
             selection_record["repair_attempted"] = True
             repaired_tmp = tmp_root / "repaired.md"
             repair_res = invoke_repair(candidate_path, repaired_tmp)
+            selection_record["repair_result"] = repair_res
             if repair_res.get("ok") is True and repaired_tmp.is_file():
                 rep_lint = invoke_lint(repaired_tmp, metadata_path, artifact_root, cutoff)
                 selection_record["repaired_lint"] = rep_lint

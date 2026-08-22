@@ -7,8 +7,9 @@ Contract with smoke-ephemeral.sh / the dev-loop smoke runner:
 * ``snapshot`` captures the direct-child session IDs before launch. ``resolve``
   scans the post-launch direct child directories minus that snapshot. Each fresh
   candidate must carry a parseable ``summary.json`` and a decodable
-  ``chat_history.jsonl`` whose user records contain exactly the full
-  reconstructed headless prompt:
+  ``chat_history.jsonl`` whose user records contain exactly the expected prompt text,
+  either supplied directly via ``--prompt-file`` (persisted by the smoke runner)
+  or reconstructed via legacy ``--query``:
 
       /deep-research-dev:deep-research-dev --ephemeral --unattended <query>
 
@@ -17,9 +18,10 @@ Contract with smoke-ephemeral.sh / the dev-loop smoke runner:
       then print the final report only (no tool narration).
 
 * The prompt match is exact: decoded JSONL user content must either equal the
-  full reconstructed prompt after trailing-whitespace normalization or place
-  that exact normalized prompt in its explicit ``<user_query>`` envelope. It
-  never uses a raw substring or prefix search.
+  full expected prompt (from ``--prompt-file`` or ``--query``) after
+  trailing-whitespace normalization or place that exact normalized prompt in
+  its explicit ``<user_query>`` envelope. It never uses a raw substring or
+  prefix search.
 * ``created_at`` (summary) is compared as a timezone-aware datetime against
   ``--started``; naive or unparseable timestamps never match.
 * ``agent_name`` is captured as-is (null permitted) and never used to filter.
