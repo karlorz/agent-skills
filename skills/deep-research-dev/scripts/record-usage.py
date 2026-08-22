@@ -80,7 +80,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=("stdout", "file", "vault"),
         default="stdout",
     )
-    parser.add_argument("--duration-s", type=float, default=None)
+    parser.add_argument("--duration-s", type=float, required=True)
     parser.add_argument(
         "--outcome",
         choices=("ok", "failed", "unknown"),
@@ -93,7 +93,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--lint-ok", choices=("true", "false", "null"), default="null")
     parser.add_argument("--lint-json", default=None)
-    parser.add_argument("--plugin-version", default=None)
+    parser.add_argument("--plugin-version", required=True)
     parser.add_argument("--cwd", default=None)
     parser.add_argument("--report-path", default=None)
     parser.add_argument("--smoke-meta", default=None)
@@ -105,6 +105,8 @@ def lint_fields(args: argparse.Namespace) -> tuple[bool | None, list[str]]:
         payload = json.loads(Path(args.lint_json).read_text(encoding="utf-8"))
         ok = payload.get("ok") is True
         errors = list(payload.get("errors") or [])
+        if not ok and not errors:
+            raise UsageError("--lint-json with ok: false requires non-empty errors")
         return ok, errors[:20]
     if args.lint_ok == "true":
         return True, []
@@ -114,6 +116,8 @@ def lint_fields(args: argparse.Namespace) -> tuple[bool | None, list[str]]:
 
 
 def build_record(args: argparse.Namespace) -> dict:
+    if not str(args.plugin_version).strip():
+        raise UsageError("--plugin-version must be non-empty")
     lint_ok, lint_errors = lint_fields(args)
     record = {
         "cwd": args.cwd,

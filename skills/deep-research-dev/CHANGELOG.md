@@ -4,6 +4,8 @@ All notable changes to this skill are documented in this file.
 
 ## [0.1.0-beta.5] - 2026-08-21
 
+- Usage ledger writer rejects `lint_ok false` with empty `lint_errors`, and
+  requires `--duration-s` plus nonempty `--plugin-version`.
 - Thin host adapter: `agents/deep-research-dev.md` reads
   `skills/deep-research-dev/SKILL.md` and stops if that file is unreadable,
   instead of duplicating the Phase 1–6 recipe.

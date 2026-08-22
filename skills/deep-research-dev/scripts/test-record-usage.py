@@ -47,6 +47,10 @@ def main() -> int:
             "Partial",
             "--lint-ok",
             "false",
+            "--duration-s",
+            "10.0",
+            "--plugin-version",
+            "0.1.0-beta.4",
             "--outcome",
             "ok",
         )
@@ -56,7 +60,81 @@ def main() -> int:
         ledger = home / "ledger.jsonl"
         assert not ledger.exists(), "ledger row must not be written on invalid lint-ok false"
 
-        # 2. Valid run with --plugin-version, --duration-s, and --lint-ok true round-trips
+        # 2. --lint-json with ok: false and empty errors must exit 2 and write no row (C3)
+        lint_empty_errors = Path(temp) / "lint-empty-errors.json"
+        lint_empty_errors.write_text(
+            json.dumps({"ok": False, "errors": []}),
+            encoding="utf-8",
+        )
+        lint_false_empty = run(
+            "--home",
+            str(home),
+            "--query",
+            query,
+            "--source",
+            "phase6",
+            "--lint-json",
+            str(lint_empty_errors),
+            "--duration-s",
+            "10.0",
+            "--plugin-version",
+            "0.1.0-beta.4",
+        )
+        assert lint_false_empty.returncode == 2, (
+            f"expected exit 2 for --lint-json with ok:false and empty errors, got {lint_false_empty.returncode}"
+        )
+        assert not ledger.exists(), "ledger row must not be written on ok:false with empty errors"
+
+        # 3. --duration-s omitted must exit 2 and write no row
+        no_duration = run(
+            "--home",
+            str(home),
+            "--query",
+            query,
+            "--plugin-version",
+            "0.1.0-beta.4",
+            "--lint-ok",
+            "true",
+        )
+        assert no_duration.returncode == 2, (
+            f"expected exit 2 when --duration-s is omitted, got {no_duration.returncode}"
+        )
+        assert not ledger.exists(), "ledger row must not be written when --duration-s is omitted"
+
+        # 4. --plugin-version omitted or empty must exit 2 and write no row
+        no_version = run(
+            "--home",
+            str(home),
+            "--query",
+            query,
+            "--duration-s",
+            "10.0",
+            "--lint-ok",
+            "true",
+        )
+        assert no_version.returncode == 2, (
+            f"expected exit 2 when --plugin-version is omitted, got {no_version.returncode}"
+        )
+        assert not ledger.exists(), "ledger row must not be written when --plugin-version is omitted"
+
+        empty_version = run(
+            "--home",
+            str(home),
+            "--query",
+            query,
+            "--duration-s",
+            "10.0",
+            "--plugin-version",
+            "",
+            "--lint-ok",
+            "true",
+        )
+        assert empty_version.returncode == 2, (
+            f"expected exit 2 when --plugin-version is empty, got {empty_version.returncode}"
+        )
+        assert not ledger.exists(), "ledger row must not be written when --plugin-version is empty"
+
+        # 5. Valid run with --plugin-version, --duration-s, and --lint-ok true round-trips
         completed = run(
             "--home",
             str(home),
@@ -91,14 +169,27 @@ def main() -> int:
         assert record["plugin_version"] == "0.1.0-beta.4"
         assert record["source"] == "phase6"
 
+        # 6. Vault-refuse case must still exit 2 for vault, not only argparse (pass dummy duration and version)
         vault = Path(temp) / "vault"
         (vault / "projects").mkdir(parents=True)
         (vault / "SCHEMA.md").write_text("# schema\n", encoding="utf-8")
-        refused = run("--home", str(vault), "--query", "topic")
+        refused = run(
+            "--home",
+            str(vault),
+            "--query",
+            "topic",
+            "--duration-s",
+            "10.0",
+            "--plugin-version",
+            "0.1.0-beta.4",
+            "--lint-ok",
+            "true",
+        )
         assert refused.returncode == 2, refused.stderr
         assert "vault" in refused.stderr.lower()
         assert not (vault / "ledger.jsonl").exists()
 
+        # 7. Existing --lint-json with ok: false and nonempty errors writes those errors
         lint = Path(temp) / "lint.json"
         lint.write_text(
             json.dumps({"ok": False, "errors": ["expected an H1 title"]}),
@@ -113,6 +204,10 @@ def main() -> int:
             "smoke",
             "--lint-json",
             str(lint),
+            "--duration-s",
+            "5.2",
+            "--plugin-version",
+            "0.1.0-beta.4",
         )
         assert completed.returncode == 0, completed.stderr
         rows = [
