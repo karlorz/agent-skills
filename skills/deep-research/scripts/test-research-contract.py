@@ -206,14 +206,26 @@ required_s_scripts = (
 
 # Scratch pipeline anchors in SKILL.md
 required_scratch_pipeline = (
-    "${TMPDIR:-/tmp}/deep-research/",
-    "fallback-input.json",
-    "fallback.md",
-    "candidate.md",
-    "lint.json",
-    "selection.json",
-    "final-report.md",
+    "DEEP_RESEARCH_PLUGIN_ROOT",
+    "SCRATCH_PARENT=\"${TMPDIR:-/tmp}/deep-research\"",
+    "mkdir -p \"$SCRATCH_PARENT\"",
+    "SCRATCH=\"$(mktemp -d \"$SCRATCH_PARENT/run.XXXXXX\")\"",
+    "FALLBACK_INPUT=\"$SCRATCH/fallback-input.json\"",
+    "FALLBACK=\"$SCRATCH/fallback.md\"",
+    "CANDIDATE=\"$SCRATCH/candidate.md\"",
+    "LINT_JSON=\"$SCRATCH/lint.json\"",
+    "SELECTION_JSON=\"$SCRATCH/selection.json\"",
+    "FINAL_REPORT=\"$SCRATCH/final-report.md\"",
+    "python3 \"$DEEP_RESEARCH_PLUGIN_ROOT/scripts/build-fallback-report.py\" \"$FALLBACK_INPUT\" --output \"$FALLBACK\" --artifact-root \"$SCRATCH\"",
+    "python3 \"$DEEP_RESEARCH_PLUGIN_ROOT/scripts/select-report-candidate.py\" --candidate \"$CANDIDATE\" --fallback \"$FALLBACK\" --output \"$FINAL_REPORT\" --lint-json \"$LINT_JSON\" --selection-json \"$SELECTION_JSON\" --artifact-root \"$SCRATCH\"",
+    "skillwiki path --plain",
     "never write scratch artifacts into the vault",
+    "fail closed",
+)
+
+prohibited_scratch_patterns = (
+    "<scratch>",
+    "prefix English role",
 )
 
 # ── Explicit D-only exclusions ───────────────────────────────────────────────
@@ -309,6 +321,10 @@ def main() -> int:
     for phrase in required_scratch_pipeline:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing scratch pipeline ref: {phrase!r}")
+
+    for phrase in prohibited_scratch_patterns:
+        if phrase in skill_text:
+            failures.append(f"SKILL.md still contains prohibited pattern: {phrase!r}")
 
     for phrase in required_literal_headings:
         if phrase not in skill_text:

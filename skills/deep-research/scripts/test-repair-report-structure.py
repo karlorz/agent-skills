@@ -80,6 +80,11 @@ def main() -> int:
     if not HELPER.is_file():
         print(f"RED: missing {HELPER}", file=sys.stderr)
         return 1
+
+    helper_src = HELPER.read_text(encoding="utf-8")
+    assert "ROLE_TOKENS" not in helper_src, "repairer must not define unused ROLE_TOKENS"
+    assert "role_has_token" not in helper_src, "repairer must not define unused role_has_token()"
+
     with tempfile.TemporaryDirectory(prefix="test-repair-report-") as temp:
         root = Path(temp)
         src = root / "broken.md"

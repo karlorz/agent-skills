@@ -36,7 +36,6 @@ LEDGER_HEADER = [
     "Accessed",
     "Exact URL or local record",
 ]
-ROLE_TOKENS = ("direct-fetch", "search-summary only", "retained-without-citation")
 
 
 def is_substantive(line: str) -> bool:
@@ -81,11 +80,6 @@ def strip_fence_mask(lines: list[str]) -> list[bool]:
 
 def join_cells(cells: list[str]) -> str:
     return "| " + " | ".join(cells) + " |"
-
-
-def role_has_token(role: str) -> bool:
-    lowered = role.lower()
-    return any(token in lowered for token in ROLE_TOKENS)
 
 
 def looks_like_path(record: str) -> bool:
@@ -198,12 +192,9 @@ def repair_ledger(lines: list[str]) -> tuple[list[str], list[str]]:
             # Local rows do not require fetch tokens.
         else:
             pass
-        if role != original_role or record != original_record:
+        if record != original_record:
             lines[i] = join_cells([ref, role, publisher, stype, accessed, record]) + "\n"
-            if role != original_role:
-                repairs.append(f"{ref} prefixed role token")
-            if record != original_record:
-                repairs.append(f"{ref} prefixed local-record:")
+            repairs.append(f"{ref} prefixed local-record:")
     return lines, repairs
 
 
