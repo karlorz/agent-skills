@@ -12,7 +12,7 @@
       "name": "deep-research",
       "source": "./skills/deep-research",
       "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration. Spawnable as a subagent (model: sonnet) via deep-research:deep-research.",
-      "version": "2.4.3",
+      "version": "2.5.0",
       "category": "research",
       "keywords": [
         "research",

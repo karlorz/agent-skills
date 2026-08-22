@@ -120,10 +120,13 @@ function matchingTags(repo, skill) {
   const prefix = `${skill}-`;
   const output = runGit(repo, ["tag", "--list", `${prefix}*`]).stdout.trim();
   if (!output) return [];
-  return output.split(/\r?\n/).map((tag) => {
-    const version = tag.slice(prefix.length);
-    return { tag, version, parsed: parseSemver(version, `tag ${tag}`) };
-  });
+  return output
+    .split(/\r?\n/)
+    .filter((tag) => tag.startsWith(prefix) && !tag.slice(prefix.length).startsWith("dev-"))
+    .map((tag) => {
+      const version = tag.slice(prefix.length);
+      return { tag, version, parsed: parseSemver(version, `tag ${tag}`) };
+    });
 }
 
 function latestTag(repo, skill) {
