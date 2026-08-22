@@ -154,4 +154,26 @@ UNRELATED_OUT="$(run_checker "$UNRELATED")" ||
   fail "unrelated repository changes must not require a dev-loop release"
 assert_contains "unrelated change" "$UNRELATED_OUT" "payload unchanged"
 
+SIBLING_TAGS="$TMP/sibling-tags"
+mkdir -p "$SIBLING_TAGS"
+init_fixture "$SIBLING_TAGS"
+git -C "$SIBLING_TAGS" tag dev-loop-dev-20260822
+git -C "$SIBLING_TAGS" tag dev-loop-preview-1
+git -C "$SIBLING_TAGS" tag dev-loop-preview.foo
+SIBLING_OUT="$(run_checker "$SIBLING_TAGS")" ||
+  fail "sibling or non-semver suffixed tags must be ignored"
+assert_contains "sibling tags ignored" "$SIBLING_OUT" "payload unchanged"
+
+MALFORMED_EXACT="$TMP/malformed-exact"
+mkdir -p "$MALFORMED_EXACT"
+init_fixture "$MALFORMED_EXACT"
+git -C "$MALFORMED_EXACT" tag dev-loop-1.26.22-invalid_meta
+set +e
+MALFORMED_EXACT_OUT="$(run_checker "$MALFORMED_EXACT" 2>&1)"
+MALFORMED_EXACT_EXIT=$?
+set -e
+[[ "$MALFORMED_EXACT_EXIT" -ne 0 ]] ||
+  fail "exact malformed semver tag must fail"
+assert_contains "malformed exact tag" "$MALFORMED_EXACT_OUT" "is not valid X.Y.Z or X.Y.Z-beta.N semver"
+
 printf 'test-plugin-release-drift: all checks passed\n'

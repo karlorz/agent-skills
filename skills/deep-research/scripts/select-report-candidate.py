@@ -39,7 +39,6 @@ REPAIRER = SCRIPTS_DIR / "repair-report-structure.py"
 REPAIRABLE_PATTERNS = [
     r"expected an H1 title",
     r"first substantive line must be",
-    r"role must contain 'direct-fetch' or 'search-summary only'",
     r"must be an http\(s\):// URL or start with 'local-record:'",
     r"local record .* has no path",
 ]

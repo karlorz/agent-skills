@@ -48,6 +48,8 @@ LEDGER_HEADER_CELLS = (
     "Exact URL or local record",
 )
 
+VALID_SOURCE_TYPES = {"primary", "secondary", "repository", "other"}
+
 STATUS_RE = re.compile(r"^\*\*Status: (Verified|Partial)\*\*$")
 H1_RE = re.compile(r"^#\s+(.+)$")
 H2_RE = re.compile(r"^##\s+(.+)$")
@@ -335,7 +337,7 @@ def validate_report(text, metadata, args):
                         f"source ledger row has an empty cell: {line.strip()!r}"
                     )
                     continue
-                ref, role, _publisher, _stype, _accessed, url = cells
+                ref, role, publisher, stype, accessed, url = cells
                 rm = REF_RE.fullmatch(ref)
                 if rm is None:
                     errors.append(
@@ -346,6 +348,23 @@ def validate_report(text, metadata, args):
                     errors.append(f"duplicate ledger ref {ref}")
                     continue
                 refs_seen.add(ref)
+
+                if stype not in VALID_SOURCE_TYPES:
+                    errors.append(
+                        f"ledger row {ref} source type must be one of {sorted(VALID_SOURCE_TYPES)}, got: {stype!r}"
+                    )
+                if not DATE_RE.match(accessed):
+                    errors.append(
+                        f"ledger row {ref} accessed date must be formatted as YYYY-MM-DD, got: {accessed!r}"
+                    )
+                else:
+                    try:
+                        datetime.strptime(accessed, "%Y-%m-%d")
+                    except ValueError:
+                        errors.append(
+                            f"ledger row {ref} accessed date {accessed!r} is not a real calendar date"
+                        )
+
                 rows.append(
                     {
                         "ref": ref,

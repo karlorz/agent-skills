@@ -204,6 +204,18 @@ required_s_scripts = (
     "scripts/select-report-candidate.py",
 )
 
+# Scratch pipeline anchors in SKILL.md
+required_scratch_pipeline = (
+    "${TMPDIR:-/tmp}/deep-research/",
+    "fallback-input.json",
+    "fallback.md",
+    "candidate.md",
+    "lint.json",
+    "selection.json",
+    "final-report.md",
+    "never write scratch artifacts into the vault",
+)
+
 # ── Explicit D-only exclusions ───────────────────────────────────────────────
 # Production S must NEVER contain these strings/concepts.
 prohibited_d_only_features = (
@@ -293,6 +305,10 @@ def main() -> int:
     for phrase in required_s_scripts:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing script anchor: {phrase!r}")
+
+    for phrase in required_scratch_pipeline:
+        if phrase not in skill_text:
+            failures.append(f"SKILL.md missing scratch pipeline ref: {phrase!r}")
 
     for phrase in required_literal_headings:
         if phrase not in skill_text:

@@ -5,13 +5,11 @@ Allowed repairs:
 
 * After ``**Status: Verified|Partial**``, the next substantive line must be an
   H1. Insert or move an H1; keep any interposed note after that H1.
-* External ledger roles missing ``direct-fetch``, ``search-summary only``, or
-  ``retained-without-citation`` get a prefix (``direct-fetch; `` for http(s)
-  rows, otherwise ``search-summary only; ``).
 * Non-URL path cells get a ``local-record:`` prefix when missing.
 
 The repairer must not change Status, claim sentences, Coverage, existing URLs,
-or invent ``sha256=`` hashes.
+or invent role routes (such as ``direct-fetch`` or ``search-summary only``)
+or ``sha256=`` hashes.
 
 Stdlib only; no network, no Docker.
 """
@@ -191,16 +189,15 @@ def repair_ledger(lines: list[str]) -> tuple[list[str], list[str]]:
         record_stripped = record.strip()
         lower = record_stripped.lower()
         if lower.startswith("http://") or lower.startswith("https://"):
-            if not role_has_token(role):
-                role = f"direct-fetch; {role}" if role else "direct-fetch"
+            # Structure-only repair must not guess or invent route tokens (direct-fetch or search-summary only)
+            pass
         elif lower.startswith("local-record:"):
             pass
         elif looks_like_path(record_stripped):
             record = f"local-record: {record_stripped}"
             # Local rows do not require fetch tokens.
         else:
-            if not role_has_token(role):
-                role = f"search-summary only; {role}" if role else "search-summary only"
+            pass
         if role != original_role or record != original_record:
             lines[i] = join_cells([ref, role, publisher, stype, accessed, record]) + "\n"
             if role != original_role:

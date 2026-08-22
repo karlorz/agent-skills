@@ -120,13 +120,18 @@ function matchingTags(repo, skill) {
   const prefix = `${skill}-`;
   const output = runGit(repo, ["tag", "--list", `${prefix}*`]).stdout.trim();
   if (!output) return [];
-  return output
-    .split(/\r?\n/)
-    .filter((tag) => tag.startsWith(prefix) && !tag.slice(prefix.length).startsWith("dev-"))
-    .map((tag) => {
-      const version = tag.slice(prefix.length);
-      return { tag, version, parsed: parseSemver(version, `tag ${tag}`) };
-    });
+  const tags = [];
+  for (const tag of output.split(/\r?\n/)) {
+    if (!tag.startsWith(prefix)) continue;
+    const version = tag.slice(prefix.length);
+    // General rule: if version does not start with a digit, ignore as sibling / non-semver suffix
+    if (!/^[0-9]/.test(version)) {
+      continue;
+    }
+    // If it starts with a digit, it is an intended release tag and must parse as valid semver
+    tags.push({ tag, version, parsed: parseSemver(version, `tag ${tag}`) });
+  }
+  return tags;
 }
 
 function latestTag(repo, skill) {

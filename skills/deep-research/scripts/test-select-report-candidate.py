@@ -45,7 +45,7 @@ def valid_report_text(title: str = "Valid Report") -> str:
 
 
 def repairable_report_text() -> str:
-    """Report with repairable defects (missing H1 after status, unadorned role)."""
+    """Report with repairable defects (missing H1 after status, un-prefixed local record)."""
     return (
         "**Status: Verified**\n\n"
         "A note before H1 that is not an H1.\n\n"
@@ -60,7 +60,7 @@ def repairable_report_text() -> str:
         "## Sources\n\n"
         f"{LEDGER_HEADER}\n"
         f"{LEDGER_DIVIDER}\n"
-        "| S1 | primary evidence | Example Publisher | primary | 2026-08-13 | https://example.test/source |\n\n"
+        "| S1 | direct-fetch; primary evidence | Example Publisher | primary | 2026-08-13 | /tmp/local/source.txt sha256=" + "a" * 64 + " |\n\n"
         "## Coverage and uncertainty\n\n"
         "- All planned questions returned usable structured research.\n"
     )
@@ -232,6 +232,37 @@ def main() -> int:
         assert sel["fallback_lint"]["ok"] is False
         assert len(sel["fallback_lint"]["errors"]) > 0
         assert sel["final_lint_errors"] == sel["candidate_lint"]["errors"]
+
+        # Case 5: Ambiguous external row without fetch token must NOT be repaired into direct-fetch, causing fallback selection
+        ambiguous_external = (
+            "**Status: Verified**\n\n"
+            "# Valid title\n\n"
+            "Consultation remains open [S1].\n\n"
+            "## Freshness & Verification Status\n\n"
+            "| Claim | Status | Source route | Notes |\n"
+            "| --- | --- | --- | --- |\n"
+            "| Open | externally verified | direct-fetch → primary | [S1] |\n\n"
+            "## Verification Methods\n\n"
+            "Open official notice.\n\n"
+            "## Sources\n\n"
+            f"{LEDGER_HEADER}\n"
+            f"{LEDGER_DIVIDER}\n"
+            "| S1 | official announcement | Publisher | primary | 2026-08-13 | https://example.test/official |\n\n"
+            "## Coverage and uncertainty\n\n"
+            "- **Topic-inherent unknown:** final adoption remains undecided.\n"
+        )
+        amb_cand = root / "amb_cand.md"
+        amb_cand.write_text(ambiguous_external, encoding="utf-8")
+        amb_fall = root / "amb_fall.md"
+        amb_fall.write_text(valid_fallback_text(), encoding="utf-8")
+        amb_out = root / "amb_out.md"
+        amb_lint = root / "amb_lint.json"
+        amb_sel = root / "amb_sel.json"
+        res = invoke_selector(amb_cand, amb_fall, amb_out, amb_lint, amb_sel)
+        assert res.returncode == 0, f"case 5 failed: {res.stderr}"
+        sel = json.loads(amb_sel.read_text(encoding="utf-8"))
+        assert sel["selected"] == "fallback", sel
+        assert amb_out.read_text(encoding="utf-8") == amb_fall.read_text(encoding="utf-8")
 
     return 0
 

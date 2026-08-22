@@ -44,7 +44,7 @@ def broken_identity() -> str:
         "\n"
         f"{LEDGER_HEADER}\n"
         f"{LEDGER_DIVIDER}\n"
-        "| S1 | 全部主张的主要依据 | Publisher | primary | 2026-08-13 | https://example.test/official |\n"
+        "| S1 | direct-fetch; 全部主张的主要依据 | Publisher | primary | 2026-08-13 | https://example.test/official |\n"
         "| S2 | 本地说明 | Local notes | repository | 2026-08-13 | 本地路径：/tmp/hstech_research/ |\n"
         "\n"
         "## Coverage and uncertainty\n"
@@ -125,6 +125,35 @@ def main() -> int:
         moved = [line for line in moved_dest.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert moved[0] == "**Status: Verified**"
         assert moved[1] == "# Late title"
+
+        # Ambiguous external row without direct-fetch or search-summary only must NOT be guessed as direct-fetch
+        ambiguous_external = (
+            "**Status: Verified**\n\n"
+            "# Valid title\n\n"
+            "Consultation remains open [S1].\n\n"
+            "## Freshness & Verification Status\n\n"
+            "| Claim | Status | Source route | Notes |\n"
+            "| --- | --- | --- | --- |\n"
+            "| Open | externally verified | external route → primary | [S1] |\n\n"
+            "## Verification Methods\n\n"
+            "Open official notice.\n\n"
+            "## Sources\n\n"
+            f"{LEDGER_HEADER}\n"
+            f"{LEDGER_DIVIDER}\n"
+            "| S1 | official announcement | Publisher | primary | 2026-08-13 | https://example.test/official |\n\n"
+            "## Coverage and uncertainty\n\n"
+            "- **Topic-inherent unknown:** final adoption remains undecided.\n"
+        )
+        amb_src = root / "ambiguous.md"
+        amb_dest = root / "ambiguous_repaired.md"
+        amb_src.write_text(ambiguous_external, encoding="utf-8")
+        amb_summary = invoke_repair(amb_src, amb_dest)
+        amb_repaired = amb_dest.read_text(encoding="utf-8")
+        assert "direct-fetch" not in amb_repaired, "repair must not invent direct-fetch for ambiguous external rows"
+        assert amb_summary["changed"] is False, "ambiguous external row should not be changed"
+        amb_lint = invoke_lint(amb_dest)
+        assert amb_lint["ok"] is False, "ambiguous external row must still be rejected by linter"
+        assert any("role must contain 'direct-fetch' or 'search-summary only'" in err for err in amb_lint["errors"])
     print("repair-report-structure: ok")
     return 0
 

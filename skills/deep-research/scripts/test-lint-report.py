@@ -253,6 +253,53 @@ def main() -> int:
         )
         assert_valid(disclosed_search_summary)
 
+        # Ledger cell validations: Source type and Accessed date
+        invalid_source_type = root / "invalid-source-type.md"
+        invalid_source_type.write_text(
+            report(
+                sources=(
+                    "| S1 | direct-fetch; retained official evidence | Publisher / official notice | invalid_type | 2026-08-13 | https://example.test/official |"
+                )
+            ),
+            encoding="utf-8",
+        )
+        assert_invalid(invalid_source_type, "source type must be one of")
+
+        malformed_accessed = root / "malformed-accessed.md"
+        malformed_accessed.write_text(
+            report(
+                sources=(
+                    "| S1 | direct-fetch; retained official evidence | Publisher / official notice | primary | 2026/08/13 | https://example.test/official |"
+                )
+            ),
+            encoding="utf-8",
+        )
+        assert_invalid(malformed_accessed, "accessed date")
+
+        impossible_accessed = root / "impossible-accessed.md"
+        impossible_accessed.write_text(
+            report(
+                sources=(
+                    "| S1 | direct-fetch; retained official evidence | Publisher / official notice | primary | 2026-02-30 | https://example.test/official |"
+                )
+            ),
+            encoding="utf-8",
+        )
+        assert_invalid(impossible_accessed, "accessed date")
+
+        # Valid positive source types
+        for valid_stype in ("primary", "secondary", "repository", "other"):
+            stype_md = root / f"valid-stype-{valid_stype}.md"
+            stype_md.write_text(
+                report(
+                    sources=(
+                        f"| S1 | direct-fetch; retained evidence | Publisher | {valid_stype} | 2026-08-13 | https://example.test/official |"
+                    )
+                ),
+                encoding="utf-8",
+            )
+            assert_valid(stype_md)
+
         volatile_local = root / "volatile-local.md"
         volatile_local.write_text(
             report(
