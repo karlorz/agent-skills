@@ -176,10 +176,7 @@ verification.
 
 ## Structurally valid fallback
 
-This is a **structurally valid fallback**, not an isolated bullet list. When normal synthesis is empty, malformed, omits required content,
-or has invalid Mermaid syntax, return a `Partial` report with the **Status header, H1 title**, `## 1. Findings`, the preserved retained ledger, and **all four audit headings**. Its Coverage has an **explicit evidence-gap Coverage entry** naming the invalid synthesis or unavailable evidence. Never return an
-empty report. Preserve the ledger rows accumulated before synthesis; do not
-invent citations, source facts, URLs, or conclusions.
+This is a **structurally valid fallback**, not an isolated bullet list. Before synthesis, construct the retained-claim and complete source-ledger checkpoint via `scripts/build-fallback-report.py`. The builder uses retained structured evidence, not malformed final prose. When normal synthesis is empty, malformed, omits required content, or has invalid Mermaid syntax, candidate selection emits the prebuilt `Partial` fallback report with the **Status header, H1 title**, `## 1. Findings`, the preserved retained ledger, and **all four audit headings**. Its Coverage has an **explicit evidence-gap Coverage entry** naming the synthesis/report-format failure or unavailable evidence. Never return an empty report. Candidate selection runs candidate lint → repair → re-lint → fallback selection. Fallback is always Partial with a synthesis-format Evidence gap; the builder and selector never change or invent evidence, claims, URLs, source roles, hashes, or Verified status. Fallback linter failure is a hard report-contract failure. Preserve the ledger rows accumulated before synthesis; do not invent citations, source facts, URLs, or conclusions.
 
 ## --reuse-s-template (optional, interactive only)
 

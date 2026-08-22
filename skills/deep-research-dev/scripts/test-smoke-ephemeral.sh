@@ -323,13 +323,21 @@ Open the fixture URL.
 - **Topic-inherent unknown:** no additional decision is published.
 EOF
 
+# (h) malformed q3-shaped report where stub creates valid fallback checkpoint
+cat > "$TMP/h.full" <<'EOF'
+The synthesizer encountered formatting issues.===REPORT===
+Here is unstructured notes without status or H1.
+## Overview
+Some notes.
+EOF
+
 # ---- stub grok (never invokes the real CLI) ---------------------------------
 mkdir -p "$TMP/bin"
-cat > "$TMP/bin/grok" <<'EOF'
+cat > "$TMP/bin/grok" <<EOF
 #!/usr/bin/env bash
-if [[ "${1:-}" == "inspect" && "${2:-}" == "--json" ]]; then
-  if [[ -n "${GROK_STUB_INSPECT_PATH:-}" ]]; then
-    python3 - "$GROK_STUB_INSPECT_PATH" <<'PY'
+if [[ "\${1:-}" == "inspect" && "\${2:-}" == "--json" ]]; then
+  if [[ -n "\${GROK_STUB_INSPECT_PATH:-}" ]]; then
+    python3 - "\$GROK_STUB_INSPECT_PATH" <<'PY'
 import json
 import sys
 print(json.dumps({"skills": [{
@@ -342,11 +350,43 @@ PY
   printf '%s\n' '{"skills":[]}'
   exit 0
 fi
-if [[ -n "${GROK_STUB_CALLED:-}" ]]; then
-  touch "$GROK_STUB_CALLED"
+if [[ -n "\${GROK_STUB_CALLED:-}" ]]; then
+  touch "\$GROK_STUB_CALLED"
 fi
-if [[ -n "${GROK_STUB_SESSION_ROOT:-}" ]]; then
-  python3 - "$GROK_STUB_SESSION_ROOT" "${GROK_STUB_SESSION_ID:-fresh-session}" "${GROK_STUB_QUERY:-}" <<'PY'
+if [[ -n "\${GROK_STUB_CREATE_FALLBACK:-}" && -n "\${GROK_STUB_FALLBACK_DIR:-}" ]]; then
+  python3 - "\${GROK_STUB_FALLBACK_DIR}" <<'PY'
+import json
+import sys
+from pathlib import Path
+out_dir = Path(sys.argv[1])
+input_data = {
+    "title": "Fallback Smoke Report",
+    "evidence_cutoff": "2026-08-12",
+    "verification_date": "2026-08-13",
+    "scope": "smoke fallback scope",
+    "navigation": ["Capture", "Ledger"],
+    "claims": [{"text": "Retained fallback claim.", "refs": ["S1"]}],
+    "freshness_rows": [["Fallback claim", "externally verified", "direct-fetch → primary", "[S1]"]],
+    "verification_methods": ["Check the official fallback source."],
+    "ledger_rows": [{
+        "ref": "S1",
+        "role": "direct-fetch; retained fallback fixture",
+        "publisher_title": "Publisher / official source",
+        "source_type": "primary",
+        "accessed": "2026-08-13",
+        "record": "https://example.test/fixture",
+    }],
+    "evidence_gap_reason": "synthesis/report-format failure: malformed q3 prose; pre-synthesis fallback checkpoint emitted.",
+}
+(out_dir / "fallback-input.json").write_text(json.dumps(input_data, indent=2), encoding="utf-8")
+PY
+  BUILDER_SCRIPT="$SCRIPT_DIR/build-fallback-report.py"
+  if [[ -f "\$BUILDER_SCRIPT" ]]; then
+    python3 "\$BUILDER_SCRIPT" "\$GROK_STUB_FALLBACK_DIR/fallback-input.json" --output "\$GROK_STUB_FALLBACK_DIR/fallback.md"
+  fi
+fi
+if [[ -n "\${GROK_STUB_SESSION_ROOT:-}" ]]; then
+  python3 - "\$GROK_STUB_SESSION_ROOT" "\${GROK_STUB_SESSION_ID:-fresh-session}" "\${GROK_STUB_QUERY:-}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -376,8 +416,8 @@ records = [
 )
 PY
 fi
-cat "$GROK_STUB_OUTPUT"
-exit "${GROK_STUB_EXIT:-0}"
+cat "\$GROK_STUB_OUTPUT"
+exit "\${GROK_STUB_EXIT:-0}"
 EOF
 chmod +x "$TMP/bin/grok"
 # stub date: fixed capture timestamp lets synthetic session metadata satisfy
@@ -450,7 +490,7 @@ else
 fi
 
 EXPECTED_PLUGIN_ROOT="$TMP/expected-plugin"
-mkdir -p "$EXPECTED_PLUGIN_ROOT/skills/deep-research-dev" "$EXPECTED_PLUGIN_ROOT/.claude-plugin"
+cp -R "$SCRIPT_DIR/.." "$EXPECTED_PLUGIN_ROOT"
 EXPECTED_SKILL="$EXPECTED_PLUGIN_ROOT/skills/deep-research-dev/SKILL.md"
 printf '%s\n' '---' 'name: deep-research-dev' '---' >"$EXPECTED_SKILL"
 cat >"$EXPECTED_PLUGIN_ROOT/.claude-plugin/plugin.json" <<'EOF'
@@ -499,6 +539,15 @@ run_cell d "$TMP/d.full" "$TMP/d.expected" || true
 run_cell e "$TMP/e.full" "$TMP/e.expected" || true
 run_cell f "$TMP/f.full" "$TMP/f.expected" || true
 run_cell g "$TMP/g.full" "$TMP/g.expected" || true
+
+# run cell h (fallback selection for malformed candidate)
+mkdir -p "$TMP/run-h"
+GROK_STUB_OUTPUT="$TMP/h.full" GROK_STUB_EXIT=0 \
+  GROK_STUB_CREATE_FALLBACK=1 GROK_STUB_FALLBACK_DIR="$TMP/run-h" \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-h" \
+  DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+  GROK_AGENT=1 bash "$SMOKE" "test query h" "$TMP/run-h" \
+  >"$TMP/run-h.log" 2>&1 || true
 
 # ---- section 2: metadata and post-capture contracts -------------------------
 # check_meta <label> <meta.json> <exp_exit> <exp_outcome> [exp_model]
@@ -565,6 +614,7 @@ assert meta["report_lint"] == "lint.json", meta
 assert meta["report_lint_ok"] is True, meta
 assert meta["report_lint_exit_code"] == 0, meta
 assert meta["report_lint_errors"] == [], meta
+assert meta.get("report_candidate_selected") == "repaired", meta
 assert lint["ok"] is True, lint
 assert "# Repaired Smoke Report" in cell, cell
 PY
@@ -572,6 +622,28 @@ then
   ok "g: structure-repaired report is re-linted and persisted successfully"
 else
   bad "g: structure repair / re-lint metadata mismatch"
+fi
+
+# (h) demonstrates malformed q3 candidate falls back to prebuilt fallback checkpoint
+if python3 - "$TMP/run-h/meta.json" "$TMP/run-h/lint.json" "$TMP/run-h/cell.md" <<'PY'
+import json, sys
+from pathlib import Path
+meta = json.load(open(sys.argv[1], encoding="utf-8"))
+lint = json.load(open(sys.argv[2], encoding="utf-8"))
+cell = open(sys.argv[3], "r", encoding="utf-8").read()
+assert meta["report_lint"] == "lint.json", meta
+assert meta["report_lint_ok"] is True, meta
+assert meta["report_lint_exit_code"] == 0, meta
+assert meta["report_lint_errors"] == [], meta
+assert meta.get("report_candidate_selected") == "fallback", meta
+assert lint["ok"] is True, lint
+assert lint["status"] == "Partial", lint
+assert "# Fallback Smoke Report" in cell, cell
+PY
+then
+  ok "h: malformed candidate replaced by prebuilt fallback checkpoint"
+else
+  bad "h: fallback selection metadata mismatch (see $TMP/run-h.log)"
 fi
 if python3 - "$TMP/run-f/meta.json" "$TMP/run-f/lint.json" "$EXPECTED_SKILL" <<'PY'
 import hashlib
@@ -583,6 +655,7 @@ assert meta["report_lint"] == "lint.json", meta
 assert meta["report_lint_ok"] is True, meta
 assert meta["report_lint_exit_code"] == 0, meta
 assert meta["report_lint_errors"] == [], meta
+assert meta.get("report_candidate_selected") == "normal", meta
 assert lint["ok"] is True, lint
 assert meta["plugin_version"] == "0.1.0-test", meta
 assert meta["plugin_skill"] == sys.argv[3], meta
@@ -1056,6 +1129,14 @@ else
   bad "r9: stub grok invoked despite nonexistent vault override"
 fi
 
+# Prompt contains fallback paths and instructions
+if grep -Fq 'fallback-input.json' "$SMOKE" \
+  && grep -Fq 'fallback.md' "$SMOKE" \
+  && grep -Fq 'report-selection.json' "$SMOKE"; then
+  ok "smoke-ephemeral: prompt and runner define fallback paths"
+else
+  bad "smoke-ephemeral: missing fallback paths in prompt or runner"
+fi
 # Static assertions: smoke-ephemeral.sh must unconditionally pass required usage argv.
 if grep -Fq -e '--duration-s "$DURATION_S"' "$SMOKE" \
   && grep -Fq -e '--lint-json "$LINT"' "$SMOKE" \

@@ -85,6 +85,8 @@ PROVENANCE_HELPER="$SCRIPT_DIR/capture-session-provenance.py"
 REPORT_LINTER="$SCRIPT_DIR/lint-report.py"
 USAGE_HELPER="$SCRIPT_DIR/record-usage.py"
 REPAIR_HELPER="$SCRIPT_DIR/repair-report-structure.py"
+FALLBACK_BUILDER="$SCRIPT_DIR/build-fallback-report.py"
+SELECTOR_HELPER="$SCRIPT_DIR/select-report-candidate.py"
 if [[ -n "${DEEP_RESEARCH_DEV_SESSIONS_ROOT:-}" ]]; then
   # A caller-provided sessions root is test-only; snapshot it if available but
   # never create it here. A missing root records unavailable provenance after
@@ -103,6 +105,8 @@ fi
 [[ -f "$REPORT_LINTER" ]] || { echo "error: report linter missing: $REPORT_LINTER" >&2; exit 3; }
 [[ -f "$USAGE_HELPER" ]] || { echo "error: usage helper missing: $USAGE_HELPER" >&2; exit 3; }
 [[ -f "$REPAIR_HELPER" ]] || { echo "error: repair helper missing: $REPAIR_HELPER" >&2; exit 3; }
+[[ -f "$FALLBACK_BUILDER" ]] || { echo "error: fallback builder missing: $FALLBACK_BUILDER" >&2; exit 3; }
+[[ -f "$SELECTOR_HELPER" ]] || { echo "error: selector helper missing: $SELECTOR_HELPER" >&2; exit 3; }
 
 EXPECTED_PLUGIN_ROOT="${DEEP_RESEARCH_DEV_PLUGIN_ROOT:-$PLUGIN_ROOT}"
 EXPECTED_PLUGIN_ROOT="$(python3 - "$EXPECTED_PLUGIN_ROOT" <<'PY'
@@ -316,11 +320,21 @@ META="$OUT_DIR/meta.json"
 PROVENANCE="$OUT_DIR/provenance.json"
 FROZEN_SUMMARY="$OUT_DIR/session-summary.json"
 LINT="$OUT_DIR/lint.json"
+FALLBACK_INPUT="$OUT_DIR/fallback-input.json"
+FALLBACK_MD="$OUT_DIR/fallback.md"
+SELECTION_JSON="$OUT_DIR/report-selection.json"
 RUN_ID="$(basename "$OUT_DIR")"
 QUERY_ID="$(printf '%s' "$QUERY" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-' | sed 's/^-*//; s/-*$//' | cut -c1-32)"
 [[ -n "$QUERY_ID" ]] || QUERY_ID="query"
 
 PROMPT="/deep-research-dev:deep-research-dev --ephemeral --unattended ${QUERY}
+
+Before normal synthesis:
+1. Write the retained-claim and source-ledger JSON to:
+$FALLBACK_INPUT
+2. Run the installed plugin fallback builder to generate:
+$FALLBACK_MD
+Do not change fallback.md after synthesis.
 
 When the research report is complete, print a line exactly:
 ===REPORT===
@@ -441,62 +455,40 @@ if meta.get("session_provenance"):
 meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 
-# Run the deterministic output linter after extraction. If lint reports
-# identity, English role, or local-record prefix errors, apply structure-only
-# repair and re-lint. Persist the final lint.json (and optional lint.before.json).
-LINT_ARGS=("$CELL" --metadata "$META" --artifact-root "$OUT_DIR")
+# Run deterministic candidate selection: normal candidate -> repair -> fallback.
+# Selection metadata records candidate lint, repair attempts, and final chosen mode.
+SELECTOR_ARGS=(
+  --candidate "$CELL"
+  --fallback "$FALLBACK_MD"
+  --output "$CELL"
+  --lint-json "$LINT"
+  --selection-json "$SELECTION_JSON"
+  --metadata "$META"
+  --artifact-root "$OUT_DIR"
+)
 if [[ -n "$EVIDENCE_CUTOFF" ]]; then
-  LINT_ARGS+=(--cutoff "$EVIDENCE_CUTOFF")
+  SELECTOR_ARGS+=(--cutoff "$EVIDENCE_CUTOFF")
 fi
-LINT_RC=0
-python3 "$REPORT_LINTER" "${LINT_ARGS[@]}" >"$LINT" || LINT_RC=$?
+SELECTOR_RC=0
+python3 "$SELECTOR_HELPER" "${SELECTOR_ARGS[@]}" >/dev/null 2>&1 || SELECTOR_RC=$?
 
-# Structure-only repair trigger: only if lint failed and errors contain identity,
-# English role token, or local-record prefix issues.
-NEEDS_REPAIR="$(python3 - "$LINT" <<'PY'
-import json, re, sys
-try:
-    data = json.load(open(sys.argv[1], encoding="utf-8"))
-    errors = data.get("errors", [])
-    if data.get("ok") is True or not errors:
-        print("no")
-        sys.exit(0)
-    # Check for identity / role / local-record prefix errors
-    patterns = [
-        r"expected an H1 title",
-        r"first substantive line must be",
-        r"role must contain 'direct-fetch' or 'search-summary only'",
-        r"must be an http\(s\):// URL or start with 'local-record:'",
-        r"local record .* has no path",
-    ]
-    if any(any(re.search(p, err) for p in patterns) for err in errors):
-        print("yes")
-    else:
-        print("no")
-except Exception:
-    print("no")
-PY
-)"
-
-if [[ "$NEEDS_REPAIR" == "yes" ]]; then
-  cp "$LINT" "$OUT_DIR/lint.before.json"
-  python3 "$REPAIR_HELPER" "$CELL" --output "$CELL" >/dev/null 2>&1 || true
-  LINT_RC=0
-  python3 "$REPORT_LINTER" "${LINT_ARGS[@]}" >"$LINT" || LINT_RC=$?
-fi
-
-python3 - "$META" "$LINT" "$LINT_RC" <<'PY'
+python3 - "$META" "$LINT" "$SELECTION_JSON" "$SELECTOR_RC" <<'PY'
 import json
 import sys
 from pathlib import Path
 meta_path = Path(sys.argv[1])
 lint_path = Path(sys.argv[2])
-lint_rc = int(sys.argv[3])
+selection_path = Path(sys.argv[3])
+selector_rc = int(sys.argv[4])
 meta = json.loads(meta_path.read_text(encoding="utf-8"))
-lint = json.loads(lint_path.read_text(encoding="utf-8"))
+lint = json.loads(lint_path.read_text(encoding="utf-8")) if lint_path.is_file() else {}
+selection = json.loads(selection_path.read_text(encoding="utf-8")) if selection_path.is_file() else {}
+
 meta["report_lint"] = "lint.json"
-meta["report_lint_exit_code"] = lint_rc
-meta["report_lint_ok"] = lint.get("ok") is True and lint_rc == 0
+meta["report_selection"] = "report-selection.json"
+meta["report_candidate_selected"] = selection.get("selected")
+meta["report_lint_exit_code"] = selector_rc
+meta["report_lint_ok"] = lint.get("ok") is True and selector_rc == 0
 meta["report_lint_errors"] = lint.get("errors", [])
 meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
