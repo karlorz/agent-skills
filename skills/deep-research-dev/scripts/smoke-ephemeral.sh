@@ -330,10 +330,10 @@ QUERY_ID="$(printf '%s' "$QUERY" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:
 PROMPT="/deep-research-dev:deep-research-dev --ephemeral --unattended ${QUERY}
 
 Before normal synthesis:
-1. Write the retained-claim and source-ledger JSON to:
+1. Write the retained-claim and complete source-ledger JSON with all required fields (title, evidence_cutoff, verification_date, scope, navigation with 1-4 labels, claims with refs, verification_methods, ledger_rows with 6 cells, evidence_gap_reason) to:
 $FALLBACK_INPUT
-2. Run the installed plugin fallback builder to generate:
-$FALLBACK_MD
+2. Run the exact installed plugin fallback builder:
+python3 \"$EXPECTED_PLUGIN_ROOT/scripts/build-fallback-report.py\" \"$FALLBACK_INPUT\" --output \"$FALLBACK_MD\" --artifact-root \"$OUT_DIR\"
 Do not change fallback.md after synthesis.
 
 When the research report is complete, print a line exactly:
@@ -533,3 +533,9 @@ printf '  full:     %s\n' "$FULL"
 printf '  meta:     %s\n' "$META"
 printf '  exit:     %d\n' "$EXIT_CODE"
 printf '  duration: %ds\n' "$DURATION_S"
+
+# If candidate selection failed (invalid candidate + invalid/missing fallback), fail closed
+if [[ "$SELECTOR_RC" -ne 0 ]]; then
+  echo "error: candidate selection contract failed (exit $SELECTOR_RC); malformed report not contract-clean" >&2
+  exit "$SELECTOR_RC"
+fi

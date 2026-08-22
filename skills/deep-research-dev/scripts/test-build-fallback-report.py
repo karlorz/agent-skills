@@ -54,7 +54,7 @@ def valid_input_payload() -> dict:
             {
                 "ref": "S2",
                 "role": "search-summary only; candidate constituent overview",
-                "publisher_title": "Secondary Analysis",
+                "publisher_title": "Secondary Analysis Org",
                 "source_type": "secondary",
                 "accessed": "2026-08-13",
                 "record": "https://example.test/summary",
@@ -64,9 +64,9 @@ def valid_input_payload() -> dict:
     }
 
 
-def invoke_builder(src: Path, dest: Path) -> subprocess.CompletedProcess[str]:
+def invoke_builder(src: Path, dest: Path, *extra_args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(HELPER), str(src), "--output", str(dest)],
+        [sys.executable, str(HELPER), str(src), "--output", str(dest), *extra_args],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -74,10 +74,12 @@ def invoke_builder(src: Path, dest: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def invoke_lint(path: Path, cutoff: str | None = None) -> dict:
+def invoke_lint(path: Path, cutoff: str | None = None, artifact_root: Path | None = None) -> dict:
     args = [sys.executable, str(LINTER), str(path)]
     if cutoff:
         args.extend(["--cutoff", cutoff])
+    if artifact_root:
+        args.extend(["--artifact-root", str(artifact_root)])
     completed = subprocess.run(
         args,
         text=True,
@@ -98,7 +100,7 @@ def main() -> int:
         input_path = root / "input.json"
         output_path = root / "fallback.md"
 
-        # 1. Valid input produces lint-clean Partial report
+        # 1. Valid input produces lint-clean Partial report and preserves 6 ledger cell values
         data = valid_input_payload()
         input_path.write_text(json.dumps(data), encoding="utf-8")
         res = invoke_builder(input_path, output_path)
@@ -111,54 +113,153 @@ def main() -> int:
         lines = [line for line in content.splitlines() if line.strip()]
         assert lines[0] == "**Status: Partial**", f"expected **Status: Partial**, got {lines[0]!r}"
         assert lines[1] == "# HSTECH consultation report", f"expected H1, got {lines[1]!r}"
-        assert "## 1. Findings" in content
-        assert "## Freshness & Verification Status" in content
-        assert "## Verification Methods" in content
-        assert "## Sources" in content
-        assert "## Coverage and uncertainty" in content
-        assert "Evidence gap:" in content or "Evidence gap —" in content or "Evidence gap -" in content
+        assert lines[2] == "> Evidence cutoff: 2026-08-12 · Verification date: 2026-08-13 · Scope: official methodology"
+        assert lines[3] == "**This report covers**"
+        assert lines[4] == "1. Proposal"
+        assert lines[5] == "2. Timeline"
+        assert lines[6] == "3. Undecided items"
+
+        # Audit headings in exact order
+        h2_indices = {
+            "## 1. Findings": content.index("## 1. Findings"),
+            "## Freshness & Verification Status": content.index("## Freshness & Verification Status"),
+            "## Verification Methods": content.index("## Verification Methods"),
+            "## Sources": content.index("## Sources"),
+            "## Coverage and uncertainty": content.index("## Coverage and uncertainty"),
+        }
+        assert (
+            h2_indices["## 1. Findings"]
+            < h2_indices["## Freshness & Verification Status"]
+            < h2_indices["## Verification Methods"]
+            < h2_indices["## Sources"]
+            < h2_indices["## Coverage and uncertainty"]
+        ), f"audit headings out of order: {h2_indices}"
+
+        # Check preserved ledger cells
+        assert "| S2 | search-summary only; candidate constituent overview | Secondary Analysis Org | secondary | 2026-08-13 | https://example.test/summary |" in content
 
         lint_res = invoke_lint(output_path, cutoff="2026-08-12")
         assert lint_res["ok"] is True, f"fallback report failed linting: {lint_res}"
         assert lint_res["status"] == "Partial"
 
-        # 2. Reject missing required fields: title, cutoff, scope, claims, ledger_rows
-        for req_field in ["title", "evidence_cutoff", "scope", "claims", "ledger_rows"]:
+        # 2. Strict required fields: title, cutoff, scope, navigation, claims, verification_methods, ledger_rows, evidence_gap_reason
+        required_fields = [
+            "title",
+            "evidence_cutoff",
+            "verification_date",
+            "scope",
+            "navigation",
+            "claims",
+            "verification_methods",
+            "ledger_rows",
+            "evidence_gap_reason",
+        ]
+        for req_field in required_fields:
             bad_data = valid_input_payload()
             del bad_data[req_field]
             input_path.write_text(json.dumps(bad_data), encoding="utf-8")
             res = invoke_builder(input_path, output_path)
             assert res.returncode != 0, f"expected failure when missing {req_field}"
 
-        # 3. Reject unresolved claim ref
+            # Also test empty value for each required field
+            bad_empty = valid_input_payload()
+            if isinstance(bad_empty[req_field], list):
+                bad_empty[req_field] = []
+            else:
+                bad_empty[req_field] = ""
+            input_path.write_text(json.dumps(bad_empty), encoding="utf-8")
+            res = invoke_builder(input_path, output_path)
+            assert res.returncode != 0, f"expected failure when {req_field} is empty"
+
+        # Navigation length must be 1-4
+        bad_nav = valid_input_payload()
+        bad_nav["navigation"] = ["1", "2", "3", "4", "5"]
+        input_path.write_text(json.dumps(bad_nav), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode != 0, "expected failure for navigation length > 4"
+
+        # 3. Optional freshness_rows: when omitted, default must NOT invent 'externally verified' or source route
+        no_freshness_data = valid_input_payload()
+        del no_freshness_data["freshness_rows"]
+        input_path.write_text(json.dumps(no_freshness_data), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode == 0, f"expected exit 0 when freshness_rows is omitted, got {res.returncode}: {res.stderr}"
+        no_fresh_content = output_path.read_text(encoding="utf-8")
+        assert "externally verified" not in no_fresh_content
+        assert "direct-fetch → primary" not in no_fresh_content
+        lint_no_fresh = invoke_lint(output_path, cutoff="2026-08-12")
+        assert lint_no_fresh["ok"] is True, f"no-freshness fallback report failed linting: {lint_no_fresh}"
+
+        # 4. Local-record validations: empty local-record, malformed sha256, valid sha256, artifact-root containment
+        # Empty local record path
+        bad_local_empty = valid_input_payload()
+        bad_local_empty["ledger_rows"][0]["record"] = "local-record: "
+        input_path.write_text(json.dumps(bad_local_empty), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode != 0, "expected failure for empty local-record"
+
+        # Malformed sha256
+        bad_sha = valid_input_payload()
+        bad_sha["ledger_rows"][0]["record"] = "local-record: /tmp/artifact.txt sha256=1234bad"
+        input_path.write_text(json.dumps(bad_sha), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode != 0, "expected failure for malformed sha256"
+
+        # Valid sha256 (64 hex characters)
+        valid_sha = valid_input_payload()
+        valid_sha["ledger_rows"][0]["record"] = "local-record: /tmp/artifact.txt sha256=" + ("a" * 64)
+        input_path.write_text(json.dumps(valid_sha), encoding="utf-8")
+        res = invoke_builder(input_path, output_path)
+        assert res.returncode == 0, f"expected success for valid sha256, got {res.returncode}: {res.stderr}"
+        lint_sha = invoke_lint(output_path, cutoff="2026-08-12")
+        assert lint_sha["ok"] is True, f"valid sha256 fallback report failed linting: {lint_sha}"
+
+        # Local record inside artifact root without sha256
+        artifact_dir = root / "artifacts"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        local_file = artifact_dir / "data.json"
+        local_file.write_text("{}", encoding="utf-8")
+        valid_artifact = valid_input_payload()
+        valid_artifact["ledger_rows"][0]["record"] = f"local-record: {local_file}"
+        input_path.write_text(json.dumps(valid_artifact), encoding="utf-8")
+        # Fails without artifact-root
+        res_no_root = invoke_builder(input_path, output_path)
+        assert res_no_root.returncode != 0, "expected failure for local record without sha256 and without artifact root"
+        # Succeeds with --artifact-root
+        res_with_root = invoke_builder(input_path, output_path, "--artifact-root", str(artifact_dir))
+        assert res_with_root.returncode == 0, f"expected success with --artifact-root: {res_with_root.stderr}"
+        lint_art = invoke_lint(output_path, cutoff="2026-08-12", artifact_root=artifact_dir)
+        assert lint_art["ok"] is True, f"artifact-root fallback report failed linting: {lint_art}"
+
+        # 5. Reject unresolved claim ref
         bad_data = valid_input_payload()
         bad_data["claims"].append({"text": "Unresolved claim.", "refs": ["S99"]})
         input_path.write_text(json.dumps(bad_data), encoding="utf-8")
         res = invoke_builder(input_path, output_path)
         assert res.returncode != 0, "expected failure on unresolved ref S99"
 
-        # 4. Reject duplicate ref in claim
+        # 6. Reject duplicate ref in claim
         bad_data = valid_input_payload()
         bad_data["claims"][0]["refs"] = ["S1", "S1"]
         input_path.write_text(json.dumps(bad_data), encoding="utf-8")
         res = invoke_builder(input_path, output_path)
         assert res.returncode != 0, "expected failure on duplicate ref in claim"
 
-        # 5. Reject attempt to supply or request Verified status
+        # 7. Reject attempt to supply or request Verified status
         bad_data = valid_input_payload()
         bad_data["status"] = "Verified"
         input_path.write_text(json.dumps(bad_data), encoding="utf-8")
         res = invoke_builder(input_path, output_path)
         assert res.returncode != 0, "expected failure when status is supplied (cannot request Verified)"
 
-        # 6. Reject empty ledger cells
+        # 8. Reject empty ledger cells
         bad_data = valid_input_payload()
         bad_data["ledger_rows"][0]["publisher_title"] = ""
         input_path.write_text(json.dumps(bad_data), encoding="utf-8")
         res = invoke_builder(input_path, output_path)
         assert res.returncode != 0, "expected failure on empty ledger cell"
 
-        # 7. Reject malformed record / URL
+        # 9. Reject malformed record / URL
         bad_data = valid_input_payload()
         bad_data["ledger_rows"][0]["record"] = "not-a-url-or-local"
         input_path.write_text(json.dumps(bad_data), encoding="utf-8")

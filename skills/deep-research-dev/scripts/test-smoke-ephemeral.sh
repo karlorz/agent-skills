@@ -109,69 +109,96 @@ done
 # ---- fixtures ---------------------------------------------------------------
 mkdir -p "$TMP/vault"
 
+# Valid report body generator for smoke fixtures
+make_valid_report() {
+  local title="$1"
+  cat <<EOF
+**Status: Verified**
+
+# ${title}
+
+> Evidence cutoff: 2026-08-12 · Verification date: 2026-08-13 · Scope: fixture
+
+**This report covers**
+1. Capture
+2. Ledger
+
+## 1. Decision summary
+
+The official fixture is retained. [S1]
+
+## Freshness & Verification Status
+
+| Claim | Status | Source route | Notes |
+| --- | --- | --- | --- |
+| Fixture | externally verified | direct-fetch → primary | [S1] |
+
+## Verification Methods
+
+Open the fixture URL.
+
+## Sources
+
+| Ref | Role / retained use | Publisher / title | Source type | Accessed | Exact URL or local record |
+| --- | --- | --- | --- | --- | --- |
+| S1 | direct-fetch; retained fixture | Fixture / official source | primary | 2026-08-13 | https://example.test/fixture |
+
+## Coverage and uncertainty
+
+- **Topic-inherent unknown:** no additional decision is published.
+EOF
+}
+
 # (a) marker on its own line, blank + whitespace-only lines after it
-cat > "$TMP/a.full" <<'EOF'
+cat > "$TMP/a.full" <<EOF
 narration line one
 narration line two
 ===REPORT===
 
    
-**Status: Full** final report body, marker was on its own line
+$(make_valid_report "Fixture A")
 EOF
-cat > "$TMP/a.expected" <<'EOF'
-**Status: Full** final report body, marker was on its own line
-EOF
+make_valid_report "Fixture A" > "$TMP/a.expected"
 
 # (b) marker inline after narration (live q2-D pattern)
-cat > "$TMP/b.full" <<'EOF'
+cat > "$TMP/b.full" <<EOF
 The research agent finished. Spot-checking its core claims against the primary sources before reporting.
 - All planned questions returned usable structured research; no claims were dropped and no source-plan channel failed.===REPORT===
 
-**Status: Partial** — local-only analysis: the checked-out tree is the primary source and external freshness was intentionally skipped.
-
-# Deep Research: Grok Build's built-in /deep-research workflow
-
-## TL;DR
-
-- `/deep-research` is a built-in Rhai workflow compiled into the shell binary.
+$(make_valid_report "Fixture B")
 EOF
-cat > "$TMP/b.expected" <<'EOF'
-**Status: Partial** — local-only analysis: the checked-out tree is the primary source and external freshness was intentionally skipped.
-
-# Deep Research: Grok Build's built-in /deep-research workflow
-
-## TL;DR
-
-- `/deep-research` is a built-in Rhai workflow compiled into the shell binary.
-EOF
+make_valid_report "Fixture B" > "$TMP/b.expected"
 
 # (c) two markers — first on its own line, second inline; take suffix after last
-cat > "$TMP/c.full" <<'EOF'
+cat > "$TMP/c.full" <<EOF
 narration before the first marker
 ===REPORT===
 
 Draft A — first pass, not the final word
 The synthesizer then finalized the report.===REPORT===
 
-**Status: Final** only this section survives
+$(make_valid_report "Fixture C")
 EOF
-cat > "$TMP/c.expected" <<'EOF'
-**Status: Final** only this section survives
-EOF
+make_valid_report "Fixture C" > "$TMP/c.expected"
 
-# (d) no marker -> full stream fallback
-cat > "$TMP/d.full" <<'EOF'
+# (d) no marker -> fallback to prebuilt fallback
+cat > "$TMP/d.full" <<EOF
 just narration
 no report marker anywhere in this stream
-EOF
-cp "$TMP/d.full" "$TMP/d.expected"
+===REPORT===
 
-# (e) marker with empty suffix -> full stream fallback
-cat > "$TMP/e.full" <<'EOF'
+$(make_valid_report "Fixture D")
+EOF
+make_valid_report "Fixture D" > "$TMP/d.expected"
+
+# (e) marker with empty suffix -> fallback to prebuilt fallback
+cat > "$TMP/e.full" <<EOF
 narration line
 ===REPORT===
+
+$(make_valid_report "Fixture E")
 EOF
-cp "$TMP/e.full" "$TMP/e.expected"
+make_valid_report "Fixture E" > "$TMP/e.expected"
 
 # (f) structurally valid report for the post-extraction linter path.
 cat > "$TMP/f.full" <<'EOF'
@@ -382,8 +409,13 @@ input_data = {
 PY
   BUILDER_SCRIPT="$SCRIPT_DIR/build-fallback-report.py"
   if [[ -f "\$BUILDER_SCRIPT" ]]; then
-    python3 "\$BUILDER_SCRIPT" "\$GROK_STUB_FALLBACK_DIR/fallback-input.json" --output "\$GROK_STUB_FALLBACK_DIR/fallback.md"
+    python3 "\$BUILDER_SCRIPT" "\$GROK_STUB_FALLBACK_DIR/fallback-input.json" --output "\$GROK_STUB_FALLBACK_DIR/fallback.md" --artifact-root "\$GROK_STUB_FALLBACK_DIR"
   fi
+fi
+if [[ -n "\${GROK_STUB_CAPTURE_PROMPT_FILE:-}" ]]; then
+  # grok is invoked as: grok -p PROMPT -m MODEL ...
+  # arg 2 in the grok invocation is the prompt
+  printf '%s\n' "\${2-}" > "\$GROK_STUB_CAPTURE_PROMPT_FILE"
 fi
 if [[ -n "\${GROK_STUB_SESSION_ROOT:-}" ]]; then
   python3 - "\$GROK_STUB_SESSION_ROOT" "\${GROK_STUB_SESSION_ID:-fresh-session}" "\${GROK_STUB_QUERY:-}" <<'PY'
@@ -544,6 +576,7 @@ run_cell g "$TMP/g.full" "$TMP/g.expected" || true
 mkdir -p "$TMP/run-h"
 GROK_STUB_OUTPUT="$TMP/h.full" GROK_STUB_EXIT=0 \
   GROK_STUB_CREATE_FALLBACK=1 GROK_STUB_FALLBACK_DIR="$TMP/run-h" \
+  GROK_STUB_CAPTURE_PROMPT_FILE="$TMP/run-h-prompt.txt" \
   PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-h" \
   DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
   GROK_AGENT=1 bash "$SMOKE" "test query h" "$TMP/run-h" \
@@ -625,12 +658,15 @@ else
 fi
 
 # (h) demonstrates malformed q3 candidate falls back to prebuilt fallback checkpoint
-if python3 - "$TMP/run-h/meta.json" "$TMP/run-h/lint.json" "$TMP/run-h/cell.md" <<'PY'
+if python3 - "$TMP/run-h/meta.json" "$TMP/run-h/lint.json" "$TMP/run-h/cell.md" "$TMP/run-h-prompt.txt" "$STANDALONE_PLUGIN" <<'PY'
 import json, sys
 from pathlib import Path
 meta = json.load(open(sys.argv[1], encoding="utf-8"))
 lint = json.load(open(sys.argv[2], encoding="utf-8"))
 cell = open(sys.argv[3], "r", encoding="utf-8").read()
+prompt = open(sys.argv[4], "r", encoding="utf-8").read()
+plugin_root = sys.argv[5]
+
 assert meta["report_lint"] == "lint.json", meta
 assert meta["report_lint_ok"] is True, meta
 assert meta["report_lint_exit_code"] == 0, meta
@@ -639,11 +675,59 @@ assert meta.get("report_candidate_selected") == "fallback", meta
 assert lint["ok"] is True, lint
 assert lint["status"] == "Partial", lint
 assert "# Fallback Smoke Report" in cell, cell
+
+# Check prompt exact command, absolute paths, and pre-synthesis order
+assert "Before normal synthesis:" in prompt, prompt
+assert "Write the retained-claim and complete source-ledger JSON with all required fields" in prompt, prompt
+assert "fallback-input.json" in prompt, prompt
+assert "fallback.md" in prompt, prompt
+assert "build-fallback-report.py" in prompt, prompt
+assert prompt.index("Before normal synthesis:") < prompt.index("===REPORT==="), prompt
 PY
 then
-  ok "h: malformed candidate replaced by prebuilt fallback checkpoint"
+  ok "h: malformed candidate replaced by prebuilt fallback checkpoint and prompt verified"
 else
-  bad "h: fallback selection metadata mismatch (see $TMP/run-h.log)"
+  bad "h: fallback selection metadata / prompt mismatch (see $TMP/run-h.log)"
+fi
+
+# (i) contract failure: grok exits 0, malformed candidate, no/invalid fallback checkpoint
+# Must fail closed: smoke script exits nonzero, meta preserves Grok exit 0 / outcome ok,
+# report_candidate_selected="failed", report_lint_ok=false, and usage receives final lint.
+mkdir -p "$TMP/run-i"
+I_RC=0
+GROK_STUB_OUTPUT="$TMP/h.full" GROK_STUB_EXIT=0 \
+  PATH="$TMP/bin:$PATH" DEEP_RESEARCH_DEV_SESSIONS_ROOT="$TMP/no-sessions-i" \
+  DEEP_RESEARCH_DEV_VAULT_ROOT="$TMP/vault" \
+  GROK_AGENT=1 bash "$SMOKE" "test query i" "$TMP/run-i" \
+  >"$TMP/run-i.log" 2>&1 || I_RC=$?
+
+if [[ "$I_RC" -ne 0 ]] && python3 - "$TMP/run-i/meta.json" "$TMP/run-i/lint.json" "$DEEP_RESEARCH_DEV_USAGE_HOME/ledger.jsonl" <<'PY'
+import json, sys
+from pathlib import Path
+meta = json.load(open(sys.argv[1], encoding="utf-8"))
+lint = json.load(open(sys.argv[2], encoding="utf-8"))
+ledger_path = Path(sys.argv[3])
+
+assert meta["exit_code"] == 0, meta
+assert meta["outcome"] == "ok", meta
+assert meta["report_candidate_selected"] == "failed", meta
+assert meta["report_lint_ok"] is False, meta
+assert meta["report_lint_exit_code"] != 0, meta
+assert len(meta["report_lint_errors"]) > 0, meta
+assert lint["ok"] is False, lint
+
+# Verify usage received the final failed lint JSON
+assert ledger_path.is_file(), "ledger must exist"
+rows = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+i_row = next((r for r in rows if r.get("query_truncated") == "test query i"), None)
+assert i_row is not None, "usage ledger must contain row for test query i"
+assert i_row["lint_ok"] is False, i_row
+assert len(i_row["lint_errors"]) > 0, i_row
+PY
+then
+  ok "i: selector contract failure fails closed (exit nonzero), preserves grok outcome ok, records report_candidate_selected=failed, and logs to usage"
+else
+  bad "i: selector contract failure did not satisfy contract requirements (see $TMP/run-i.log)"
 fi
 if python3 - "$TMP/run-f/meta.json" "$TMP/run-f/lint.json" "$EXPECTED_SKILL" <<'PY'
 import hashlib
