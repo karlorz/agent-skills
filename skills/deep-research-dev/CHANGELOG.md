@@ -2,6 +2,24 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.1.0-beta.6] - 2026-08-22
+
+- Added deterministic pre-synthesis fallback report builder
+  (`scripts/build-fallback-report.py`) that constructs a linter-clean
+  checkpoint from structured retained claims and a complete source ledger before
+  synthesis begins.
+- Candidate selection order (`scripts/select-report-candidate.py`): normal
+  synthesis → structure-only repaired (`scripts/repair-report-structure.py`) →
+  valid prebuilt fallback (`## 1. Findings`), with hard failure when no candidate is
+  contract-clean.
+- Fallback is always an honest `**Status: Partial**` report with a
+  synthesis/report-format `Evidence gap` in Coverage; the builder and selector
+  never invent or rewrite evidence, claims, URLs, source roles, hashes, or Verified status.
+  A **topic-inherent unknown** **does not by itself require `Partial`**.
+- Smoke artifacts and metadata now record `fallback-input.json`, `fallback.md`,
+  `report-selection.json`, and `report_candidate_selected` alongside `cell.md`,
+  `cell.full.md`, and `meta.json`.
+
 ## [0.1.0-beta.5] - 2026-08-21
 
 - Usage ledger writer rejects `lint_ok false` with empty `lint_errors`, and

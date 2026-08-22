@@ -82,9 +82,16 @@ bundled template is always the base.
   conflicts, or a required source route failed without a substitute. In every
   report language, `Evidence gap` is the literal English classification label
   used by the deterministic linter; its explanatory text may localize.
-- The fallback is structurally valid: it retains the status, H1, numbered
-  Findings, audit headings, ledger, and an explicit evidence-gap Coverage
-  entry rather than returning an isolated bullet list.
+- Candidate selection order (`scripts/select-report-candidate.py`) runs: normal
+  synthesis → structure-only repaired (`scripts/repair-report-structure.py`) →
+  valid prebuilt fallback checkpoint (`scripts/build-fallback-report.py`), with
+  hard nonzero selector exit when no candidate passes lint. The fallback is
+  structurally valid: it retains the status header, H1, numbered
+  Findings (`## 1. Findings`), audit headings, ledger, and an explicit
+  synthesis-format `Evidence gap` entry in Coverage rather than returning an
+  isolated bullet list or inventing evidence. See canonical contract details in
+  `skills/deep-research-dev/SKILL.md` and
+  `references/report-presentation-template.md`.
 
 Full behavior lives in `skills/deep-research-dev/SKILL.md`; version history in
 `CHANGELOG.md`.
@@ -126,9 +133,14 @@ wins discovery, the runner exits 3 rather than capturing the wrong version.
 The script runs `grok -p "/deep-research-dev:deep-research-dev --ephemeral
 --unattended <query> … ===REPORT===" -m "${MODEL:-flash-max}" --yolo
 --cwd … --output-format plain` and writes `cell.md` (final report),
-`cell.full.md` (full stream), `meta.json` (timestamps, process outcome, exact
-observed tool counts, and fail-closed session provenance), `provenance.json`,
-optional frozen `session-summary.json`, and `lint.json`. The model identity is
+`cell.full.md` (full stream), `fallback-input.json`, `fallback.md`,
+`report-selection.json`, `meta.json` (timestamps, process outcome, exit code,
+exact observed tool counts, fail-closed session provenance, and
+`report_candidate_selected`), `provenance.json`, optional frozen
+`session-summary.json`, and `lint.json`. When candidate selection fails
+(neither candidate, repair, nor prebuilt fallback is contract-clean), the
+runner exits nonzero while preserving original Grok process `exit_code` and
+`outcome` in metadata. The model identity is
 accepted only when one fresh decoded user-query record maps to the exact
 headless prompt; its agent identity and summary hash are capture evidence, not
 an eligibility filter. The runner requires a resolvable SkillWiki vault path:
