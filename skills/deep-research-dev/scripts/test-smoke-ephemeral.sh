@@ -418,25 +418,20 @@ if [[ -n "\${GROK_STUB_CAPTURE_PROMPT_FILE:-}" ]]; then
   printf '%s\n' "\${2-}" > "\$GROK_STUB_CAPTURE_PROMPT_FILE"
 fi
 if [[ -n "\${GROK_STUB_SESSION_ROOT:-}" ]]; then
-  python3 - "\$GROK_STUB_SESSION_ROOT" "\${GROK_STUB_SESSION_ID:-fresh-session}" "\${GROK_STUB_QUERY:-}" <<'PY'
+  python3 - "\$GROK_STUB_SESSION_ROOT" "\${GROK_STUB_SESSION_ID:-fresh-session}" "\${2-}" <<'PY'
 import json
 import sys
 from pathlib import Path
 root = Path(sys.argv[1]) / sys.argv[2]
-query = sys.argv[3]
+actual_prompt = sys.argv[3]
 root.mkdir(parents=True, exist_ok=True)
 (root / "summary.json").write_text(json.dumps({
     "agent_name": "grok-build-plan",
     "current_model_id": "deepseek-v4-flash-max",
     "created_at": "2026-08-13T00:00:00.500000Z",
 }) + "\n", encoding="utf-8")
-prompt = (
-    "/deep-research-dev:deep-research-dev --ephemeral --unattended " + query
-    + "\n\nWhen the research report is complete, print a line exactly:\n"
-    + "===REPORT===\nthen print the final report only (no tool narration)."
-)
 records = [
-    {"type": "user", "content": [{"type": "text", "text": "<user_query>\n" + prompt + "\n</user_query>"}]},
+    {"type": "user", "content": [{"type": "text", "text": "<user_query>\n" + actual_prompt + "\n</user_query>"}]},
     {"type": "assistant", "content": "", "tool_calls": [
         {"name": "web_fetch", "arguments": "{}"},
         {"name": "web_fetch", "arguments": "{}"},
@@ -783,7 +778,11 @@ from pathlib import Path
 out = Path(sys.argv[1])
 meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
 frozen = out / "session-summary.json"
+prompt_file = out / "invocation-prompt.txt"
+assert prompt_file.is_file(), "invocation-prompt.txt must exist"
+assert "Before normal synthesis:" in prompt_file.read_text(encoding="utf-8")
 assert meta["actual_model"] == "deepseek-v4-flash-max", meta
+assert "actual_model_observation_error" not in meta, meta
 assert meta["session_id"] == "fresh-multiline", meta
 assert meta["session_provenance"]["agent_name"] == "grok-build-plan", meta
 assert meta["session_provenance"]["summary_sha256"] == hashlib.sha256(frozen.read_bytes()).hexdigest(), meta

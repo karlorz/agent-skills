@@ -88,31 +88,48 @@ def write_session(
     return session
 
 
-def run(root: Path, before: Path, output: Path, query: str, *, started: str = STARTED) -> tuple[int, dict[str, object], str]:
+def run(
+    root: Path,
+    before: Path,
+    output: Path,
+    query: str | None = None,
+    *,
+    prompt_file: Path | None = None,
+    started: str = STARTED,
+) -> tuple[int, dict[str, object], str]:
+    cmd = [
+        sys.executable,
+        str(HELPER),
+        "resolve",
+        "--sessions-root",
+        str(root),
+        "--before",
+        str(before),
+        "--started",
+        started,
+        "--output",
+        str(output),
+        "--frozen-summary",
+        str(output.parent / "session-summary.json"),
+    ]
+    if query is not None:
+        cmd.extend(["--query", query])
+    if prompt_file is not None:
+        cmd.extend(["--prompt-file", str(prompt_file)])
     completed = subprocess.run(
-        [
-            sys.executable,
-            str(HELPER),
-            "resolve",
-            "--sessions-root",
-            str(root),
-            "--before",
-            str(before),
-            "--started",
-            started,
-            "--query",
-            query,
-            "--output",
-            str(output),
-            "--frozen-summary",
-            str(output.parent / "session-summary.json"),
-        ],
+        cmd,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
     )
-    return completed.returncode, json.loads(output.read_text(encoding="utf-8")), completed.stderr
+    res_dict = {}
+    if output.is_file():
+        try:
+            res_dict = json.loads(output.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return completed.returncode, res_dict, completed.stderr
 
 
 def snapshot(root: Path, output: Path) -> tuple[int, str]:
@@ -268,6 +285,112 @@ def main() -> int:
         code, result, stderr = run(root_invalid, before_invalid, Path(temp) / "invalid.json", "invalid", started="not-a-date")
         assert code == 1, (code, stderr, result)
         assert result["actual_model"] is None and "started timestamp" in result["observation_error"], result
+
+        # ---- TDD tests for --prompt-file exact matching ----
+        # Smoke prompt with fallback instructions
+        smoke_prompt_text = (
+            "/deep-research-dev:deep-research-dev --ephemeral --unattended smoke-fallback-query\n\n"
+            "Before normal synthesis:\n"
+            "1. Write the retained-claim and complete source-ledger JSON with all required fields to:\n"
+            "/path/to/fallback-input.json\n"
+            "2. Run the exact installed plugin fallback builder:\n"
+            "python3 \"/path/to/build-fallback-report.py\" \"/path/to/fallback-input.json\" --output \"/path/to/fallback.md\"\n\n"
+            "When the research report is complete, print a line exactly:\n"
+            "===REPORT===\n"
+            "then print the final report only (no tool narration)."
+        )
+        prompt_file = Path(temp) / "invocation-prompt.txt"
+        prompt_file.write_text(smoke_prompt_text, encoding="utf-8")
+
+        # 1. Session with new smoke prompt fails to match legacy reconstruction (--query)
+        root_smoke = Path(temp) / "smoke-prompt-sessions"
+        root_smoke.mkdir()
+        before_smoke = Path(temp) / "before-smoke.txt"
+        before_smoke.write_text("", encoding="utf-8")
+        write_session(
+            root_smoke,
+            "smoke-sess",
+            query="smoke-fallback-query",
+            exact_prompt=smoke_prompt_text,
+        )
+        code, result, stderr = run(root_smoke, before_smoke, Path(temp) / "legacy-fail.json", query="smoke-fallback-query")
+        assert code == 1, (code, stderr, result)
+        assert result["actual_model"] is None and "no matching" in result["observation_error"], result
+
+        # 2. Same session matches when resolve --prompt-file receives exact persisted prompt
+        code, result, stderr = run(
+            root_smoke,
+            before_smoke,
+            Path(temp) / "prompt-file-pass.json",
+            prompt_file=prompt_file,
+        )
+        assert code == 0, (code, stderr, result)
+        assert result["actual_model"] == "deepseek-v4-flash-max", result
+        assert result["session_id"] == "smoke-sess", result
+
+        # 3. One-character / prefix-extended prompt still fails closed
+        prompt_file_extended = Path(temp) / "prompt-extended.txt"
+        prompt_file_extended.write_text(smoke_prompt_text + "!", encoding="utf-8")
+        code, result, stderr = run(
+            root_smoke,
+            before_smoke,
+            Path(temp) / "prompt-extended-fail.json",
+            prompt_file=prompt_file_extended,
+        )
+        assert code == 1, (code, stderr, result)
+        assert result["actual_model"] is None and "no matching" in result["observation_error"], result
+
+        # 4. <user_query> wrapped and split-block exact prompt-file forms still match
+        root_wrapped_pf = Path(temp) / "wrapped-pf-sessions"
+        root_wrapped_pf.mkdir()
+        before_wrapped_pf = Path(temp) / "before-wrapped-pf.txt"
+        before_wrapped_pf.write_text("", encoding="utf-8")
+        write_session(
+            root_wrapped_pf,
+            "wrapped-pf",
+            query="ignored",
+            exact_prompt=smoke_prompt_text,
+            wrap_user_query=True,
+            split_prompt_blocks=True,
+            trailing_whitespace=True,
+        )
+        code, result, stderr = run(
+            root_wrapped_pf,
+            before_wrapped_pf,
+            Path(temp) / "wrapped-pf-pass.json",
+            prompt_file=prompt_file,
+        )
+        assert code == 0, (code, stderr, result)
+        assert result["session_id"] == "wrapped-pf", result
+
+        # 5. Missing / unreadable prompt file fails closed with deterministic observation error
+        missing_pf = Path(temp) / "nonexistent-prompt.txt"
+        code, result, stderr = run(
+            root_smoke,
+            before_smoke,
+            Path(temp) / "missing-pf.json",
+            prompt_file=missing_pf,
+        )
+        assert code == 1, (code, stderr, result)
+        assert result["actual_model"] is None, result
+        assert "cannot read prompt file" in result.get("observation_error", "") or "prompt file" in result.get("observation_error", ""), result
+
+        # 6. Both --query and --prompt-file or neither fails closed (or clear CLI error)
+        code, result, stderr = run(
+            root_smoke,
+            before_smoke,
+            Path(temp) / "neither.json",
+        )
+        assert code != 0, (code, stderr, result)
+
+        code, result, stderr = run(
+            root_smoke,
+            before_smoke,
+            Path(temp) / "both.json",
+            query="smoke-fallback-query",
+            prompt_file=prompt_file,
+        )
+        assert code != 0, (code, stderr, result)
 
     print("session provenance: ok")
     return 0

@@ -214,6 +214,27 @@ def run_resolve(args: argparse.Namespace) -> int:
         "actual_model_matches": [],
     }
 
+    if (args.query is None and args.prompt_file is None) or (
+        args.query is not None and args.prompt_file is not None
+    ):
+        observation["observation_error"] = (
+            "exactly one of --query or --prompt-file must be provided"
+        )
+        write_output(args.output, observation)
+        return 2
+
+    if args.prompt_file is not None:
+        try:
+            prompt_text = args.prompt_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            observation["observation_error"] = (
+                f"cannot read prompt file {args.prompt_file}: {exc}"
+            )
+            write_output(args.output, observation)
+            return 1
+    else:
+        prompt_text = build_prompt(args.query)
+
     started = parse_iso_aware(args.started)
     if started is None:
         observation["observation_error"] = (
@@ -241,7 +262,6 @@ def run_resolve(args: argparse.Namespace) -> int:
     fresh = [name for name in fresh if name not in before_ids]
     observation["fresh_session_ids"] = fresh
 
-    prompt_text = build_prompt(args.query)
     matches = [
         info
         for name in fresh
@@ -325,7 +345,10 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--sessions-root", required=True, metavar="PATH", type=Path)
     resolve.add_argument("--before", required=True, metavar="PATH", type=Path)
     resolve.add_argument("--started", required=True, metavar="ISO_Z")
-    resolve.add_argument("--query", required=True, metavar="QUERY")
+    resolve.add_argument("--query", required=False, default=None, metavar="QUERY")
+    resolve.add_argument(
+        "--prompt-file", required=False, default=None, metavar="PATH", type=Path
+    )
     resolve.add_argument("--output", required=True, metavar="OUTPUT.json", type=Path)
     resolve.add_argument("--frozen-summary", required=True, metavar="PATH", type=Path)
     return parser

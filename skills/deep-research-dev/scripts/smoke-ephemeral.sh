@@ -323,6 +323,7 @@ LINT="$OUT_DIR/lint.json"
 FALLBACK_INPUT="$OUT_DIR/fallback-input.json"
 FALLBACK_MD="$OUT_DIR/fallback.md"
 SELECTION_JSON="$OUT_DIR/report-selection.json"
+INVOCATION_PROMPT="$OUT_DIR/invocation-prompt.txt"
 RUN_ID="$(basename "$OUT_DIR")"
 QUERY_ID="$(printf '%s' "$QUERY" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-' | sed 's/^-*//; s/-*$//' | cut -c1-32)"
 [[ -n "$QUERY_ID" ]] || QUERY_ID="query"
@@ -339,6 +340,8 @@ Do not change fallback.md after synthesis.
 When the research report is complete, print a line exactly:
 ===REPORT===
 then print the final report only (no tool narration)."
+
+printf '%s\n' "$PROMPT" > "$INVOCATION_PROMPT"
 
 STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 START_EPOCH="$(date +%s)"
@@ -412,7 +415,7 @@ if [[ "$PROVENANCE_SNAPSHOT_RC" -eq 0 ]]; then
     --sessions-root "$SESSIONS_ROOT" \
     --before "$BEFORE_SESSIONS" \
     --started "$STARTED" \
-    --query "$QUERY" \
+    --prompt-file "$INVOCATION_PROMPT" \
     --output "$PROVENANCE" \
     --frozen-summary "$FROZEN_SUMMARY" || PROVENANCE_RC=$?
 else
