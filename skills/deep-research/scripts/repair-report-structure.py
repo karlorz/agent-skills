@@ -179,19 +179,16 @@ def repair_ledger(lines: list[str]) -> tuple[list[str], list[str]]:
         if len(cells) != 6:
             continue
         ref, role, publisher, stype, accessed, record = cells
-        original_role, original_record = role, record
+        original_record = record
         record_stripped = record.strip()
         lower = record_stripped.lower()
-        if lower.startswith("http://") or lower.startswith("https://"):
-            # Structure-only repair must not guess or invent route tokens (direct-fetch or search-summary only)
-            pass
-        elif lower.startswith("local-record:"):
-            pass
-        elif looks_like_path(record_stripped):
+        if (
+            not lower.startswith("http://")
+            and not lower.startswith("https://")
+            and not lower.startswith("local-record:")
+            and looks_like_path(record_stripped)
+        ):
             record = f"local-record: {record_stripped}"
-            # Local rows do not require fetch tokens.
-        else:
-            pass
         if record != original_record:
             lines[i] = join_cells([ref, role, publisher, stype, accessed, record]) + "\n"
             repairs.append(f"{ref} prefixed local-record:")

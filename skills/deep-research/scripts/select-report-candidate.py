@@ -85,7 +85,7 @@ def invoke_lint(
 def is_repairable(errors: list[str]) -> bool:
     if not errors:
         return False
-    return any(any(re.search(p, err) for p in REPAIRABLE_PATTERNS) for err in errors)
+    return any(re.search(p, err) for p in REPAIRABLE_PATTERNS for err in errors)
 
 
 def invoke_repair(src: Path, dest: Path) -> dict:

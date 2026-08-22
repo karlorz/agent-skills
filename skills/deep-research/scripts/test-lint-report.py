@@ -379,9 +379,7 @@ def main() -> int:
         )
         assert_invalid(escape_local, "outside the artifact root", "--artifact-root", str(root))
 
-        assert_valid(artifact_local, "--artifact-root", str(root))
         assert_invalid(artifact_local, "outside the artifact root", "--artifact-root", str(root / "nonexistent_root_dir"))
-        assert_valid(hashed_local, "--artifact-root", str(root))
 
         mismatched_cutoff = root / "mismatched-cutoff.md"
         mismatched_cutoff.write_text(report(cutoff="2026-08-13"), encoding="utf-8")

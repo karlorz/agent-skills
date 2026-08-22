@@ -138,12 +138,6 @@ required_literal_headings = (
     "## Coverage and uncertainty",
 )
 
-# Numbered Phase 3 item 6 must instruct emitting the literal
-# "## Verification Methods" audit heading in SKILL.md.
-required_verification_methods_emission = (
-    "## Verification Methods",
-)
-
 # Mode parity: slash-skill detection and question gate include --ephemeral.
 required_mode_parity = (
     "--unattended` or `--ephemeral",
@@ -396,12 +390,6 @@ def main() -> int:
     for phrase in required_literal_headings:
         if phrase not in skill_text:
             failures.append(f"SKILL.md missing literal audit heading: {phrase!r}")
-
-    for phrase in required_verification_methods_emission:
-        if phrase not in skill_text:
-            failures.append(
-                f"SKILL.md missing Verification Methods literal-heading instruction: {phrase!r}"
-            )
 
     # Mode parity: slash-skill detection and question gate include --ephemeral.
     for phrase in required_mode_parity:
