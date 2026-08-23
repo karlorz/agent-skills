@@ -71,8 +71,12 @@ The plugin runner sources that env file so GUI Claude does not need the variable
 
 ## MCP Architecture
 
-- **v1 (current):** stdio transport via `uvx --from git+https://github.com/karlorz/GrokSearch@grok-with-tavily grok-search`.
-- **Future:** Hosted HTTP MCP support will be introduced via a configuration update in `.mcp.json` (`type: "http"`).
+- **stdio (default):** `uvx --from git+https://github.com/karlorz/GrokSearch@grok-with-tavily grok-search` via `scripts/run-grok-search.sh`. Needs `GUDA_API_KEY` / `GUDA_BASE_URL`.
+- **http (additive):** official Cursor `type: "http"` in the same `.mcp.json` as `grok-search-http`. Points at cursor-box Tailscale `http://100.76.134.104:8800/mcp` with `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`.
+  - Operator supplies `GROK_SEARCH_MCP_TOKEN`. Do not reuse `GUDA_API_KEY`, `GROK_API_KEY`, `TAVILY_API_KEY`, or `FIRECRAWL_API_KEY`. No live keys in git.
+  - Never set the server bind to `0.0.0.0`. Tailscale-only.
+  - Optional CLI wrapper: `cursor-cli-http.example.json` (same shape; still no secrets).
+  - Same tools as stdio. Inbound `/mcp` is not the outbound `httpx` client.
 
 ## License
 

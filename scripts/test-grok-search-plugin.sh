@@ -47,6 +47,19 @@ if set(env) != {"GUDA_API_KEY", "GUDA_BASE_URL"}:
 if env["GUDA_API_KEY"] != "${GUDA_API_KEY}" or env["GUDA_BASE_URL"] != "${GUDA_BASE_URL}":
     raise SystemExit(f"{mcp_path}: env values must be unadorned ${{VAR}} interpolation")
 
+http_server = data["mcpServers"].get("grok-search-http")
+if not isinstance(http_server, dict):
+    raise SystemExit(f"{mcp_path}: missing additive mcpServers.grok-search-http")
+if http_server.get("type") != "http":
+    raise SystemExit(f"{mcp_path}: grok-search-http type must be http")
+if not http_server.get("url"):
+    raise SystemExit(f"{mcp_path}: grok-search-http url must be present")
+http_auth = (http_server.get("headers") or {}).get("Authorization")
+if http_auth != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
+    raise SystemExit(
+        f"{mcp_path}: headers.Authorization must be exactly Bearer ${{GROK_SEARCH_MCP_TOKEN}}"
+    )
+
 readme_text = texts[readme_path]
 if "plugin-chain" not in readme_text and "plugin-grok-search-grok-search" not in readme_text:
     raise SystemExit(f"{readme_path}: must mention plugin-chain or plugin-grok-search-grok-search")
@@ -87,9 +100,35 @@ if "env" in ex_server:
 if "REPLACE_WITH_PLUGIN_ROOT" not in "".join(ex_server.get("args") or []):
     raise SystemExit(f"{example}: args must use REPLACE_WITH_PLUGIN_ROOT")
 texts[example] = example.read_text(encoding="utf-8")
-blob = "".join(texts[p] for p in (manifest_path, mcp_path, skill_path, readme_path, example))
+
+http_example = root / "cursor-cli-http.example.json"
+try:
+    http_ex_text = http_example.read_text(encoding="utf-8")
+except FileNotFoundError:
+    raise SystemExit(f"missing {http_example}") from None
+http_ex = json.loads(http_ex_text)
+http_ex_server = (http_ex.get("mcpServers") or {}).get("grok-search-http")
+if not isinstance(http_ex_server, dict):
+    raise SystemExit(f"{http_example}: missing mcpServers.grok-search-http")
+if http_ex_server.get("type") != "http":
+    raise SystemExit(f"{http_example}: type must be http")
+if not http_ex_server.get("url"):
+    raise SystemExit(f"{http_example}: url must be present")
+http_ex_auth = (http_ex_server.get("headers") or {}).get("Authorization")
+if http_ex_auth != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
+    raise SystemExit(
+        f"{http_example}: headers.Authorization must be exactly Bearer ${{GROK_SEARCH_MCP_TOKEN}}"
+    )
+texts[http_example] = http_ex_text
+
+blob = "".join(
+    texts[p]
+    for p in (manifest_path, mcp_path, skill_path, readme_path, example, http_example)
+)
+allowed_bearer = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
+scanned = blob.replace(allowed_bearer, "")
 for needle in ("search.karldigi.dev", "code.guda.studio", "gsk_", "tvly-", "Bearer "):
-    if needle in blob:
+    if needle in scanned:
         raise SystemExit(f"forbidden token {needle!r} in plugin files")
 PY
 
