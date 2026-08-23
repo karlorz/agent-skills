@@ -7,6 +7,8 @@ description: "This skill should be used when the user needs live web search, cur
 
 Use this skill to perform live web searches, plan search intent, fetch web content, map site topologies, and extract citations.
 
+The same tools are available over stdio or the additive HTTP MCP (`type: http` to Tailscale `:8800/mcp` with `GROK_SEARCH_MCP_TOKEN`). Prefer whichever transport the host already has connected.
+
 ## Tool Workflow
 
 Follow this execution discipline when searching or fetching external information:

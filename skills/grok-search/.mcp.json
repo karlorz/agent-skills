@@ -10,6 +10,13 @@
         "GUDA_API_KEY": "${GUDA_API_KEY}",
         "GUDA_BASE_URL": "${GUDA_BASE_URL}"
       }
+    },
+    "grok-search-http": {
+      "type": "http",
+      "url": "http://100.76.134.104:8800/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GROK_SEARCH_MCP_TOKEN}"
+      }
     }
   }
 }
