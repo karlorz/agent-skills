@@ -1,0 +1,31 @@
+{
+  "name": "grok-search",
+  "version": "0.1.8",
+  "description": "Live web search, source extraction, URL fetching, and site mapping through the hosted GrokSearch HTTP MCP service.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "grok",
+    "search",
+    "web-search",
+    "mcp"
+  ],
+  "variables": {
+    "type": "object",
+    "properties": {
+      "GROK_SEARCH_MCP_TOKEN": {
+        "type": "string",
+        "title": "Grok Search gateway-keys bearer",
+        "description": "Gateway key created at https://search.karldigi.dev/admin/gateway-keys."
+      }
+    },
+    "required": [
+      "GROK_SEARCH_MCP_TOKEN"
+    ]
+  },
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json"
+}

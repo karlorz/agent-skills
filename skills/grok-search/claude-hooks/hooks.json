@@ -1,0 +1,17 @@
+{
+  "description": "Check grok-search readiness and pass the URL default through Claude's environment handoff without writing user config files.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/claude-hooks/session-start.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

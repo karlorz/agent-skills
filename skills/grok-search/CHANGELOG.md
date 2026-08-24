@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-08-25
+
+### Changed
+- Default the Claude/Grok HTTP MCP URL to `https://search.karldigi.dev/mcp` while preserving `GROK_SEARCH_MCP_URL` as an explicit override, avoiding a literal relative URL when the variable is unset.
+- Document that Grok requires an operator-provided gateway-keys bearer in process environment; SessionStart cannot inject the parent MCP environment and `mcp.env` is not auto-sourced.
+- Add a Cursor-native `.cursor-plugin` package with a required token variable and production `grok-search` HTTP MCP server; leftover `grok-search-http` is not a fallback.
+
 ## [0.1.7] - 2026-08-25
 
 ### Added

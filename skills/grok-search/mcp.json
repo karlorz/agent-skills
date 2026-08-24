@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://search.karldigi.dev/mcp",
       "headers": {
-        "Authorization": "Bearer ${env:GROK_SEARCH_MCP_TOKEN}"
+        "Authorization": "Bearer ${GROK_SEARCH_MCP_TOKEN}"
       }
     }
   }

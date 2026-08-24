@@ -7,59 +7,46 @@ description: "This skill should be used when the user needs live web search, cur
 
 Use this skill to perform live web searches, plan search intent, fetch web content, map site topologies, and extract citations.
 
-Grok-search is HTTP MCP only (`type: http`). The host expands `GROK_SEARCH_MCP_URL` and `GROK_SEARCH_MCP_TOKEN`. Prefer connected `grok-search` tools. Do not start a local stdio `uvx` server.
+Grok-search is HTTP MCP only (`type: http`). Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. The Cursor-native package pins production; the URL override is not configurable in Cursor. Every host requires an operator-provided gateway-keys bearer as `GROK_SEARCH_MCP_TOKEN` before MCP load. Do not start a local stdio `uvx` server.
 
-## Readiness (mandatory first action)
+## First-run readiness
 
-Before any grok-search MCP tool, run:
+- **Claude/Grok plugin hosts:** resolve the installed root from `GROK_PLUGIN_ROOT`, falling back to `CLAUDE_PLUGIN_ROOT`, and run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --apply --json` before the first grok-search MCP call. `missing_prereq` means the token is absent from process environment; stop and ask for a gateway-keys bearer. `in_sync` means the probe has a usable URL/token decision.
+- **Cursor-native:** the plugin's **Plugins → Configure** UI requires the token variable and the manifest pins production, so Cursor-native does not run the probe or read a Cursor process environment variable. If `grok-search` tools are connected, continue; otherwise report the MCP connection error.
+- Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced. A restart cannot supply a missing token.
+- A 401 is an MCP handshake failure, not a readiness-probe status. Report it and stop.
+- Never auto-source `mcp.env` or auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
+- A leftover `grok-search-http` connection is a preview overlay inherited from operator Cursor MCP config. It is not a fallback. Never dual-call it.
 
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-<plugin-root>}/scripts/check_readiness.py" --apply --json
-```
+## Endpoint contract
 
-- `missing_prereq` (`GROK_SEARCH_MCP_TOKEN` unset): stop. Ask the operator for a gateway-keys bearer. Do not invent a token. Do not call leftover `grok-search-http` as a fallback.
-- `in_sync` with `migrated: true`: URL was empty; the probe applied `https://search.karldigi.dev/mcp` in-process only. Continue.
-- Handshake 401 after a set token: `handshake_fail` — report it; do not dual-call `grok-search-http`.
-- Never auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
-- After a plugin update, a **new session** is required; this process cannot hot-swap injected SKILL.md.
+- Production: `https://search.karldigi.dev/mcp` — gateway-keys bearer (recommended; Cursor-native pins this endpoint)
+- Tailscale: `http://100.76.134.104:8800/mcp` — Bearer-only preview override for Claude/Grok
+- Cloudflare Access: `https://search.termolo.com/mcp` — preview override requiring operator-local Access headers
 
-## First-Run Environment & Connectivity
+## Tool workflow
 
-Production recommended URL is `https://search.karldigi.dev/mcp` with a gateway-keys token when set. Do not invent a host.
+### Search planning and execution
 
-Known endpoint options (operator picks one):
-- Production: `https://search.karldigi.dev/mcp` — gateway-keys bearer token (recommended)
-- Tailscale `http://100.76.134.104:8800/mcp` — Bearer-only (preview / fallback)
-- `https://search.termolo.com/mcp` — token plus operator-local Cloudflare Access headers (preview / fallback)
+Before every `web_search`, follow the planning tool descriptions as the source of truth:
 
-If a leftover `grok-search-http` alias is still connected, it is the same tool surface. Use `grok-search` when both exist; never dual-call.
+1. Call `plan_intent`.
+2. Call `plan_complexity`.
+3. Call `plan_sub_query` for each sub-query.
+4. For complexity levels that require them, call `plan_search_term`, `plan_tool_mapping`, and `plan_execution` in the order described by the tools.
+5. Call `web_search`. Leave `extra_sources` at its default unless the user explicitly requests extra provider hits.
+6. When `web_search` returns a `session_id`, call `get_sources` to retrieve full source metadata and cite canonical URLs.
 
-## Tool Workflow
+### Fetching and site exploration
 
-Follow this execution discipline when searching or fetching external information:
+- Use `web_fetch` for readable markdown from a specific URL when search snippets are insufficient.
+- Use `web_map` to discover pages and structure across a documentation tree or site.
 
-### 1. Search Planning & Query Formulation
+### Diagnostics
 
-- Call `plan_intent` before every `web_search`. The MCP tool description requires that planning step.
-- Leave `extra_sources` at its default unless the user explicitly requests extra provider hits.
+- Use `get_config_info` only for connectivity or backend diagnostics. Never display credentials.
+- Call `toggle_builtin_tools` or `switch_model` only when explicitly requested.
 
-### 2. Search Execution & Citation Tracking
+## Errors
 
-- Execute `web_search` with the formulated query.
-- When `web_search` returns a `session_id`, call `get_sources` with that `session_id` to retrieve full source URLs, titles, and publication metadata.
-- Cite sources with canonical URLs and factual provenance in the final answer.
-
-### 3. Fetching and Site Exploration
-
-- Use `web_fetch` to retrieve the readable markdown content of a specific URL when search snippets are insufficient.
-- Use `web_map` to discover pages, endpoints, and structure across a target domain or documentation tree.
-
-### 4. Diagnostic & Configuration Inspection
-
-- Use `get_config_info` strictly for diagnostic troubleshooting (e.g. verifying connectivity or backend version). Never log or display sensitive credentials or tokens.
-- Only call `toggle_builtin_tools` or `switch_model` if explicitly requested by the user.
-
-## Error Handling & Discipline
-
-- Report search or fetch failures honestly. If a URL is inaccessible or search yields no relevant results, state what was attempted rather than speculating.
-- Adapt tool invocations to the host environment's MCP tool naming without assuming rigid tool prefixes.
+Report search, fetch, and handshake failures literally. Do not speculate, invent credentials, or switch to the leftover preview alias.

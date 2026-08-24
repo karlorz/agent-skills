@@ -4,20 +4,21 @@ Thin marketplace plugin for [GrokSearch](https://github.com/karlorz/GrokSearch),
 
 ## Configuration & Environment
 
-The plugin connects over HTTP MCP using two environment variables:
+For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https://search.karldigi.dev/mcp` (set `GROK_SEARCH_MCP_URL` only to override that endpoint). A gateway-keys bearer must be present in the agent's **process environment before MCP loading**:
 
 ```bash
-export GROK_SEARCH_MCP_URL="https://search.karldigi.dev/mcp"
 export GROK_SEARCH_MCP_TOKEN="your-gateway-keys-token"
+# Optional override:
+export GROK_SEARCH_MCP_URL="https://search.karldigi.dev/mcp"
 ```
 
-Operators may store the token at `~/.config/grok-search/http-mcp.token` for convenience. Note that HTTP MCP does not auto-source `mcp.env`; set these variables in your shell profile or session environment before starting the agent.
+Operators may store a token at `~/.config/grok-search/http-mcp.token` for convenience, but HTTP MCP does not auto-source that file or `mcp.env`. Export the gateway-keys bearer before starting Grok, Claude, or Orca sessions. For **Cursor**, configure the token via **Plugins → Configure** instead of process environment variables.
 
 ### Operator Endpoints
 
 1. **Production (recommended):** `https://search.karldigi.dev/mcp`
    - Bearer is a **gateway-keys** token generated from `https://search.karldigi.dev/admin/gateway-keys` (create-once / show-raw-once).
-   - Set as `GROK_SEARCH_MCP_TOKEN` in client environment.
+   - Set as `GROK_SEARCH_MCP_TOKEN` in the Claude/Grok process environment, or enter it in Cursor under **Plugins → Configure**.
 2. **Tailscale (preview / fallback):** `http://100.76.134.104:8800/mcp`
    - Bearer-only: `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`.
    - Preview / fallback endpoint until kr01 is proven.
@@ -27,13 +28,19 @@ Operators may store the token at `~/.config/grok-search/http-mcp.token` for conv
    - Preview / fallback endpoint until kr01 is proven.
    - Access headers stay operator-local and never belong in plugin JSON.
 
+### Grok startup boundary
+
+Grok resolves plugin MCP configuration before a SessionStart child can change the parent environment. **SessionStart cannot inject Grok's parent MCP environment.** The hook may populate Claude's `CLAUDE_ENV_FILE`, but it cannot supply a missing Grok token. A new Grok session is necessary after a plugin update and still requires `GROK_SEARCH_MCP_TOKEN` in the process environment.
+
+A leftover `grok-search-http` server inherited from `~/.cursor/mcp.json` is **not a fallback**. It is a separate preview overlay and must not be dual-called. Remove it only after native Cursor and Grok `grok-search` handshakes are proven.
+
 ### Operator Troubleshooting Note
 
 Upstream x.ai web → grok2api can make the gateway `POST /grok/v1/chat/completions` return empty `content` (seen with `grok-4.3-fast`). If MCP tools/list works but `web_search` returns blank results, debug grok2api / model routing on the backend, not the plugin URL or client configuration.
 
 Inbound /mcp is not the outbound httpx client GrokSearch uses toward Grok/Tavily/Firecrawl.
 
-A SessionStart hook / `scripts/check_readiness.py` applies the production URL in-process when the token is set and the URL is empty. It does not auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, or `~/.config/grok-search/mcp.env`. If the token is unset, the companion skill stops and asks. After a plugin update, start a **new session**.
+A SessionStart hook / `scripts/check_readiness.py` checks the token and can write the production URL to Claude's `CLAUDE_ENV_FILE` when available. It does not auto-source `mcp.env`, change Grok's parent MCP environment, or auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`. If the token is unset, the companion skill stops and asks.
 
 ## Installation
 
@@ -47,7 +54,7 @@ claude plugin install grok-search@karlorz-agent-skills
 
 ### Cursor (Desktop + Agent CLI)
 
-1. **Prerequisites:** Set `GROK_SEARCH_MCP_URL` and `GROK_SEARCH_MCP_TOKEN`. No `uvx` / GUDA installation is required.
+1. **Prerequisites:** Install/enable the Cursor-native plugin, then open **Plugins → Configure** for `grok-search` and enter a gateway-keys bearer in `GROK_SEARCH_MCP_TOKEN`. This is a Cursor plugin variable, not a Cursor process-environment setting. The native plugin pins production; no `uvx` / GUDA installation is required.
 2. **Desktop / Agent settings:** Settings → Rules, Skills, Subagents → enable **Include third-party Plugins, Skills, and other configs**. Reload the window / restart your session.
 3. **Plugin loading:** After marketplace install, grok-search MCP loads automatically in Cursor Agent TUI via the plugin chain (`plugin-grok-search-grok-search` or `plugin-chain`) when third-party / Claude-compat plugins are enabled.
 4. **Diagnostic note on `agent mcp list`:** `agent mcp list` inspects `~/.cursor/mcp.json` and `.cursor/mcp.json`, not Claude-style plugin `.mcp.json` definitions. This is a known CLI diagnostic gap and is not the proof of install.

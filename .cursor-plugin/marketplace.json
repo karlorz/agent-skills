@@ -1,0 +1,22 @@
+{
+  "name": "karlorz-agent-skills",
+  "owner": {
+    "name": "karlorz"
+  },
+  "metadata": {
+    "description": "Cursor-native plugins from karlorz/agent-skills"
+  },
+  "plugins": [
+    {
+      "name": "grok-search",
+      "source": "skills/grok-search",
+      "description": "Live web search, source extraction, URL fetching, and site mapping through the hosted GrokSearch HTTP MCP service.",
+      "category": "integrations",
+      "tags": [
+        "grok",
+        "search",
+        "mcp"
+      ]
+    }
+  ]
+}

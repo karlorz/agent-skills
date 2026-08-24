@@ -2,15 +2,16 @@
 #
 # bump-version.sh — bump a skill's version across its manifests.
 #
-# A plugin's release identity lives in two or three manifests that must stay in
-# sync. The Claude manifest is the release metadata anchor; the Codex manifest
-# and marketplace entry must agree on name and version. Descriptions are stable
+# A plugin's release identity lives in its enabled manifests and root catalog.
+# The Claude manifest is the release metadata anchor; optional Codex and Cursor
+# manifests plus the marketplace entry must agree on name and version. Descriptions are stable
 # prose and never carry release version markers.
 #
 # The version lives in:
 #   1. skills/<skill>/.claude-plugin/plugin.json              "version": "X.Y.Z"
 #   2. skills/<skill>/.codex-plugin/plugin.json               "version": "X.Y.Z" (if present)
-#   3. .claude-plugin/marketplace.json          matching plugin entry's "version"
+#   3. skills/<skill>/.cursor-plugin/plugin.json              "version": "X.Y.Z" (if present)
+#   4. .claude-plugin/marketplace.json          matching plugin entry's "version"
 #
 # This script reads the current version from .claude-plugin/plugin.json,
 # computes the next version, and rewrites all manifest files in place while
@@ -91,6 +92,7 @@ else
 fi
 PLUGIN_JSON="$SKILL_DIR/.claude-plugin/plugin.json"
 CODEX_PLUGIN_JSON="$SKILL_DIR/.codex-plugin/plugin.json"
+CURSOR_PLUGIN_JSON="$SKILL_DIR/.cursor-plugin/plugin.json"
 
 [ -d "$SKILL_DIR" ]    || die "skill not found: skills/$SKILL/"
 [ -n "$SKILL_MD" ] && [ -f "$SKILL_MD" ] || die "missing SKILL.md under skills/$SKILL/ (expected skills/$SKILL/skills/<skill>/SKILL.md)"
@@ -102,6 +104,11 @@ if [ -f "$CODEX_PLUGIN_JSON" ]; then
 else
   HAS_CODEX_PLUGIN=0
 fi
+if [ -f "$CURSOR_PLUGIN_JSON" ]; then
+  HAS_CURSOR_PLUGIN=1
+else
+  HAS_CURSOR_PLUGIN=0
+fi
 
 # --- read current versions ---------------------------------------------------
 read_plugin_version() {
@@ -109,6 +116,9 @@ read_plugin_version() {
 }
 read_codex_plugin_version() {
   awk -F'"' '/"version"[[:space:]]*:/{print $4; exit}' "$CODEX_PLUGIN_JSON"
+}
+read_cursor_plugin_version() {
+  awk -F'"' '/"version"[[:space:]]*:/{print $4; exit}' "$CURSOR_PLUGIN_JSON"
 }
 read_market_version() {
   awk -v name="$SKILL" '
@@ -128,10 +138,18 @@ if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
 else
   C_CUR=""
 fi
+if [ "$HAS_CURSOR_PLUGIN" -eq 1 ]; then
+  U_CUR="$(read_cursor_plugin_version)"
+else
+  U_CUR=""
+fi
 
 # --- pre-check: warn on pre-existing drift -----------------------------------
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ] && [ "$C_CUR" != "$CUR" ]; then
   printf 'bump-version: WARNING .codex-plugin/plugin.json (%s) != .claude-plugin/plugin.json (%s) before bump\n' "$C_CUR" "$CUR" >&2
+fi
+if [ "$HAS_CURSOR_PLUGIN" -eq 1 ] && [ "$U_CUR" != "$CUR" ]; then
+  printf 'bump-version: WARNING .cursor-plugin/plugin.json (%s) != .claude-plugin/plugin.json (%s) before bump\n' "$U_CUR" "$CUR" >&2
 fi
 if [ "$M_CUR" != "$CUR" ]; then
   printf 'bump-version: WARNING marketplace.json (%s) != .claude-plugin/plugin.json (%s) before bump\n' "$M_CUR" "$CUR" >&2
@@ -206,6 +224,9 @@ FILES="skills/$SKILL/.claude-plugin/plugin.json"
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
   FILES="$FILES, skills/$SKILL/.codex-plugin/plugin.json"
 fi
+if [ "$HAS_CURSOR_PLUGIN" -eq 1 ]; then
+  FILES="$FILES, skills/$SKILL/.cursor-plugin/plugin.json"
+fi
 FILES="$FILES, .claude-plugin/marketplace.json"
 
 # --- detect skill CHANGELOG.md -----------------------------------------------
@@ -255,6 +276,18 @@ if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
   ' "$CODEX_PLUGIN_JSON" > "$tmp" && mv "$tmp" "$CODEX_PLUGIN_JSON"
 fi
 
+if [ "$HAS_CURSOR_PLUGIN" -eq 1 ]; then
+  # .cursor-plugin/plugin.json: replace the first "version": "..." occurrence.
+  tmp="$(mktemp)"
+  awk -v ver="$NEW" '
+    !done && /"version"[[:space:]]*:/ {
+      sub(/"version"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"version\": \"" ver "\"")
+      done=1
+    }
+    { print }
+  ' "$CURSOR_PLUGIN_JSON" > "$tmp" && mv "$tmp" "$CURSOR_PLUGIN_JSON"
+fi
+
 # marketplace.json: replace "version" only inside the matching plugin block.
 tmp="$(mktemp)"
 awk -v name="$SKILL" -v ver="$NEW" '
@@ -296,16 +329,26 @@ C_NEW=""
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
   C_NEW="$(read_codex_plugin_version)"
 fi
+U_NEW=""
+if [ "$HAS_CURSOR_PLUGIN" -eq 1 ]; then
+  U_NEW="$(read_cursor_plugin_version)"
+fi
 if [ "$P_NEW" != "$NEW" ] || [ "$M_NEW" != "$NEW" ]; then
   die "post-edit mismatch: plugin.json=$P_NEW marketplace.json=$M_NEW (wanted $NEW)"
 fi
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ] && [ "$C_NEW" != "$NEW" ]; then
   die "post-edit mismatch: .codex-plugin/plugin.json=$C_NEW (wanted $NEW)"
 fi
+if [ "$HAS_CURSOR_PLUGIN" -eq 1 ] && [ "$U_NEW" != "$NEW" ]; then
+  die "post-edit mismatch: .cursor-plugin/plugin.json=$U_NEW (wanted $NEW)"
+fi
 
 UPDATED_COUNT=2
 if [ "$HAS_CODEX_PLUGIN" -eq 1 ]; then
-  UPDATED_COUNT=3
+  UPDATED_COUNT=$((UPDATED_COUNT + 1))
+fi
+if [ "$HAS_CURSOR_PLUGIN" -eq 1 ]; then
+  UPDATED_COUNT=$((UPDATED_COUNT + 1))
 fi
 printf '\nbumped %s to %s (%s files updated, in sync).\n' "$SKILL" "$NEW" "$UPDATED_COUNT"
 printf 'next: git add -A && git commit && git tag %s\n' "$TAG"

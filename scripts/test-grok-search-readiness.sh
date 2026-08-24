@@ -84,6 +84,32 @@ if out.get("url") != "http://127.0.0.1:8800/mcp":
     raise SystemExit(f"explicit url lost: {out!r}")
 
 
+# A token stored only in operator mcp.env is not process environment and must not be sourced.
+with tempfile.TemporaryDirectory() as td:
+    td_path = Path(td)
+    config_dir = td_path / ".config" / "grok-search"
+    cursor_dir = td_path / ".cursor"
+    grok_dir = td_path / ".grok"
+    config_dir.mkdir(parents=True)
+    cursor_dir.mkdir(parents=True)
+    grok_dir.mkdir(parents=True)
+    mcp_env = config_dir / "mcp.env"
+    cursor_mcp = cursor_dir / "mcp.json"
+    grok_config = grok_dir / "config.toml"
+    mcp_env.write_text("GROK_SEARCH_MCP_TOKEN=stored-token-not-process-env\n", encoding="utf-8")
+    cursor_mcp.write_text('{"mcpServers":{"keep":{}}}\n', encoding="utf-8")
+    grok_config.write_text("[plugins]\nenabled = []\n", encoding="utf-8")
+    before = {path: path.read_bytes() for path in (mcp_env, cursor_mcp, grok_config)}
+    env = base_env()
+    env["HOME"] = str(td_path)
+    out = run(env, extra_args=["--apply"])
+    if out.get("status") != "missing_prereq":
+        raise SystemExit(f"mcp.env-only token must remain missing_prereq: {out!r}")
+    for path, expected in before.items():
+        if path.read_bytes() != expected:
+            raise SystemExit(f"probe modified operator file {path}")
+
+
 # --apply writes URL into CLAUDE_ENV_FILE, never mcp.json / mcp.env
 with tempfile.TemporaryDirectory() as td:
     td_path = Path(td)
@@ -100,8 +126,8 @@ with tempfile.TemporaryDirectory() as td:
     if out.get("migrated") is not True:
         raise SystemExit(f"--apply should migrate: {out!r}")
     written = env_file.read_text(encoding="utf-8")
-    if "GROK_SEARCH_MCP_URL=https://search.karldigi.dev/mcp" not in written:
-        raise SystemExit(f"CLAUDE_ENV_FILE missing URL export:\n{written}")
+    if written != "export GROK_SEARCH_MCP_URL=https://search.karldigi.dev/mcp\n":
+        raise SystemExit(f"CLAUDE_ENV_FILE missing exact URL export line:\n{written!r}")
     if "test-token" in written:
         raise SystemExit("CLAUDE_ENV_FILE leaked token")
     if mcp_json.read_text(encoding="utf-8") != "{}\n":

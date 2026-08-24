@@ -180,6 +180,13 @@ run_bump_version_checks() {
   chmod +x "$tmp/scripts/bump-version.sh"
 
   write_skill_fixture "$tmp" "demo-codex" "1.2.3" "yes"
+  mkdir -p "$tmp/skills/demo-codex/.cursor-plugin"
+  cat > "$tmp/skills/demo-codex/.cursor-plugin/plugin.json" <<'EOF'
+{
+  "name": "demo-codex",
+  "version": "1.2.3"
+}
+EOF
   write_skill_fixture "$tmp" "demo-basic" "0.4.0" "no"
 
   cat > "$tmp/.claude-plugin/marketplace.json" <<'EOF'
@@ -200,12 +207,14 @@ EOF
   local dry_run
   dry_run="$(cd "$tmp" && ./scripts/bump-version.sh demo-codex --set 1.2.4 --dry-run)"
   assert_contains "dry-run file list" "$dry_run" "skills/demo-codex/.codex-plugin/plugin.json"
+  assert_contains "dry-run Cursor file list" "$dry_run" "skills/demo-codex/.cursor-plugin/plugin.json"
 
   local codex_bump basic_bump
   codex_bump="$(cd "$tmp" && ./scripts/bump-version.sh demo-codex --set 1.2.4)"
-  assert_contains "demo-codex updated file count" "$codex_bump" "3 files updated"
+  assert_contains "demo-codex updated file count" "$codex_bump" "4 files updated"
   assert_eq "demo-codex Claude manifest" "$(read_json_version "$tmp/skills/demo-codex/.claude-plugin/plugin.json")" "1.2.4"
   assert_eq "demo-codex Codex manifest" "$(read_json_version "$tmp/skills/demo-codex/.codex-plugin/plugin.json")" "1.2.4"
+  assert_eq "demo-codex Cursor manifest" "$(read_json_version "$tmp/skills/demo-codex/.cursor-plugin/plugin.json")" "1.2.4"
   assert_eq "demo-codex marketplace" "$(read_market_version "$tmp/.claude-plugin/marketplace.json" demo-codex)" "1.2.4"
 
   basic_bump="$(cd "$tmp" && ./scripts/bump-version.sh demo-basic --set 0.4.1)"
@@ -931,12 +940,13 @@ run_skill_frontmatter_contract_checks() {
 }
 
 run_plugin_version_sync_contract_checks() {
-  local name version source root claude_manifest codex_manifest
+  local name version source root claude_manifest codex_manifest cursor_manifest
 
   while IFS=$'\t' read -r name version source; do
     root="$ROOT/${source#./}"
     claude_manifest="$root/.claude-plugin/plugin.json"
     codex_manifest="$root/.codex-plugin/plugin.json"
+    cursor_manifest="$root/.cursor-plugin/plugin.json"
 
     [ -d "$root" ] || fail "$name source directory missing: $source"
     [ -f "$claude_manifest" ] || fail "$name missing Claude plugin manifest"
@@ -947,6 +957,10 @@ run_plugin_version_sync_contract_checks() {
     if [ -f "$codex_manifest" ]; then
       assert_eq "$name Codex manifest name" "$(jq -r '.name' "$codex_manifest")" "$name"
       assert_eq "$name Codex manifest version" "$(read_json_version "$codex_manifest")" "$version"
+    fi
+    if [ -f "$cursor_manifest" ]; then
+      assert_eq "$name Cursor manifest name" "$(jq -r '.name' "$cursor_manifest")" "$name"
+      assert_eq "$name Cursor manifest version" "$(read_json_version "$cursor_manifest")" "$version"
     fi
   done < <(
     jq -r '.plugins[] | select(.source | startswith("./skills/")) | [.name, .version, .source] | @tsv' \
@@ -1065,6 +1079,22 @@ run_marketplace_inventory_contract_checks() {
   )
 }
 
+run_cursor_marketplace_inventory_contract_checks() {
+  local marketplace="$ROOT/.cursor-plugin/marketplace.json"
+  local name source root manifest
+
+  [ -f "$marketplace" ] || fail ".cursor-plugin/marketplace.json missing"
+  assert_eq "Cursor marketplace name" "$(jq -r '.name' "$marketplace")" "karlorz-agent-skills"
+
+  while IFS=$'\t' read -r name source; do
+    root="$ROOT/$source"
+    manifest="$root/.cursor-plugin/plugin.json"
+    [ -d "$root" ] || fail "$name Cursor marketplace source directory missing: $source"
+    [ -f "$manifest" ] || fail "$name Cursor marketplace source missing .cursor-plugin/plugin.json"
+    assert_eq "$name Cursor manifest name" "$(jq -r '.name' "$manifest")" "$name"
+  done < <(jq -r '.plugins[] | [.name, .source] | @tsv' "$marketplace" | sort)
+}
+
 run_plugin_manifest_contract_checks() {
   local manifest rel root skills_path type
 
@@ -1074,12 +1104,12 @@ run_plugin_manifest_contract_checks() {
     assert_eq "$rel skills field type" "$type" "string"
   done < <(
     find "$ROOT/skills" -maxdepth 3 -type f \
-      \( -path '*/.codex-plugin/plugin.json' -o -path '*/.claude-plugin/plugin.json' \) \
+      \( -path '*/.codex-plugin/plugin.json' -o -path '*/.claude-plugin/plugin.json' -o -path '*/.cursor-plugin/plugin.json' \) \
       -print | sort
   )
 
   while IFS= read -r root; do
-    for kind in .claude-plugin .codex-plugin; do
+    for kind in .claude-plugin .codex-plugin .cursor-plugin; do
       manifest="$root/$kind/plugin.json"
       rel="${manifest#$ROOT/}"
       [ -f "$manifest" ] || continue
@@ -1126,6 +1156,7 @@ run_deep_research_dev_generated_report_checks
 run_skill_frontmatter_contract_checks
 run_plugin_metadata_contract_checks
 run_marketplace_inventory_contract_checks
+run_cursor_marketplace_inventory_contract_checks
 run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks

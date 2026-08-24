@@ -53,7 +53,7 @@ def probe(environ: Mapping[str, str] | None = None) -> dict:
 
 
 def apply(environ: dict[str, str] | None = None) -> dict:
-    """Apply URL default into process env and optional CLAUDE_ENV_FILE."""
+    """Apply the URL default to this process and Claude's env handoff only."""
     target = os.environ if environ is None else environ
     result = probe(target)
     if result["status"] != "in_sync" or not result.get("migrated"):
@@ -65,7 +65,7 @@ def apply(environ: dict[str, str] | None = None) -> dict:
     env_file = _strip(target.get("CLAUDE_ENV_FILE"))
     if env_file:
         with open(env_file, "a", encoding="utf-8") as handle:
-            handle.write(f"{URL_ENV}={url}\n")
+            handle.write(f"export {URL_ENV}={url}\n")
     return result
 
 
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="set GROK_SEARCH_MCP_URL in this process / CLAUDE_ENV_FILE when TOKEN is set",
+        help="set GROK_SEARCH_MCP_URL in this child process and Claude's CLAUDE_ENV_FILE when TOKEN is set",
     )
     args = parser.parse_args(argv)
     result = apply() if args.apply else probe()
