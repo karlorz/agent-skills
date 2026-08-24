@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Grok-search-specific MCP pin, env interpolation, skill tools, and secret scan.
+# Grok-search-specific HTTP MCP pin, env interpolation, skill tools, and secret scan.
 # Catalog/manifest inventory is covered by scripts/test-dev-loop-release-tooling.sh.
 set -euo pipefail
 
@@ -17,50 +17,139 @@ mcp_path = root / ".mcp.json"
 skill_path = root / "skills" / "grok-search" / "SKILL.md"
 readme_path = root / "README.md"
 manifest_path = root / ".claude-plugin" / "plugin.json"
+example_path = root / "cursor-cli-mcp.example.json"
+changelog_path = root / "CHANGELOG.md"
+
+# 1. Non-existence of removed stdio / legacy files in live plugin tree
+http_example = root / "cursor-cli-http.example.json"
+if http_example.exists():
+    raise SystemExit(f"{http_example}: cursor-cli-http.example.json must not exist in live plugin tree")
+
+for legacy_script in ("run-grok-search.sh", "migrate-from-user-mcp.py"):
+    legacy_path = root / "scripts" / legacy_script
+    if legacy_path.exists():
+        raise SystemExit(f"{legacy_path}: {legacy_script} must not exist in skills/grok-search/scripts/")
 
 texts = {}
-for path in (mcp_path, skill_path, readme_path, manifest_path):
+for path in (mcp_path, skill_path, readme_path, manifest_path, example_path, changelog_path):
     try:
         texts[path] = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise SystemExit(f"missing {path}") from None
 
+# 2. Plugin .mcp.json contract
 data = json.loads(texts[mcp_path])
-if "mcpServers" not in data or "grok-search" not in data["mcpServers"]:
-    raise SystemExit(f"{mcp_path}: missing mcpServers.grok-search")
-server = data["mcpServers"]["grok-search"]
-if server.get("type", "stdio") != "stdio":
-    raise SystemExit(f"{mcp_path}: type must be stdio")
-if server.get("command") != "bash":
-    raise SystemExit(f"{mcp_path}: command must be bash wrapper")
-args = server.get("args", [])
-if args != ["${CLAUDE_PLUGIN_ROOT}/scripts/run-grok-search.sh"]:
-    raise SystemExit(f"{mcp_path}: unexpected args {args!r}")
-runner = root / "scripts" / "run-grok-search.sh"
-runner_text = runner.read_text(encoding="utf-8")
-pin = "git+https://github.com/karlorz/GrokSearch@grok-with-tavily"
-if pin not in runner_text or "uvx" not in runner_text:
-    raise SystemExit(f"{runner}: must exec uvx pin {pin}")
-env = server.get("env", {})
-if set(env) != {"GUDA_API_KEY", "GUDA_BASE_URL"}:
-    raise SystemExit(f"{mcp_path}: env keys must be exactly GUDA_API_KEY and GUDA_BASE_URL")
-if env["GUDA_API_KEY"] != "${GUDA_API_KEY}" or env["GUDA_BASE_URL"] != "${GUDA_BASE_URL}":
-    raise SystemExit(f"{mcp_path}: env values must be unadorned ${{VAR}} interpolation")
+servers = data.get("mcpServers")
+if not isinstance(servers, dict) or set(servers.keys()) != {"grok-search"}:
+    raise SystemExit(f"{mcp_path}: mcpServers must contain exactly one key: grok-search")
 
-http_server = data["mcpServers"].get("grok-search-http")
-if not isinstance(http_server, dict):
-    raise SystemExit(f"{mcp_path}: missing additive mcpServers.grok-search-http")
-if http_server.get("type") != "http":
-    raise SystemExit(f"{mcp_path}: grok-search-http type must be http")
-if not http_server.get("url"):
-    raise SystemExit(f"{mcp_path}: grok-search-http url must be present")
-http_auth = (http_server.get("headers") or {}).get("Authorization")
-if http_auth != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
-    raise SystemExit(
-        f"{mcp_path}: headers.Authorization must be exactly Bearer ${{GROK_SEARCH_MCP_TOKEN}}"
-    )
+server = servers["grok-search"]
+if server.get("type") != "http":
+    raise SystemExit(f"{mcp_path}: type must be http")
+if server.get("url") != "${GROK_SEARCH_MCP_URL}":
+    raise SystemExit(f"{mcp_path}: url must be exactly ${{GROK_SEARCH_MCP_URL}}")
 
+headers = server.get("headers")
+if not isinstance(headers, dict) or headers.get("Authorization") != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
+    raise SystemExit(f"{mcp_path}: headers.Authorization must be exactly Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
+
+for forbidden in ("command", "args", "env"):
+    if forbidden in server:
+        raise SystemExit(f"{mcp_path}: server must not contain {forbidden!r}")
+if "grok-search-http" in servers:
+    raise SystemExit(f"{mcp_path}: must not contain grok-search-http key")
+
+# 3. Example config cursor-cli-mcp.example.json contract
+ex = json.loads(texts[example_path])
+ex_servers = ex.get("mcpServers")
+if not isinstance(ex_servers, dict) or set(ex_servers.keys()) != {"grok-search"}:
+    raise SystemExit(f"{example_path}: mcpServers must contain exactly one key: grok-search")
+
+ex_server = ex_servers["grok-search"]
+if ex_server.get("type") != "http":
+    raise SystemExit(f"{example_path}: type must be http")
+if ex_server.get("url") != "${GROK_SEARCH_MCP_URL}":
+    raise SystemExit(f"{example_path}: url must be exactly ${{GROK_SEARCH_MCP_URL}}")
+ex_headers = ex_server.get("headers")
+if not isinstance(ex_headers, dict) or ex_headers.get("Authorization") != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
+    raise SystemExit(f"{example_path}: headers.Authorization must be exactly Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
+for forbidden in ("command", "args", "env"):
+    if forbidden in ex_server:
+        raise SystemExit(f"{example_path}: server must not contain {forbidden!r}")
+
+# 4. JSON configs must not have hardcoded IPs or domains
+for json_path in (mcp_path, example_path, manifest_path):
+    json_text = texts[json_path]
+    if "100.76.134.104" in json_text:
+        raise SystemExit(f"{json_path}: must not contain hardcoded IP 100.76.134.104")
+    if "search.termolo.com" in json_text:
+        raise SystemExit(f"{json_path}: must not contain domain search.termolo.com")
+
+# 5. Manifest (.claude-plugin/plugin.json)
+manifest = json.loads(texts[manifest_path])
+if manifest.get("version") != "0.1.5":
+    raise SystemExit(f"{manifest_path}: version must be 0.1.5")
+manifest_desc = manifest.get("description", "")
+if "HTTP" not in manifest_desc and "http" not in manifest_desc:
+    raise SystemExit(f"{manifest_path}: description must mention HTTP MCP")
+if "stdio" in manifest_desc.lower():
+    raise SystemExit(f"{manifest_path}: description must not mention stdio-as-default")
+
+# 6. CHANGELOG.md
+changelog_text = texts[changelog_path]
+if "0.1.5" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must mention version 0.1.5")
+if "2026-08-24" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must mention release date 2026-08-24")
+
+# 7. SKILL.md contract
+skill_text = texts[skill_path]
+if not skill_text.startswith("---\n"):
+    raise SystemExit(f"{skill_path}: missing frontmatter")
+end = skill_text.find("\n---", 4)
+if end < 0:
+    raise SystemExit(f"{skill_path}: missing frontmatter terminator")
+fm = skill_text[4:end]
+body = skill_text[end + 4 :]
+
+if not re.search(r"^name:\s*grok-search\s*$", fm, re.M):
+    raise SystemExit(f"{skill_path}: name must be grok-search")
+if "This skill should be used when" not in fm:
+    raise SystemExit(f"{skill_path}: description must use third-person trigger")
+
+for tool in ("plan_intent", "web_search", "get_sources", "web_fetch", "web_map"):
+    if tool not in body:
+        raise SystemExit(f"{skill_path}: missing tool {tool}")
+
+if "mcp__plugin_" in body:
+    raise SystemExit(f"{skill_path}: must not hard-code mcp__plugin_ prefixes")
+
+if len(skill_text.split()) > 1500:
+    raise SystemExit(f"{skill_path}: too long ({len(skill_text.split())} words > 1500)")
+
+if "GROK_SEARCH_MCP_URL" not in body or "GROK_SEARCH_MCP_TOKEN" not in body:
+    raise SystemExit(f"{skill_path}: must mention GROK_SEARCH_MCP_URL and GROK_SEARCH_MCP_TOKEN")
+if "HTTP" not in body and "http" not in body:
+    raise SystemExit(f"{skill_path}: must mention HTTP MCP")
+if "first-run" not in body.lower() and "first run" not in body.lower():
+    raise SystemExit(f"{skill_path}: must mention first-run setup / ask if URL or token missing")
+if "grok-search-http" not in body:
+    raise SystemExit(f"{skill_path}: must mention leftover grok-search-http alias note")
+if "never dual-call" not in body.lower() and "do not dual-call" not in body.lower():
+    raise SystemExit(f"{skill_path}: must advise never dual-calling grok-search-http alias")
+if "stdio (default)" in body.lower() or "stdio as default" in body.lower() or "via stdio mcp" in body.lower():
+    raise SystemExit(f"{skill_path}: must not present stdio as default")
+
+# 8. README.md contract
 readme_text = texts[readme_path]
+if "GROK_SEARCH_MCP_URL" not in readme_text or "GROK_SEARCH_MCP_TOKEN" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention GROK_SEARCH_MCP_URL and GROK_SEARCH_MCP_TOKEN")
+
+if "http://100.76.134.104:8800/mcp" not in readme_text:
+    raise SystemExit(f"{readme_path}: must document Tailscale endpoint http://100.76.134.104:8800/mcp")
+if "https://search.termolo.com/mcp" not in readme_text:
+    raise SystemExit(f"{readme_path}: must document Cloudflare Access endpoint https://search.termolo.com/mcp")
+
 if "plugin-chain" not in readme_text and "plugin-grok-search-grok-search" not in readme_text:
     raise SystemExit(f"{readme_path}: must mention plugin-chain or plugin-grok-search-grok-search")
 if "agent mcp list" not in readme_text:
@@ -72,107 +161,27 @@ if "required for `agent mcp list`" in readme_text or "required for agent mcp lis
 if "optional" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must describe wrapper as optional")
 
-text = texts[skill_path]
-if not text.startswith("---\n"):
-    raise SystemExit(f"{skill_path}: missing frontmatter")
-end = text.find("\n---", 4)
-if end < 0:
-    raise SystemExit(f"{skill_path}: missing frontmatter terminator")
-fm = text[4:end]
-body = text[end + 4 :]
-if not re.search(r"^name:\s*grok-search\s*$", fm, re.M):
-    raise SystemExit(f"{skill_path}: name must be grok-search")
-if "This skill should be used when" not in fm:
-    raise SystemExit(f"{skill_path}: description must use third-person trigger")
-for tool in ("plan_intent", "web_search", "get_sources", "web_fetch", "web_map"):
-    if tool not in body:
-        raise SystemExit(f"{skill_path}: missing {tool}")
-if "mcp__plugin_" in body:
-    raise SystemExit(f"{skill_path}: must not hard-code mcp__plugin_ prefixes")
-if len(text.split()) > 1500:
-    raise SystemExit(f"{skill_path}: too long")
+if "~/.config/grok-search/http-mcp.token" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention ~/.config/grok-search/http-mcp.token token path")
+if "archive/skills/grok-search-stdio/" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention archive/skills/grok-search-stdio/")
+if "0.0.0.0" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention never bind to 0.0.0.0")
+if "inbound /mcp" not in readme_text.lower() and "/mcp is not" not in readme_text.lower():
+    raise SystemExit(f"{readme_path}: must note inbound /mcp is not outbound httpx")
+if "mcp.env" not in readme_text:
+    raise SystemExit(f"{readme_path}: must note HTTP does not auto-source mcp.env")
 
-example = root / "cursor-cli-mcp.example.json"
-ex = json.loads(example.read_text(encoding="utf-8"))
-ex_server = ex["mcpServers"]["grok-search"]
-if "env" in ex_server:
-    raise SystemExit(f"{example}: must not embed env/secrets")
-if "REPLACE_WITH_PLUGIN_ROOT" not in "".join(ex_server.get("args") or []):
-    raise SystemExit(f"{example}: args must use REPLACE_WITH_PLUGIN_ROOT")
-texts[example] = example.read_text(encoding="utf-8")
-
-http_example = root / "cursor-cli-http.example.json"
-try:
-    http_ex_text = http_example.read_text(encoding="utf-8")
-except FileNotFoundError:
-    raise SystemExit(f"missing {http_example}") from None
-http_ex = json.loads(http_ex_text)
-http_ex_server = (http_ex.get("mcpServers") or {}).get("grok-search-http")
-if not isinstance(http_ex_server, dict):
-    raise SystemExit(f"{http_example}: missing mcpServers.grok-search-http")
-if http_ex_server.get("type") != "http":
-    raise SystemExit(f"{http_example}: type must be http")
-if not http_ex_server.get("url"):
-    raise SystemExit(f"{http_example}: url must be present")
-http_ex_auth = (http_ex_server.get("headers") or {}).get("Authorization")
-if http_ex_auth != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
-    raise SystemExit(
-        f"{http_example}: headers.Authorization must be exactly Bearer ${{GROK_SEARCH_MCP_TOKEN}}"
-    )
-texts[http_example] = http_ex_text
-
-blob = "".join(
-    texts[p]
-    for p in (manifest_path, mcp_path, skill_path, readme_path, example, http_example)
-)
+# 9. Secret scan
+blob = "".join(texts[p] for p in (manifest_path, mcp_path, skill_path, readme_path, example_path, changelog_path))
 allowed_bearer = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
-scanned = blob.replace(allowed_bearer, "")
+allowed_url = "${GROK_SEARCH_MCP_URL}"
+scanned = blob.replace(allowed_bearer, "").replace(allowed_url, "")
+
 for needle in ("search.karldigi.dev", "code.guda.studio", "gsk_", "tvly-", "Bearer "):
     if needle in scanned:
         raise SystemExit(f"forbidden token {needle!r} in plugin files")
-PY
 
-# Migrate dry-run + apply-env against a fake HOME (placeholder secrets only)
-FAKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/grok-search-migrate.XXXXXX")"
-trap 'rm -rf "$FAKE_HOME"' EXIT
-mkdir -p "$FAKE_HOME/.cursor"
-python3 - "$FAKE_HOME" <<'PY'
-import json, sys
-from pathlib import Path
-home = Path(sys.argv[1])
-claude = {
-    "mcpServers": {
-        "grok-search": {
-            "command": "uvx",
-            "args": ["--from", "git+https://github.com/karlorz/GrokSearch@grok-with-tavily", "grok-search"],
-            "env": {
-                "GUDA_API_KEY": "placeholder-guda-key",
-                "GUDA_BASE_URL": "https://example.invalid",
-                "GROK_MODEL": "test-model",
-            },
-        }
-    }
-}
-(home / ".claude.json").write_text(json.dumps(claude), encoding="utf-8")
-cursor = {"mcpServers": {"grok-search": {"command": "uvx", "env": {"GUDA_API_KEY": "placeholder-guda-key"}}}}
-(home / ".cursor" / "mcp.json").write_text(json.dumps(cursor), encoding="utf-8")
-PY
-MIGRATE="$PLUGIN_ROOT/scripts/migrate-from-user-mcp.py"
-DRY="$(python3 "$MIGRATE" --home "$FAKE_HOME")"
-printf '%s\n' "$DRY" | grep -q 'placeholder-guda-key' && fail 'migrate dry-run leaked secret value'
-printf '%s\n' "$DRY" | grep -q 'claude-user' || fail 'migrate dry-run missed claude-user'
-printf '%s\n' "$DRY" | grep -q 'cursor-user' || fail 'migrate dry-run missed cursor-user'
-python3 "$MIGRATE" --home "$FAKE_HOME" --apply-env >/dev/null
-test -f "$FAKE_HOME/.config/grok-search/mcp.env" || fail 'migrate --apply-env did not write env file'
-python3 "$MIGRATE" --home "$FAKE_HOME" --apply-env --remove-user-mcp >/dev/null
-python3 - "$FAKE_HOME" <<'PY'
-import json, sys
-from pathlib import Path
-home = Path(sys.argv[1])
-cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
-servers = cursor.get("mcpServers") or {}
-if "grok-search" in servers:
-    raise SystemExit("cursor grok-search not removed")
 PY
 
 printf 'test-grok-search-plugin: all checks passed\n'

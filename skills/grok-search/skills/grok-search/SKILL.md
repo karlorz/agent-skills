@@ -7,7 +7,17 @@ description: "This skill should be used when the user needs live web search, cur
 
 Use this skill to perform live web searches, plan search intent, fetch web content, map site topologies, and extract citations.
 
-The same tools are available over stdio or the additive HTTP MCP (`type: http` to Tailscale `:8800/mcp` with `GROK_SEARCH_MCP_TOKEN`). Prefer whichever transport the host already has connected.
+Grok-search is HTTP MCP only (`type: http`). The host expands `GROK_SEARCH_MCP_URL` and `GROK_SEARCH_MCP_TOKEN`. Prefer connected `grok-search` tools. Do not start a local stdio `uvx` server.
+
+## First-Run Environment & Connectivity
+
+If `GROK_SEARCH_MCP_URL` or `GROK_SEARCH_MCP_TOKEN` is unset, or HTTP MCP is not connected (including 401), ask the operator for one URL and the bearer token. Do not invent a host. Do not auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
+
+Known cursor-box options (operator picks one):
+- Tailscale `http://100.76.134.104:8800/mcp` — Bearer-only (recommended on this fleet)
+- `https://search.termolo.com/mcp` — token plus operator-local Cloudflare Access headers
+
+If a leftover `grok-search-http` alias is still connected, it is the same tool surface. Use `grok-search` when both exist; never dual-call.
 
 ## Tool Workflow
 

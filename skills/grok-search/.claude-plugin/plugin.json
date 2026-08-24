@@ -1,7 +1,7 @@
 {
   "name": "grok-search",
-  "version": "0.1.4",
-  "description": "Thin marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via stdio MCP, plus optional type:http to a Tailscale /mcp.",
+  "version": "0.1.5",
+  "description": "Thin marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via HTTP MCP.",
   "author": {
     "name": "karlorz"
   },

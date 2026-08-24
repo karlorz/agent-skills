@@ -1,10 +1,11 @@
 {
   "mcpServers": {
     "grok-search": {
-      "command": "bash",
-      "args": [
-        "REPLACE_WITH_PLUGIN_ROOT/scripts/run-grok-search.sh"
-      ]
+      "type": "http",
+      "url": "${GROK_SEARCH_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${GROK_SEARCH_MCP_TOKEN}"
+      }
     }
   }
 }

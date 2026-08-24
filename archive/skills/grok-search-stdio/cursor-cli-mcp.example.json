@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "grok-search": {
+      "command": "bash",
+      "args": [
+        "REPLACE_WITH_PLUGIN_ROOT/scripts/run-grok-search.sh"
+      ]
+    }
+  }
+}
