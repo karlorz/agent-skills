@@ -84,11 +84,13 @@ for json_path in (mcp_path, example_path, manifest_path):
         raise SystemExit(f"{json_path}: must not contain hardcoded IP 100.76.134.104")
     if "search.termolo.com" in json_text:
         raise SystemExit(f"{json_path}: must not contain domain search.termolo.com")
+    if "search.karldigi.dev" in json_text:
+        raise SystemExit(f"{json_path}: must not contain domain search.karldigi.dev")
 
 # 5. Manifest (.claude-plugin/plugin.json)
 manifest = json.loads(texts[manifest_path])
-if manifest.get("version") != "0.1.5":
-    raise SystemExit(f"{manifest_path}: version must be 0.1.5")
+if manifest.get("version") != "0.1.6":
+    raise SystemExit(f"{manifest_path}: version must be 0.1.6")
 manifest_desc = manifest.get("description", "")
 if "HTTP" not in manifest_desc and "http" not in manifest_desc:
     raise SystemExit(f"{manifest_path}: description must mention HTTP MCP")
@@ -97,10 +99,10 @@ if "stdio" in manifest_desc.lower():
 
 # 6. CHANGELOG.md
 changelog_text = texts[changelog_path]
-if "0.1.5" not in changelog_text:
-    raise SystemExit(f"{changelog_path}: must mention version 0.1.5")
-if "2026-08-24" not in changelog_text:
-    raise SystemExit(f"{changelog_path}: must mention release date 2026-08-24")
+if "0.1.6" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must mention version 0.1.6")
+if "2026-08-25" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must mention release date 2026-08-25")
 
 # 7. SKILL.md contract
 skill_text = texts[skill_path]
@@ -129,6 +131,8 @@ if len(skill_text.split()) > 1500:
 
 if "GROK_SEARCH_MCP_URL" not in body or "GROK_SEARCH_MCP_TOKEN" not in body:
     raise SystemExit(f"{skill_path}: must mention GROK_SEARCH_MCP_URL and GROK_SEARCH_MCP_TOKEN")
+if "https://search.karldigi.dev/mcp" not in body:
+    raise SystemExit(f"{skill_path}: must mention production URL https://search.karldigi.dev/mcp")
 if "HTTP" not in body and "http" not in body:
     raise SystemExit(f"{skill_path}: must mention HTTP MCP")
 if "first-run" not in body.lower() and "first run" not in body.lower():
@@ -145,6 +149,10 @@ readme_text = texts[readme_path]
 if "GROK_SEARCH_MCP_URL" not in readme_text or "GROK_SEARCH_MCP_TOKEN" not in readme_text:
     raise SystemExit(f"{readme_path}: must mention GROK_SEARCH_MCP_URL and GROK_SEARCH_MCP_TOKEN")
 
+if "https://search.karldigi.dev/mcp" not in readme_text:
+    raise SystemExit(f"{readme_path}: must document production endpoint https://search.karldigi.dev/mcp")
+if "gateway-keys" not in readme_text:
+    raise SystemExit(f"{readme_path}: must document gateway-keys bearer tokens")
 if "http://100.76.134.104:8800/mcp" not in readme_text:
     raise SystemExit(f"{readme_path}: must document Tailscale endpoint http://100.76.134.104:8800/mcp")
 if "https://search.termolo.com/mcp" not in readme_text:
@@ -176,11 +184,24 @@ if "mcp.env" not in readme_text:
 blob = "".join(texts[p] for p in (manifest_path, mcp_path, skill_path, readme_path, example_path, changelog_path))
 allowed_bearer = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
 allowed_url = "${GROK_SEARCH_MCP_URL}"
-scanned = blob.replace(allowed_bearer, "").replace(allowed_url, "")
+allowed_prod = "https://search.karldigi.dev/mcp"
+allowed_admin = "https://search.karldigi.dev/admin/gateway-keys"
+scanned = (
+    blob.replace(allowed_bearer, "")
+    .replace(allowed_url, "")
+    .replace(allowed_prod, "")
+    .replace(allowed_admin, "")
+    .replace("Bearer-only", "")
+    .replace("Bearer is", "")
+)
 
-for needle in ("search.karldigi.dev", "code.guda.studio", "gsk_", "tvly-", "Bearer "):
+for needle in ("code.guda.studio", "gsk_", "tvly-", "Bearer "):
     if needle in scanned:
         raise SystemExit(f"forbidden token {needle!r} in plugin files")
+if "search.karldigi.dev" in scanned:
+    raise SystemExit(
+        "forbidden leftover search.karldigi.dev outside the documented production/admin URLs"
+    )
 
 PY
 

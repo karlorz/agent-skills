@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-25
+
 ### Changed
-- Updated recommended production URL to `https://search.karldigi.dev/mcp` using `gateway-keys` token auth.
+- Recommended production URL is now `https://search.karldigi.dev/mcp` using gateway-keys token auth.
 - Relabeled Tailscale (`http://100.76.134.104:8800/mcp`) and Cloudflare Access (`https://search.termolo.com/mcp`) endpoints as preview / fallback.
 - Added operator troubleshooting note regarding upstream grok2api empty `content` responses with `grok-4.3-fast`.
 
