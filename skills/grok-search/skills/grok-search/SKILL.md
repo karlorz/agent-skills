@@ -11,11 +11,12 @@ Grok-search is HTTP MCP only (`type: http`). The host expands `GROK_SEARCH_MCP_U
 
 ## First-Run Environment & Connectivity
 
-If `GROK_SEARCH_MCP_URL` or `GROK_SEARCH_MCP_TOKEN` is unset, or HTTP MCP is not connected (including 401), ask the operator for one URL and the bearer token. Do not invent a host. Do not auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
+If `GROK_SEARCH_MCP_URL` or `GROK_SEARCH_MCP_TOKEN` is unset, or HTTP MCP is not connected (including 401), ask the operator for one URL and the bearer token. Production recommended URL is `https://search.karldigi.dev/mcp` with a gateway-keys token when set. Do not invent a host. Do not auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
 
-Known cursor-box options (operator picks one):
-- Tailscale `http://100.76.134.104:8800/mcp` — Bearer-only (recommended on this fleet)
-- `https://search.termolo.com/mcp` — token plus operator-local Cloudflare Access headers
+Known endpoint options (operator picks one):
+- Production: `https://search.karldigi.dev/mcp` — gateway-keys bearer token (recommended)
+- Tailscale `http://100.76.134.104:8800/mcp` — Bearer-only (preview / fallback)
+- `https://search.termolo.com/mcp` — token plus operator-local Cloudflare Access headers (preview / fallback)
 
 If a leftover `grok-search-http` alias is still connected, it is the same tool surface. Use `grok-search` when both exist; never dual-call.
 

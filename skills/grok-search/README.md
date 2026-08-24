@@ -7,20 +7,29 @@ Thin marketplace plugin for [GrokSearch](https://github.com/karlorz/GrokSearch),
 The plugin connects over HTTP MCP using two environment variables:
 
 ```bash
-export GROK_SEARCH_MCP_URL="http://100.76.134.104:8800/mcp"
-export GROK_SEARCH_MCP_TOKEN="your-mcp-bearer-token"
+export GROK_SEARCH_MCP_URL="https://search.karldigi.dev/mcp"
+export GROK_SEARCH_MCP_TOKEN="your-gateway-keys-token"
 ```
 
 Operators may store the token at `~/.config/grok-search/http-mcp.token` for convenience. Note that HTTP MCP does not auto-source `mcp.env`; set these variables in your shell profile or session environment before starting the agent.
 
-### Operator Endpoints (cursor-box)
+### Operator Endpoints
 
-1. **Tailscale (recommended):** `http://100.76.134.104:8800/mcp`
+1. **Production (recommended):** `https://search.karldigi.dev/mcp`
+   - Bearer is a **gateway-keys** token generated from `https://search.karldigi.dev/admin/gateway-keys` (create-once / show-raw-once).
+   - Set as `GROK_SEARCH_MCP_TOKEN` in client environment.
+2. **Tailscale (preview / fallback):** `http://100.76.134.104:8800/mcp`
    - Bearer-only: `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`.
+   - Preview / fallback endpoint until kr01 is proven.
    - Never bind the backend service to `0.0.0.0`.
-2. **Cloudflare Access:** `https://search.termolo.com/mcp`
+3. **Cloudflare Access (preview / fallback):** `https://search.termolo.com/mcp`
    - Token plus operator-local Access headers (`CF-Access-Client-Id`, `CF-Access-Client-Secret`).
+   - Preview / fallback endpoint until kr01 is proven.
    - Access headers stay operator-local and never belong in plugin JSON.
+
+### Operator Troubleshooting Note
+
+Upstream x.ai web → grok2api can make the gateway `POST /grok/v1/chat/completions` return empty `content` (seen with `grok-4.3-fast`). If MCP tools/list works but `web_search` returns blank results, debug grok2api / model routing on the backend, not the plugin URL or client configuration.
 
 Inbound /mcp is not the outbound httpx client GrokSearch uses toward Grok/Tavily/Firecrawl.
 
