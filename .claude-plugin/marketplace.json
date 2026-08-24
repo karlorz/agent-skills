@@ -297,6 +297,21 @@
         "research",
         "http"
       ]
+    },
+    {
+      "name": "cursor-box-channel",
+      "source": "./skills/cursor-box-channel",
+      "description": "Thin marketplace plugin for cursor-box-channel: stdio MCP interface to the local cursor-box macOS daemon bridge for cross-agent channel communication.",
+      "version": "0.1.0",
+      "category": "development",
+      "keywords": [
+        "mcp",
+        "cursor-box",
+        "channel",
+        "daemon",
+        "stdio",
+        "agent-bridge"
+      ]
     }
   ]
 }

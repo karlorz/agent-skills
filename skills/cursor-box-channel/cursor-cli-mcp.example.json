@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "cursor-box-channel": {
+      "command": "bash",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/run-cursor-box-mcp.sh"
+      ]
+    }
+  }
+}
