@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-25
+
+### Added
+- `scripts/check_readiness.py` probe (`in_sync` / `missing_prereq`) and SessionStart hook that apply `GROK_SEARCH_MCP_URL=https://search.karldigi.dev/mcp` in-process when the token is set and the URL is empty. Does not write user MCP config files.
+- Orca new-session probe script `scripts/test-grok-search-orca-new-session.sh` (`--dry-run` in CI; `--live-probe` after release).
+
 ## [0.1.6] - 2026-08-25
 
 ### Changed

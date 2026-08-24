@@ -1,6 +1,6 @@
 {
   "name": "grok-search",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Thin marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via HTTP MCP.",
   "author": {
     "name": "karlorz"
@@ -14,5 +14,6 @@
     "research",
     "http"
   ],
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
 }

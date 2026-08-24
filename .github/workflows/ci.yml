@@ -62,6 +62,12 @@ jobs:
       - name: Run grok-search plugin MCP contract checks
         run: bash scripts/test-grok-search-plugin.sh
 
+      - name: Run grok-search readiness probe checks
+        run: bash scripts/test-grok-search-readiness.sh
+
+      - name: Run grok-search Orca new-session dry-run
+        run: bash scripts/test-grok-search-orca-new-session.sh --dry-run
+
       - name: Run cursor-box-channel plugin MCP contract checks
         run: bash scripts/test-cursor-box-channel-plugin.sh
 

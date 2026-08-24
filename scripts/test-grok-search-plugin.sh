@@ -89,8 +89,8 @@ for json_path in (mcp_path, example_path, manifest_path):
 
 # 5. Manifest (.claude-plugin/plugin.json)
 manifest = json.loads(texts[manifest_path])
-if manifest.get("version") != "0.1.6":
-    raise SystemExit(f"{manifest_path}: version must be 0.1.6")
+if manifest.get("version") != "0.1.7":
+    raise SystemExit(f"{manifest_path}: version must be 0.1.7")
 manifest_desc = manifest.get("description", "")
 if "HTTP" not in manifest_desc and "http" not in manifest_desc:
     raise SystemExit(f"{manifest_path}: description must mention HTTP MCP")
@@ -99,8 +99,8 @@ if "stdio" in manifest_desc.lower():
 
 # 6. CHANGELOG.md
 changelog_text = texts[changelog_path]
-if "0.1.6" not in changelog_text:
-    raise SystemExit(f"{changelog_path}: must mention version 0.1.6")
+if "0.1.7" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must mention version 0.1.7")
 if "2026-08-25" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must mention release date 2026-08-25")
 
@@ -133,6 +133,8 @@ if "GROK_SEARCH_MCP_URL" not in body or "GROK_SEARCH_MCP_TOKEN" not in body:
     raise SystemExit(f"{skill_path}: must mention GROK_SEARCH_MCP_URL and GROK_SEARCH_MCP_TOKEN")
 if "https://search.karldigi.dev/mcp" not in body:
     raise SystemExit(f"{skill_path}: must mention production URL https://search.karldigi.dev/mcp")
+if "check_readiness.py" not in body:
+    raise SystemExit(f"{skill_path}: must require check_readiness.py before MCP tools")
 if "HTTP" not in body and "http" not in body:
     raise SystemExit(f"{skill_path}: must mention HTTP MCP")
 if "first-run" not in body.lower() and "first run" not in body.lower():

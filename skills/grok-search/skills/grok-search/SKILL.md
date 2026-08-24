@@ -9,9 +9,23 @@ Use this skill to perform live web searches, plan search intent, fetch web conte
 
 Grok-search is HTTP MCP only (`type: http`). The host expands `GROK_SEARCH_MCP_URL` and `GROK_SEARCH_MCP_TOKEN`. Prefer connected `grok-search` tools. Do not start a local stdio `uvx` server.
 
+## Readiness (mandatory first action)
+
+Before any grok-search MCP tool, run:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT:-<plugin-root>}/scripts/check_readiness.py" --apply --json
+```
+
+- `missing_prereq` (`GROK_SEARCH_MCP_TOKEN` unset): stop. Ask the operator for a gateway-keys bearer. Do not invent a token. Do not call leftover `grok-search-http` as a fallback.
+- `in_sync` with `migrated: true`: URL was empty; the probe applied `https://search.karldigi.dev/mcp` in-process only. Continue.
+- Handshake 401 after a set token: `handshake_fail` — report it; do not dual-call `grok-search-http`.
+- Never auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
+- After a plugin update, a **new session** is required; this process cannot hot-swap injected SKILL.md.
+
 ## First-Run Environment & Connectivity
 
-If `GROK_SEARCH_MCP_URL` or `GROK_SEARCH_MCP_TOKEN` is unset, or HTTP MCP is not connected (including 401), ask the operator for one URL and the bearer token. Production recommended URL is `https://search.karldigi.dev/mcp` with a gateway-keys token when set. Do not invent a host. Do not auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
+Production recommended URL is `https://search.karldigi.dev/mcp` with a gateway-keys token when set. Do not invent a host.
 
 Known endpoint options (operator picks one):
 - Production: `https://search.karldigi.dev/mcp` — gateway-keys bearer token (recommended)

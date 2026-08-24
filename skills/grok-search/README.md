@@ -33,7 +33,7 @@ Upstream x.ai web → grok2api can make the gateway `POST /grok/v1/chat/completi
 
 Inbound /mcp is not the outbound httpx client GrokSearch uses toward Grok/Tavily/Firecrawl.
 
-If URL or token is unset, the companion skill asks on first run. Do not auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, or `~/.config/grok-search/mcp.env`.
+A SessionStart hook / `scripts/check_readiness.py` applies the production URL in-process when the token is set and the URL is empty. It does not auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, or `~/.config/grok-search/mcp.env`. If the token is unset, the companion skill stops and asks. After a plugin update, start a **new session**.
 
 ## Installation
 
