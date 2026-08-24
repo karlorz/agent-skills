@@ -1130,6 +1130,15 @@ run_plugin_version_sync_contract_checks
 run_plugin_manifest_contract_checks
 run_codex_skill_mirror_contract_checks
 
+run_ci_workflow_contract_checks() {
+  local ci_workflow="$ROOT/.github/workflows/ci.yml"
+  [ -f "$ci_workflow" ] || fail ".github/workflows/ci.yml missing"
+
+  assert_contains "CI runs grok-search plugin test" "$(cat "$ci_workflow")" "bash scripts/test-grok-search-plugin.sh"
+  assert_contains "CI runs cursor-box-channel plugin test" "$(cat "$ci_workflow")" "bash scripts/test-cursor-box-channel-plugin.sh"
+}
+run_ci_workflow_contract_checks
+
 node "$ROOT/scripts/check-plugin-release-drift.js" --repo "$ROOT" --skill dev-loop
 bash "$ROOT/scripts/test-plugin-release-drift.sh"
 bash "$ROOT/scripts/test-dev-loop-config-schema.sh"

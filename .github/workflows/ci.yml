@@ -62,6 +62,9 @@ jobs:
       - name: Run grok-search plugin MCP contract checks
         run: bash scripts/test-grok-search-plugin.sh
 
+      - name: Run cursor-box-channel plugin MCP contract checks
+        run: bash scripts/test-cursor-box-channel-plugin.sh
+
       - name: Run host-backup-restore profile regression tests
         run: bash skills/host-backup-restore/tests/test-portfolio-lab-profile.sh
 
