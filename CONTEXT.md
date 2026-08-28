@@ -73,6 +73,15 @@ Runs once per project. Bootstraps `dev-loop.config.md`, `docs/agents/`, and dele
 **Work-item interview** (`work_item_interview` capability):
 Runs before the SPEC step when ambiguity is detected or the user forces it. Sharpens scope, constraints, and acceptance criteria. Defaults to the native three-question interview; upgrades to `grill-with-docs` when installed.
 
+**Ranked audit**:
+An unattended, read-only evidence pass over bounded project work. It classifies lifecycle state and repository proof but cannot change work-item status.
+
+**Lifecycle reconciliation**:
+An attended office-hours mode that consumes one ranked audit report, asks unresolved verdict questions one at a time, and applies approved lifecycle changes only after final batch approval.
+
+**Verification-only work**:
+Delivered scope whose remaining observation is opt-in post-release verification. It is not ordinary active implementation work and resurfaces only after an approved verification trigger.
+
 **Native interview**:
 The built-in minimal interview — three fixed `AskUserQuestion` calls (scope, constraints, acceptance criteria). Always available, zero dependencies. The fallback when no external interview backend is installed.
 
@@ -99,6 +108,8 @@ The interleaved delegation from `/setup-dev-loop` to an interview backend (e.g.,
 - **Activation depth** is emitted through harness adapters after profile resolution; it does not select the profile
 - **Setup interview** produces `dev-loop.config.md`, `docs/agents/`, and optionally `CONTEXT.md` (via delegated interview backend)
 - **Work-item interview** produces a sharpened requirements summary that feeds into `spec.md`
+- **Ranked audit** produces read-only lifecycle evidence for later office-hours reconciliation
+- **Lifecycle reconciliation** converts attended verdicts into an approved batch of SkillWiki lifecycle changes
 - **Native interview** is the default work-item interview backend; **grill-with-docs** is the optional upgrade
 - **Ambiguity detection** gates whether the work-item interview fires; `grill: true` forces it, `grill: false` suppresses it
 - **Interview backends** are declared in the `interview` config section, separate from `knowledge_backends`

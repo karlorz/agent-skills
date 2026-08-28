@@ -287,7 +287,11 @@ function splitInlineArray(value) {
 }
 
 function parseYamlScalar(rawValue) {
-  const value = cleanScalar(rawValue);
+  const trimmed = rawValue.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  const value = cleanScalar(trimmed);
   const lower = value.toLowerCase();
   if (!value) return "";
   if (value.startsWith("[") && value.endsWith("]")) {
@@ -416,35 +420,12 @@ function parseFrontmatter(text) {
 
   const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
   if (end === -1) return { data: {}, bodyStart: 0 };
-
-  const data = {};
-  for (let index = 1; index < end; index += 1) {
-    const line = lines[index];
-    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (!match) continue;
-
-    const key = match[1];
-    const rawValue = match[2];
-    if (rawValue.trim() === "") {
-      const values = [];
-      let cursor = index + 1;
-      while (cursor < end) {
-        const item = lines[cursor].match(/^\s*-\s*(.*)$/);
-        if (!item) break;
-        values.push(cleanScalar(item[1]));
-        cursor += 1;
-      }
-      if (values.length > 0) {
-        data[key] = values;
-        index = cursor - 1;
-      } else {
-        data[key] = "";
-      }
-    } else {
-      data[key] = cleanScalar(rawValue);
+  const data = parseSimpleYaml(lines.slice(1, end).join("\n"));
+  for (const [key, value] of Object.entries(data)) {
+    if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0) {
+      data[key] = "";
     }
   }
-
   return { data, bodyStart: end + 1 };
 }
 
@@ -1040,6 +1021,13 @@ function candidateBase(opts, fields) {
     findings: fields.findings ?? [],
     git_matches: [],
   };
+
+  if (frontmatter.updated) base.updated = frontmatter.updated;
+  if (frontmatter.automation_ready !== undefined) base.automation_ready = frontmatter.automation_ready;
+  if (frontmatter.preflight_state) base.preflight_state = frontmatter.preflight_state;
+  if (frontmatter.post_release_verification && typeof frontmatter.post_release_verification === "object") {
+    base.post_release_verification = frontmatter.post_release_verification;
+  }
 
   if (fields.implemented_evidence) {
     base.implemented_evidence = fields.implemented_evidence;

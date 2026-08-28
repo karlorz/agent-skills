@@ -1,10 +1,10 @@
 ---
 name: dev-loop
-argument-hint: "[status|doctor|prep|investigate|office-hours|setup|setup-dev-loop|config-lint|dashboard] [high] [flags/topic]"
+argument-hint: "[status|doctor|prep|investigate|ranked-audit|office-hours|setup|setup-dev-loop|config-lint|dashboard] [high] [flags/topic]"
 description: >
   Use for "run a dev cycle", "implement a feature", "make a code change",
-  "start a loop", "investigate", "find work", "prep", "status", "office-hours",
-  "setup", "dashboard", or "config-lint".
+  "start a loop", "investigate", "find work", "prep", "status", "ranked audit",
+  "office-hours", "setup", "dashboard", or "config-lint".
   Read-only status, config-lint, and why-skipped helpers. /goal compatible.
   Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
   Pass `high` for aggressive mode.
@@ -39,7 +39,7 @@ autodiscovers conventions or asks the user to bootstrap one.
 ## Mode
 
 Parse arguments for the keywords `status`, `doctor`, `prep`, `investigate`,
-`office-hours`, `setup`, `setup-dev-loop`, `config-lint`, and `dashboard`
+`ranked-audit`, `office-hours`, `setup`, `setup-dev-loop`, `config-lint`, and `dashboard`
 (case-insensitive). **`doctor` is an alias for `status`** (operator-facing cycle
 preview). **`setup` is an alias for `setup-dev-loop`** (interactive project
 bootstrap). `doctor` is not the REFRESH **doctor-worker** dependency probe —
@@ -49,7 +49,8 @@ doctor-worker unless you explicitly run a full REFRESH core cycle.
 If `status` or `doctor` is present, set **MODE = status**. Else if `config-lint`
 is present, set **MODE = config-lint**. Else if `dashboard` is present, set
 **MODE = dashboard**. Else if `setup` or `setup-dev-loop` is present, set
-**MODE = setup**. Else if `office-hours` is present, set **MODE = office-hours**.
+**MODE = setup**. Else if `ranked-audit` is present, set **MODE = ranked-audit**.
+Else if `office-hours` is present, set **MODE = office-hours**.
 Else if `prep` is present, set **MODE = prep**. Else if `investigate` is present,
 set **MODE = investigate**. Otherwise set **MODE = core** (default).
 
@@ -63,16 +64,18 @@ set **MODE = investigate**. Otherwise set **MODE = core** (default).
    Remaining flags become `DASHBOARD_ARGS` (e.g. `--refresh`, `--json`).
 4. Check for `setup` or `setup-dev-loop` keyword. If found, set `MODE = setup`,
    remove from args. Remaining args become `SETUP_ARGS`.
-5. Check for `office-hours` keyword. If found, set `MODE = office-hours`,
+5. Check for `ranked-audit` keyword. If found, set `MODE = ranked-audit`,
+   remove from args. Remaining flags become `RANKED_AUDIT_ARGS`.
+6. Check for `office-hours` keyword. If found, set `MODE = office-hours`,
    remove from args. Remaining args become `OFFICE_HOURS_ARGS`.
-6. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
+7. Check for `prep` keyword. If found, set `MODE = prep`, remove from args.
    Remaining non-`high` args are preserved as `PREP_ARGS`.
-7. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
-8. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
-9. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
+8. Check for `investigate` keyword. If found, set `MODE = investigate`, remove from args.
+9. Check for `high` keyword. If found, set `INTENSITY = high`, remove from args.
+10. Remaining args → `PREP_ARGS` when MODE = prep; `INVESTIGATE_TOPIC` when MODE =
    investigate; `STATUS_ARGS` when MODE = status; `CONFIG_LINT_ARGS` when MODE = config-lint;
    `DASHBOARD_ARGS` when MODE = dashboard; `SETUP_ARGS` when MODE = setup;
-   `OFFICE_HOURS_ARGS` when MODE = office-hours.
+   `RANKED_AUDIT_ARGS` when MODE = ranked-audit; `OFFICE_HOURS_ARGS` when MODE = office-hours.
 
 Examples:
 ```
@@ -90,6 +93,7 @@ Examples:
 /dev-loop doctor                         → MODE=status (alias)
 /dev-loop status --json                  → MODE=status, STATUS_ARGS includes --json (JSON to stdout)
 /dev-loop status --preview-mode investigate → MODE=status, preview investigate gates/blockers
+/dev-loop ranked-audit --top 20           → MODE=ranked-audit, RANKED_AUDIT_ARGS="--top 20"
 /dev-loop office-hours                    → MODE=office-hours
 /dev-loop office-hours --all-projects     → MODE=office-hours, OFFICE_HOURS_ARGS="--all-projects"
 /dev-loop office-hours "release triage"   → MODE=office-hours, OFFICE_HOURS_ARGS includes topic
@@ -120,6 +124,9 @@ After REFRESH (step 0), branch on MODE:
 - **`core`** → run The Loop (steps 1–14) or IDLE DISCOVERY as documented below.
 - **`setup`** → run the setup pipeline from `setup-dev-loop/SKILL.md`.
   Use this mode for both `/dev-loop setup` and `/dev-loop setup-dev-loop`.
+- **`ranked-audit`** → run the unattended read-only ranked lifecycle scan from
+  `ranked-audit/SKILL.md`. It may publish one managed evidence report, but it
+  does not change work-item lifecycle state.
 - **`office-hours`** → run the attended office-hours pipeline from
   `office-hours/SKILL.md`. It writes the requirements report described there
   and does not set preflight readiness.

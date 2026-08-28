@@ -23,7 +23,9 @@ before prep or execution.
 
 1. Run in the `main session only`. Do NOT spawn subagents for intake,
    candidate selection, or approval. `Do NOT call structured question tools from subagents`.
-2. Handle exactly one topic, capture, or work item per invocation.
+2. Handle exactly one topic, capture, or work item per ordinary invocation.
+   Ranked-audit reconciliation treats one audit report as the selected topic
+   and may resolve multiple candidate verdicts inside that report.
 3. Brain and memory refresh is fully unattended — never ask the user to choose
    memory pages, wiki layers, or project-index refresh strategy.
 4. Do NOT auto-select a no-topic candidate. List current-project candidates, or
@@ -76,6 +78,7 @@ print candidate context, but stop before any prompt or write.
 /dev-loop office-hours <topic>
 /dev-loop office-hours <work-item-slug>
 /dev-loop office-hours raw/transcripts/<file>.md
+/dev-loop office-hours <audit-report> --reconcile
 ```
 
 `--all` (or a "show all" request) expands the candidate list from the default
@@ -88,6 +91,49 @@ slugs" starts in cross-project discovery mode. It lists candidates from every
 candidate. Keep the workflow one-topic after selection. The report and any
 managed backreference still belong to the selected project's `<slug>`, not to a
 global location.
+
+## Ranked Audit Reconciliation Mode
+
+Enter this mode only when `--reconcile` and one exact ranked-audit report path
+are present. The report is the selected topic; do not run ordinary candidate
+selection.
+
+1. Require an attended main session. In `/goal`, CI, cron, satellite, nested
+   worker, or other non-interactive context, stop with:
+   `Ranked-audit reconciliation requires an attended main session.`
+2. Re-read the audit report and every referenced work-item spec. Compare current
+   hashes with the report evidence; stale targets require a rescan or explicit
+   read-only continuation.
+3. Treat `active-code-work` as no-change context unless newer evidence conflicts.
+4. For `delivered-close-candidate`, `verification-only`,
+   `stale-or-superseded`, `human-gated`, and `unverifiable`, ask one verdict question at a time. Put an evidence-backed recommendation first.
+5. Accumulate proposed actions: close delivered scope, convert optional
+   verification to post-release prose, update progress, defer, abandon, leave
+   unchanged, or research more.
+6. Do not mutate any work item before final batch approval. Show one exact
+   diff-style summary of files, lifecycle fields, checklist changes, and index
+   or log projections. Ask for final batch approval through the main-session
+   question runner.
+7. If approval is declined, write the reconciliation decision report only.
+8. If approved, apply the minimal project-work edits, then run
+   `skillwiki validate` and `skillwiki work-validate` for every target. Use
+   `--require-complete` for each closure. Refresh affected project indexes and
+   append managed lifecycle log events; never hand-edit root `index.md` or
+   `log.md`.
+9. Draft the cross-project reconciliation report outside the vault and publish
+   it through `skillwiki page publish` at:
+   `meta/YYYY-MM-DD-ranked-audit-reconciliation.md`. Link the source ranked-audit
+   report, record every asked question and answer, list approved and declined
+   mutations, and report validation results.
+10. Stop after the reconciliation report. Do not enter the ordinary Refresh,
+    candidate-selection, requirement-question, project requirements-report, or
+    backreference flow below.
+
+Apply SkillWiki's work-item completion contract during reconciliation: required
+acceptance checks may block closure; typed opt-in post-release verification does
+not and must not remain as unchecked completion tasks. Treat the schema's
+`post_release_verification.triggers` values as the authoritative resurfacing
+conditions.
 
 ## Refresh
 

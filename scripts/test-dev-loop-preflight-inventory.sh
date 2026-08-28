@@ -12,6 +12,7 @@ fail() {
 write_work_spec() {
   local dir="$1" status="$2" priority="$3" title="$4"
   local project="${5:-agent-skills}"
+  local extra="${6:-}"
   mkdir -p "$dir"
   cat > "$dir/spec.md" <<EOF
 ---
@@ -25,6 +26,7 @@ project: "[[$project]]"
 created: 2026-06-05
 updated: 2026-06-05
 started: 2026-06-05
+$extra
 ---
 
 # $title
@@ -178,7 +180,7 @@ git -C "$REPO" commit -q -m "fix(dev-loop): implement widget-reviewer widget:rev
 
 write_work_spec "$WORK/2026-06-05-planned-high" planned high "Planned High"
 write_plan "$WORK/2026-06-05-planned-high"
-write_work_spec "$WORK/2026-06-05-in-progress" in-progress medium "In Progress"
+write_work_spec "$WORK/2026-06-05-in-progress" in-progress medium "In Progress" agent-skills $'automation_ready: false\npreflight_state: needs_human\npost_release_verification:\n  posture: opt-in\n  triggers:\n    - explicit-user-request'
 write_plan "$WORK/2026-06-05-in-progress"
 write_work_spec "$WORK/2026-06-05-ready-high" ready high "Ready High"
 write_plan "$WORK/2026-06-05-ready-high"
@@ -215,6 +217,11 @@ assert_json "$all_json" '
   const ids = data.candidates.map((candidate) => candidate.id);
   assert(ids.includes("2026-06-05-planned-high"), "planned work missing");
   assert(ids.includes("2026-06-05-in-progress"), "in-progress work missing");
+  const inProgress = data.candidates.find((candidate) => candidate.id === "2026-06-05-in-progress");
+  assert(inProgress.automation_ready === false, "nested frontmatter should preserve boolean automation readiness");
+  assert(inProgress.preflight_state === "needs_human", "nested frontmatter should preserve preflight state");
+  assert(inProgress.post_release_verification?.posture === "opt-in", "nested post-release verification should remain structured");
+  assert(inProgress.post_release_verification?.triggers?.[0] === "explicit-user-request", "nested verification triggers should remain structured");
   assert(ids.includes("2026-06-05-ready-high"), "ready work missing");
   assert(ids.includes("2026-06-05-active-high"), "active work missing");
   assert(ids.includes("2026-06-05-proposed-legacy"), "legacy proposed work missing");

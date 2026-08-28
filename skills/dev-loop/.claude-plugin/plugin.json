@@ -1,7 +1,7 @@
 {
   "name": "dev-loop",
-  "version": "1.26.33",
-  "description": "Adaptive dev cycle engine with SkillWiki vault, preflight prep, investigate, office-hours, config-lint, and cross-harness verification. Pass `high` for aggressive mode.",
+  "version": "1.26.34",
+  "description": "Adaptive dev cycle engine with SkillWiki vault, preflight prep, ranked audit, investigate, office-hours, config-lint, and cross-harness verification. Pass `high` for aggressive mode.",
   "author": {
     "name": "karlorz"
   },
@@ -19,6 +19,7 @@
     "investigate",
     "prep",
     "preflight",
+    "ranked-audit",
     "simplify-worker",
     "ci-health-worker",
     "interview",

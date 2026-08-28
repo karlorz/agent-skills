@@ -646,6 +646,7 @@ run_dev_loop_command_surface_contract_checks() {
   assert_contains "dev-loop argument hint includes status" "$hint" "status"
   assert_contains "dev-loop argument hint includes doctor" "$hint" "doctor"
   assert_contains "dev-loop argument hint includes investigate" "$hint" "investigate"
+  assert_contains "dev-loop argument hint includes ranked-audit" "$hint" "ranked-audit"
   assert_contains "dev-loop argument hint includes office-hours" "$hint" "office-hours"
   assert_contains "dev-loop argument hint includes setup" "$hint" "setup"
   assert_contains "dev-loop argument hint includes setup-dev-loop" "$hint" "setup-dev-loop"
@@ -653,10 +654,12 @@ run_dev_loop_command_surface_contract_checks() {
   assert_contains "dev-loop argument hint includes dashboard" "$hint" "dashboard"
 
   body="$(cat "$umbrella")"
+  assert_contains "dev-loop parses ranked-audit mode" "$body" "MODE = ranked-audit"
   assert_contains "dev-loop parses office-hours mode" "$body" "MODE = office-hours"
   assert_contains "dev-loop parses setup mode" "$body" "MODE = setup"
   assert_contains "dev-loop setup-dev-loop alias" "$body" "setup-dev-loop"
   assert_contains "dev-loop standard office-hours example" "$body" "/dev-loop office-hours"
+  assert_contains "dev-loop standard ranked-audit example" "$body" "/dev-loop ranked-audit --top 20"
   assert_contains "dev-loop standard setup example" "$body" "/dev-loop setup"
   assert_contains "dev-loop standard Codex entrypoint" "$body" '$dev-loop'
   assert_not_contains "dev-loop does not expose research mode" "$body" "/dev-loop research"
@@ -666,7 +669,7 @@ run_dev_loop_command_surface_contract_checks() {
   assert_not_contains "dev-loop parent no research colon command" "$body" "/dev-loop:research"
   assert_not_contains "dev-loop parent no setup colon command" "$body" "/dev-loop:setup-dev-loop"
 
-  for helper_name in status investigate office-hours research setup-dev-loop; do
+  for helper_name in status investigate ranked-audit office-hours research setup-dev-loop; do
     helper="$skill_root/skills/$helper_name/SKILL.md"
     [ -f "$helper" ] || fail "${helper#$ROOT/} missing"
 
@@ -727,6 +730,33 @@ run_dev_loop_office_hours_contract_checks() {
   assert_contains "office-hours stale implemented recheck" "$body" 'possibly_implemented_without_closure'
   assert_contains "office-hours stale handling remains human-controlled" "$body" 'hygiene-cleanup'
   assert_contains "office-hours optional grill hook" "$body" 'grill-me'
+}
+
+run_dev_loop_ranked_audit_contract_checks() {
+  local skill_root audit_skill audit_helper office_hours
+
+  skill_root="$ROOT/skills/dev-loop"
+  audit_skill="$skill_root/skills/ranked-audit/SKILL.md"
+  audit_helper="$skill_root/scripts/ranked-audit.js"
+  office_hours="$skill_root/skills/office-hours/SKILL.md"
+
+  [ -f "$audit_helper" ] || fail "${audit_helper#$ROOT/} missing"
+
+  assert_contains "ranked-audit is read-only" "$(cat "$audit_skill")" 'read-only'
+  assert_contains "ranked-audit forbids lifecycle mutation" "$(cat "$audit_skill")" 'Do NOT change work-item lifecycle status'
+  assert_contains "ranked-audit helper records no writes" "$(cat "$audit_helper")" 'writes_executed: false'
+  assert_contains "ranked-audit delivered classification" "$(cat "$audit_helper")" 'delivered-close-candidate'
+  assert_contains "ranked-audit active classification" "$(cat "$audit_helper")" 'active-code-work'
+  assert_contains "ranked-audit verification classification" "$(cat "$audit_helper")" 'verification-only'
+  assert_contains "ranked-audit human classification" "$(cat "$audit_helper")" 'human-gated'
+  assert_contains "ranked-audit stale classification" "$(cat "$audit_helper")" 'stale-or-superseded'
+  assert_contains "ranked-audit unverifiable classification" "$(cat "$audit_helper")" 'unverifiable'
+  assert_contains "office-hours reconciliation input" "$(cat "$office_hours")" '<audit-report> --reconcile'
+  assert_contains "office-hours reconciliation asks one at a time" "$(cat "$office_hours")" 'one verdict question at a time'
+  assert_contains "office-hours reconciliation final batch approval" "$(cat "$office_hours")" 'final batch approval'
+  assert_contains "office-hours reconciliation no early mutation" "$(cat "$office_hours")" 'Do not mutate any work item before final batch approval'
+  assert_contains "office-hours reconciliation meta report" "$(cat "$office_hours")" 'meta/YYYY-MM-DD-ranked-audit-reconciliation.md'
+  assert_contains "office-hours reconciliation stops ordinary flow" "$(cat "$office_hours")" 'Do not enter the ordinary Refresh'
 }
 
 run_dev_loop_investigate_queue_contract_checks() {
@@ -1145,6 +1175,7 @@ run_dev_loop_prep_prompt_contract_checks
 run_dev_loop_status_companion_contract_checks
 run_dev_loop_command_surface_contract_checks
 run_dev_loop_office_hours_contract_checks
+run_dev_loop_ranked_audit_contract_checks
 run_dev_loop_investigate_queue_contract_checks
 run_codex_dispatch_contract_checks
 run_dev_loop_metadata_contract_checks
@@ -1181,6 +1212,7 @@ bash "$ROOT/scripts/test-dev-loop-config-lint.sh"
 bash "$ROOT/scripts/test-dev-loop-status.sh"
 bash "$ROOT/scripts/test-dev-loop-config-migrate.sh"
 bash "$ROOT/scripts/test-dev-loop-dashboard.sh"
+bash "$ROOT/scripts/test-dev-loop-ranked-audit.sh"
 bash "$ROOT/scripts/test-design-guide-usage.sh"
 
 printf 'test-dev-loop-release-tooling: ok\n'
