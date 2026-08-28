@@ -3,15 +3,18 @@ name: cursor-github-marketplace-repin
 description: >-
   Re-pin the two Cursor user GitHub plugin marketplaces llm-wiki
   (karlorz/llm-wiki) and karlorz-agent-skills (karlorz/agent-skills) with
-  `plugin marketplace remove` then `add --git-ref`. This skill should be used
-  when those two catalog gitRef pins lag GitHub, Cursor SkillWiki or
-  karlorz-agent-skills packs look stale, `plugin marketplace update` kept the
-  same SHA, or Team Dashboard Refresh/Auto Refresh was suggested for them
-  (Refresh does not apply when scope=user). Run status.sh first; execute
-  remove+add only if the user asked to update or re-pin these two repos. Do
-  not use for Cursor public marketplace, Team admin rows, Claude/Codex/Grok
-  plugin updates, `npx skills`, or other user GitHub adds (obsidian-skills,
-  newapi-skills, openai-codex).
+  `plugin marketplace remove` then `add --git-ref`, then reinstall KEEP
+  plugins (skillwiki, vault-sync, grok-search, deep-research). marketplace
+  remove drops those plugins from Grok Bot because the account list is
+  shared; the KEEP reinstall puts them back. Use when those two catalog
+  gitRef pins lag GitHub, Cursor/Grok Bot SkillWiki or karlorz-agent-skills
+  packs look stale, `plugin marketplace update` kept the same SHA, or Team
+  Dashboard Refresh/Auto Refresh was suggested (Refresh does not apply when
+  scope=user). Run status.sh first; execute remove+add only if the user
+  asked to update or re-pin these two repos. Do not use for Cursor public
+  marketplace, Team admin rows, Claude/Codex/Grok plugin updates, `npx
+  skills`, or other user GitHub adds (obsidian-skills, newapi-skills,
+  openai-codex).
 ---
 
 # cursor-github-marketplace-repin
@@ -86,9 +89,52 @@ Resolve `AGENT` once (`cursor-agent` or `agent`, same as `status.sh`). Do
 "$AGENT" plugin marketplace add https://github.com/karlorz/agent-skills --git-ref <head-sha-from-status.sh>
 ```
 
+## KEEP plugins (reinstall after re-pin)
+
+`marketplace remove` uninstalls every plugin from that marketplace on the
+shared Cursor account list. Grok Bot uses the same list, so SkillWiki and
+vault-sync disappear from Grok Bot until they are installed again. `add`
+brings the marketplace back but does **not** reinstall the plugins.
+
+After each successful remove+add (or add-only when status is `MISSING`),
+reinstall that marketplace's KEEP plugins. Idempotent. Do not `plugin
+uninstall` KEEP plugins as their own step.
+
+| Marketplace | KEEP plugins | Install after re-pin |
+| --- | --- | --- |
+| `llm-wiki` | `skillwiki`, `vault-sync` | `"$AGENT" plugin install skillwiki@llm-wiki` then `vault-sync@llm-wiki` |
+| `karlorz-agent-skills` | `grok-search`, `deep-research` | `"$AGENT" plugin install grok-search@karlorz-agent-skills` then `deep-research@karlorz-agent-skills` |
+
+```bash
+# after llm-wiki pin is back
+"$AGENT" plugin install skillwiki@llm-wiki
+"$AGENT" plugin install vault-sync@llm-wiki
+
+# after karlorz-agent-skills pin is back
+"$AGENT" plugin install grok-search@karlorz-agent-skills
+"$AGENT" plugin install deep-research@karlorz-agent-skills
+```
+
+`deep-research` must be in the Cursor catalog
+(`.cursor-plugin/marketplace.json` on karlorz/agent-skills), not only the
+Claude catalog. If `plugin install deep-research@karlorz-agent-skills` says
+the plugin is unknown, the Cursor marketplace pin is still the old catalog
+that listed only `grok-search` — finish the karlorz-agent-skills re-pin
+first, then install.
+
+`grok-search` may ask for `GROK_SEARCH_MCP_TOKEN` (Cursor Plugins →
+Configure). Do not invent a token. If it is already configured, leave it.
+
+Grok Bot public plugin ids when a Grok Bot reinstall is also needed:
+`skillwiki` = `57442251`, `vault-sync` = `57442252`, `grok-search` =
+`57442314`. `deep-research` has no public catalog id until it is in the
+Cursor marketplace catalog.
+
 ## Verify
 
-Re-run `status.sh` until both groups print `PIN MATCHES`.
+Re-run `status.sh` until both groups print `PIN MATCHES`. Then confirm the
+KEEP plugins above are installed again (`skillwiki`, `vault-sync`,
+`grok-search`, `deep-research`).
 
 `gitRef` is a 40-character SHA, not the tag string. For llm-wiki annotated
 tags it must equal status.sh `tag=` (tag object). The peeled `commit=` may

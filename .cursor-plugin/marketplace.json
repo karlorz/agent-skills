@@ -17,6 +17,17 @@
         "search",
         "mcp"
       ]
+    },
+    {
+      "name": "deep-research",
+      "source": "skills/deep-research",
+      "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration.",
+      "category": "research",
+      "tags": [
+        "research",
+        "deep-research",
+        "source-triage"
+      ]
     }
   ]
 }
