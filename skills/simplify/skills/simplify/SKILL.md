@@ -1,6 +1,6 @@
 ---
 name: simplify
-description: Use when reviewing recent code changes for simplification before commit, when the user asks to simplify, refine, polish, or clean up code, or when dev-loop requires its simplify review gate.
+description: Review recent diffs for simplification before commit. Use when asked to simplify, polish, or when dev-loop requires simplify.
 ---
 
 # Simplify

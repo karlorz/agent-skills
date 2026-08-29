@@ -79,3 +79,8 @@ jobs:
 
       - name: Run grok-build-harness regression checks
         run: bash scripts/test-grok-build-harness.sh
+
+      - name: Lint skill description catalog budget
+        run: |
+          python3 scripts/test-skill-description-budget.py
+          python3 scripts/lint-skill-descriptions.py --layout agent-skills --max-total-chars 4800

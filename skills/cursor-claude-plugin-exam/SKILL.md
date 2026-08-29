@@ -1,6 +1,6 @@
 ---
 name: cursor-claude-plugin-exam
-description: Read-only audit of Claude-to-Cursor plugin discovery, SkillWiki cache freshness vs Cursor marketplace snapshots, and grok-search MCP configuration. Use only when the user asks to exam, audit, or diagnose Claude-to-Cursor plugin discovery.
+description: Read-only audit of Claude-to-Cursor plugin discovery and SkillWiki cache freshness. Use to exam or diagnose those packs.
 disable-model-invocation: true
 ---
 

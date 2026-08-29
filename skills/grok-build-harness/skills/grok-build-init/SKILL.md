@@ -1,6 +1,6 @@
 ---
 name: grok-build-init
-description: Bootstrap a fresh host's grok-build with the karlorz subagent harness — custom agents (grok-build-byok, scout), agentrules.md, subagent-contract AGENTS.md, sanitized BYOK config, and the companion plugin set. Use when initializing grok-build on a new machine, re-running the harness after an upgrade, or reproducing the harness in a scratch GROK_HOME for testing.
+description: Bootstrap grok-build with the karlorz subagent harness and companion plugins. Use when initializing grok-build on a new host.
 ---
 
 # grok-build-init

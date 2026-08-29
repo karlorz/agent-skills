@@ -1,7 +1,7 @@
 ---
 name: setup-dev-loop
 user-invocable: false
-description: Scaffold per-repo dev-loop config (workflow profile, PRD layer, knowledge layer, release config, vault path) and build the project glossary with grill-with-docs. Run once per repo before using dev-loop.
+description: Scaffold per-repo dev-loop config and project glossary. Use once per repo before /dev-loop, or for setup-dev-loop.
 ---
 
 # Setup Dev-Loop

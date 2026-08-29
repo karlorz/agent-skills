@@ -7,6 +7,8 @@ Keep SkillWiki resolution portable: use
 `skillwiki path`. Hardcode an absolute vault path only for a deliberately
 machine-pinned workspace.
 
+Skill `description` fields are routing metadata for every skill we author, not marketplace-specific copy. Follow [[concepts/codex-skill-catalog-budget]]: 180-character target, CI fail above 220, unique-canonical total cap. Plugins stay installed so the agent can select them; disabling plugins is opt-in.
+
 This repo works main-first:
 
 - Work on `main` by default.

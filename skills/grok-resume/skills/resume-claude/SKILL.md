@@ -1,9 +1,6 @@
 ---
 name: resume-claude
-description: >
-  Resume or continue work from a recent Claude Code session. Use when the user
-  switched from Claude Code, says "continue from Claude" or "resume my Claude
-  session", or names a Claude session by description, path, or native ID.
+description: Resume a recent Claude Code session from ~/.claude project JSONL. Use when switching from Claude or naming a Claude session.
 metadata:
   short-description: "Continue from a recent Claude Code session"
 ---

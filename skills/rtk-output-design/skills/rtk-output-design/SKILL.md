@@ -1,6 +1,6 @@
 ---
 name: rtk-output-design
-description: "Use when designing, reviewing, or implementing CLI, skill, hook, or script output for AI agents. Distills RTK-style token-killing output patterns: compact summaries, failure-focused filtering, structured JSON, omission accounting, exit-code preservation, and verification checks for token-efficient developer tools."
+description: Design compact, failure-first CLI/skill/hook output for agents. Use when implementing or reviewing agent-facing output.
 ---
 
 # RTK Output Design

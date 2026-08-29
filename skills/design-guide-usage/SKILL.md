@@ -1,6 +1,6 @@
 ---
 name: design-guide-usage
-description: Record, preview, and report privacy-safe design-guide usage evidence and personal promotion-review readiness. Use when the user asks for design-guide usage status, wants to record or preview a meaningful design-guide frontend observation, asks what evidence remains before promotion review, or invokes $design-guide-usage.
+description: Record privacy-safe design-guide usage evidence. Use for design-guide usage status or promotion-review readiness.
 ---
 
 # Design Guide Usage

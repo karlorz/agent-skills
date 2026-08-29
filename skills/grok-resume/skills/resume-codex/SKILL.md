@@ -1,9 +1,6 @@
 ---
 name: resume-codex
-description: >
-  Resume or continue work from a recent Codex CLI or Codex VS Code session. Use
-  when the user switched from Codex, says "continue from Codex" or "resume my
-  Codex session", or names a Codex session by description, path, or native ID.
+description: Resume a recent Codex CLI or VS Code session from ~/.codex logs. Use when switching from Codex or naming a Codex session.
 metadata:
   short-description: "Continue from a recent Codex session"
 ---

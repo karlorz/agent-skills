@@ -1,11 +1,7 @@
 ---
 name: status
 user-invocable: false
-description: >
-  Companion prompt for dev-loop read-only status mode. Explains what the next
-  cycle would do without vault/git/PR/release writes. Invoked via /dev-loop
-  status or /dev-loop doctor [high] [--json] [--preview-mode …]. Works when
-  knowledge_layer is none; does not spawn REFRESH doctor-worker.
+description: Read-only preview of the next dev-loop cycle with no vault or git writes. Use for /dev-loop status or doctor.
 ---
 
 # Dev-Loop Status Mode

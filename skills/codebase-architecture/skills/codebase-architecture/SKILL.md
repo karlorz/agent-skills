@@ -1,6 +1,6 @@
 ---
 name: codebase-architecture
-description: Use when the user asks for codebase-architecture, the architecture skill chain, reimplementation playbook, or is unsure whether to analyze, design vocabulary, improve, or to-spec. Routes to the correct specialized skill; does not replace them.
+description: Route architecture work to analyze, design, improve, or to-spec. Use when the user asks for codebase-architecture.
 metadata:
   role: router
 ---

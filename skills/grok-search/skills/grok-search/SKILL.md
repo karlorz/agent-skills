@@ -1,6 +1,6 @@
 ---
 name: grok-search
-description: "This skill should be used when the user needs live web search, current documentation, web page fetching, site mapping, or verified external source citations via the grok-search MCP service."
+description: Live web search, docs fetch, and site mapping via grok-search MCP. Use when the user needs current web or documentation facts.
 ---
 
 # Grok Search

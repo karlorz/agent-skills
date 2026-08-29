@@ -1,6 +1,6 @@
 ---
 name: host-backup-restore
-description: Use when backing up or restoring remote Linux hosts, including Caddy reverse-proxy domains, databases, systemd services, SSH or Tailscale identity, Hermes state, or a Portfolio Lab recovery bundle that must be retrieved, verified, or restored.
+description: Backup or restore remote Linux hosts, Caddy, databases, and Hermes state. Use for host backup, restore, or recovery bundles.
 ---
 
 # Host Backup Restore

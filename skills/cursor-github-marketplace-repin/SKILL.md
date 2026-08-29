@@ -1,20 +1,6 @@
 ---
 name: cursor-github-marketplace-repin
-description: >-
-  Re-pin the two Cursor user GitHub plugin marketplaces llm-wiki
-  (karlorz/llm-wiki) and karlorz-agent-skills (karlorz/agent-skills) with
-  `plugin marketplace remove` then `add --git-ref`, then reinstall KEEP
-  plugins (skillwiki, vault-sync, grok-search, deep-research). marketplace
-  remove drops those plugins from Grok Bot because the account list is
-  shared; the KEEP reinstall puts them back. Use when those two catalog
-  gitRef pins lag GitHub, Cursor/Grok Bot SkillWiki or karlorz-agent-skills
-  packs look stale, `plugin marketplace update` kept the same SHA, or Team
-  Dashboard Refresh/Auto Refresh was suggested (Refresh does not apply when
-  scope=user). Run status.sh first; execute remove+add only if the user
-  asked to update or re-pin these two repos. Do not use for Cursor public
-  marketplace, Team admin rows, Claude/Codex/Grok plugin updates, `npx
-  skills`, or other user GitHub adds (obsidian-skills, newapi-skills,
-  openai-codex).
+description: Re-pin Cursor user GitHub marketplaces llm-wiki and karlorz-agent-skills, then reinstall KEEP plugins. Use when gitRef pins lag.
 ---
 
 # cursor-github-marketplace-repin

@@ -1,11 +1,6 @@
 ---
 name: playwright-cli
-description: >
-  Automate browser interactions, test web pages, initialize Playwright CLI project
-  config, and install a user-level chrome-debug launcher. Prefer attaching to a
-  headed Chrome debug profile (global default-user clone) for logged-in sessions;
-  fall back to playwright-cli open for disposable browsers. Includes browser-worker
-  for mechanical Chrome lifecycle.
+description: "Automate headed Chrome with Playwright CLI: inspect, screenshot, and test pages. Use for browser automation or chrome-debug setup."
 allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(chrome-debug:*) Bash(bash\ scripts/chrome-debug.sh:*) Bash(bash\ scripts/setup-playwright-cli.sh:*) Bash(make\ chrome-debug:*)
 ---
 

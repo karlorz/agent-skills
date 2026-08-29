@@ -1,6 +1,6 @@
 ---
 name: deep-research
-description: Use when user requests comprehensive research on a topic, wants source-triaged investigation across local files, freshness sources, docs, repos, or mentions deep research, literature review, competitive analysis, technology comparison, latest versions, changelogs, or current facts. Works with or without a knowledge base vault.
+description: Source-triaged research across local files, docs, repos, and current facts. Use for deep research, comparisons, or latest versions.
 ---
 
 # Deep Research

@@ -1,13 +1,7 @@
 ---
 name: dev-loop
 argument-hint: "[status|doctor|prep|investigate|ranked-audit|office-hours|setup|setup-dev-loop|config-lint|dashboard] [high] [flags/topic]"
-description: >
-  Use for "run a dev cycle", "implement a feature", "make a code change",
-  "start a loop", "investigate", "find work", "prep", "status", "ranked audit",
-  "office-hours", "setup", "dashboard", or "config-lint".
-  Read-only status, config-lint, and why-skipped helpers. /goal compatible.
-  Codex CLI/App, preflight prep, investigate, vault sync, portable SkillWiki vault.
-  Pass `high` for aggressive mode.
+description: "Run a project dev cycle: implement, investigate, prep, status, office-hours, setup, or dashboard. Use for /dev-loop or config-lint."
 ---
 
 # Dev Loop — PRD + Skillwiki (Generic Engine)

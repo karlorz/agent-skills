@@ -1,11 +1,7 @@
 ---
 name: research
 user-invocable: false
-description: >
-  Pluggable research agent for dev-loop. Spawn with model: sonnet.
-  Scans code health (CLI, tests, skills, specs) and optional vault health
-  (coverage, links, quality). Outputs prioritized work items. Pass `high`
-  for aggressive mode.
+description: Sonnet research agent for dev-loop code and vault health. Use when /dev-loop research should scan and rank work items.
 ---
 
 # Dev-Loop Research Agent

@@ -1,6 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: Use when scanning a codebase for deepening opportunities, shallow modules, architectural friction, testability or AI-navigability refactors, or when the user wants an architecture review HTML report before redesigning a module.
+description: Scan for deepening, testability, and AI-navigability refactors. Use when asking for an architecture improvement review.
 disable-model-invocation: true
 metadata:
   upstream: https://github.com/mattpocock/skills/tree/main/skills/engineering/improve-codebase-architecture

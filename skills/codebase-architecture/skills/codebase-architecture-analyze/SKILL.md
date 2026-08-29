@@ -1,6 +1,6 @@
 ---
 name: codebase-architecture-analyze
-description: Use when analyzing or explaining codebase architecture, extracting C4 diagrams, ADRs, tech debt, module/seam-cluster specs, reimplementation blueprints, topology maps, or when the user asks to document, reverse-engineer, or produce reimplementation-grade architecture docs for a repo.
+description: Analyze architecture into C4, ADRs, debt, and reimplementation maps. Use when documenting or reverse-engineering a repo.
 metadata:
   upstream:
     - "https://github.com/mattpocock/skills (design vocabulary lineage)"

@@ -1,6 +1,6 @@
 ---
 name: architecture-to-spec
-description: Use when turning architecture analysis or the current design conversation into a reimplementation or feature PRD/spec without interviewing the user, or when chaining after codebase-architecture-analyze / improve-codebase-architecture.
+description: Turn architecture analysis into a PRD or spec without interviewing. Use after codebase-architecture-analyze or for a feature spec.
 disable-model-invocation: true
 metadata:
   upstream: https://github.com/mattpocock/skills/tree/main/skills/engineering/to-spec

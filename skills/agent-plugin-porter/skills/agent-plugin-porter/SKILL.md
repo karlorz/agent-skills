@@ -1,6 +1,6 @@
 ---
 name: agent-plugin-porter
-description: Use when porting Claude Code plugins to Codex or Agy/Gemini packages, installing or running the agent-plugin-porter CLI, verifying generated plugin output, preparing Codex personal-marketplace installs, or planning npm publish/release steps for the porter.
+description: Port Claude Code plugins to Codex or Agy packages. Use when running agent-plugin-porter or preparing a Codex marketplace install.
 ---
 
 # Agent Plugin Porter

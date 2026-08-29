@@ -1,6 +1,6 @@
 ---
 name: codebase-design
-description: Use when designing or improving a module interface, finding deepening opportunities, deciding seam placement, making code more testable or AI-navigable, or when another architecture skill needs deep-module vocabulary.
+description: Design a module interface, seams, and testability. Use when another architecture skill needs deep-module vocabulary.
 metadata:
   upstream: https://github.com/mattpocock/skills/tree/main/skills/engineering/codebase-design
   upstream_license: MIT
