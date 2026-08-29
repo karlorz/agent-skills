@@ -1,6 +1,6 @@
 {
   "name": "deep-research",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration.",
   "author": {
     "name": "karlorz"

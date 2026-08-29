@@ -1,6 +1,6 @@
 {
   "name": "grok-resume",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Source-faithful Grok Build resume-codex and resume-claude skills with the complete inert session reader and cross-platform wrapper compatibility.",
   "author": {
     "name": "karlorz"

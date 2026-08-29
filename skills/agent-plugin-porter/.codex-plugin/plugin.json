@@ -1,6 +1,6 @@
 {
   "name": "agent-plugin-porter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Guide for using agent-plugin-porter to convert Claude Code plugins into Codex and Agy/Gemini packages, verify generated output, install Codex personal-marketplace packages, and prepare npm publish/release workflow checks.",
   "author": {
     "name": "karlorz"

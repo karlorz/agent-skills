@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [2.5.1] - 2026-08-29
+
+- Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).
+
 ## [2.5.0] - 2026-08-22
 
 - Unattended and interactive execution modes: unattended default for model/agent auto-invocation, headless runs, and `--unattended`; stdout default for ephemeral automation; interactive mode asks only when ambiguity is blocking.

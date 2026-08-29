@@ -1,6 +1,6 @@
 {
   "name": "rtk-output-design",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "RTK-inspired output contract for building token-efficient CLI, skill, hook, and script developer tools.",
   "author": {
     "name": "karlorz"

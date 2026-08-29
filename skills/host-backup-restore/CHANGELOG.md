@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [3.7.1] - 2026-08-29
+
+- Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).
+
 ## [3.7.0] - 2026-08-14
 
 - Add first-class `portfolio-lab` profile and exclusive `portfolio_lab` group (built-in preset, not YAML-only; name reserved against YAML override; selects ONLY `portfolio_lab`; profile/groups selections are never silently overridden and cannot mix with generic host/identity/Caddy/Hermes groups).

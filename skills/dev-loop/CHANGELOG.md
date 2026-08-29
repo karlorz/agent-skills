@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.26.35] - 2026-08-29
+
+- Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).
+
 ## [1.26.34] - 2026-08-28
 
 - Adds `/dev-loop ranked-audit --top <n>` for bounded read-only lifecycle evidence, plus attended `/dev-loop office-hours <audit-report> --reconcile` with one verdict question at a time and final batch approval before managed mutation.

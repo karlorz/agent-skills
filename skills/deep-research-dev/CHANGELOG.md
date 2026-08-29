@@ -2,6 +2,13 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.1.0-beta.7] - 2026-08-29
+
+- Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).
+- Status semantics and fallback are unchanged: a **topic-inherent unknown**
+  **does not by itself require `Partial`**. The deterministic fallback remains
+  `## 1. Findings`.
+
 ## [0.1.0-beta.6] - 2026-08-22
 
 - Added deterministic pre-synthesis fallback report builder

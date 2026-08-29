@@ -872,7 +872,7 @@ run_agent_plugin_porter_release_workflow_contract_checks() {
   assert_contains "agent-plugin-porter SKILL.md idempotent release check" "$skill_body" 'gh release view "$GITHUB_REF_NAME"'
   assert_contains "agent-plugin-porter SKILL.md release create" "$skill_body" 'gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"'
   assert_contains "agent-plugin-porter SKILL.md missing release remediation" "$skill_body" 'gh release create vX.Y.Z --repo <owner>/<repo> --title "vX.Y.Z" --generate-notes'
-  assert_contains "agent-plugin-porter current version" "$version" "0.2.0"
+  assert_contains "agent-plugin-porter current version" "$version" "0.2.1"
 }
 
 run_deep_research_freshness_contract_checks() {

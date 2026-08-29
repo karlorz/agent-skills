@@ -1,6 +1,6 @@
 {
   "name": "codebase-architecture",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Codebase analysis and reimplementation skill chain: router, deep-module design vocabulary, architecture analyze/extract, deepening HTML/MD reviews, and architecture-to-spec PRDs.",
   "author": {
     "name": "karlorz"

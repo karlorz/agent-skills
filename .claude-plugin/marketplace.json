@@ -12,7 +12,7 @@
       "name": "deep-research",
       "source": "./skills/deep-research",
       "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration. Spawnable as a subagent (model: sonnet) via deep-research:deep-research.",
-      "version": "2.5.0",
+      "version": "2.5.1",
       "category": "research",
       "keywords": [
         "research",
@@ -29,7 +29,7 @@
       "name": "deep-research-dev",
       "source": "./skills/deep-research-dev",
       "description": "Experimental prerelease dev-lane fork of deep-research (base 2.4.3) for controlled evaluation: source-triaged research with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, refinement, and vault integration. Not for production use.",
-      "version": "0.1.0-beta.6",
+      "version": "0.1.0-beta.7",
       "category": "research",
       "keywords": [
         "research",
@@ -48,7 +48,7 @@
       "name": "simplify",
       "source": "./skills/simplify",
       "description": "Code review for reuse, simplification, efficiency, and altitude",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "category": "code-quality",
       "keywords": [
         "simplify",
@@ -64,7 +64,7 @@
       "name": "dev-loop",
       "source": "./skills/dev-loop",
       "description": "Adaptive dev cycle engine with SkillWiki vault, preflight prep, ranked audit, investigate, office-hours, config-lint, and cross-harness verification. Pass `high` for aggressive mode.",
-      "version": "1.26.34",
+      "version": "1.26.35",
       "category": "automation",
       "keywords": [
         "dev-loop",
@@ -100,7 +100,7 @@
       "name": "agent-plugin-porter",
       "source": "./skills/agent-plugin-porter",
       "description": "Guide for using agent-plugin-porter to convert Claude Code plugins into Codex and Agy/Gemini packages, verify generated output, install Codex personal-marketplace packages, and prepare npm publish/release workflow checks.",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "category": "automation",
       "keywords": [
         "agent-plugin-porter",
@@ -119,7 +119,7 @@
       "name": "claude-md-management",
       "source": "./skills/claude-md-management",
       "description": "Tools to maintain and improve CLAUDE.md files - audit quality, capture session learnings, and keep project memory current.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "category": "productivity",
       "keywords": [
         "claude-md",
@@ -148,7 +148,7 @@
       "name": "playwright-cli",
       "source": "./skills/playwright-cli",
       "description": "Playwright CLI setup and browser automation with a user-level chrome-debug command, project config initialization, attach-first global Chrome default-user profile, browser-worker, and Linux/LXC support",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "category": "automation",
       "keywords": [
         "playwright",
@@ -166,7 +166,7 @@
       "name": "rtk-output-design",
       "source": "./skills/rtk-output-design",
       "description": "RTK-inspired output contract for building token-efficient CLI, skill, hook, and script developer tools.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "code-quality",
       "keywords": [
         "rtk",
@@ -184,7 +184,7 @@
       "name": "host-backup-restore",
       "source": "./skills/host-backup-restore",
       "description": "Host-level backup and restore with profile system, model-aware sonnet workers, post-discovery research, skillwiki infrastructure capture, and Hermes module. Supports Caddy domains, databases, systemd services, and Hermes snapshots.",
-      "version": "3.7.0",
+      "version": "3.7.1",
       "category": "operations",
       "keywords": [
         "backup",
@@ -226,7 +226,7 @@
       "name": "codebase-architecture",
       "source": "./skills/codebase-architecture",
       "description": "Codebase analysis and reimplementation skill chain: router, deep-module design vocabulary, architecture analyze/extract, deepening HTML/MD reviews, and architecture-to-spec PRDs.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "category": "architecture",
       "keywords": [
         "architecture",
@@ -249,7 +249,7 @@
       "name": "grok-resume",
       "source": "./skills/grok-resume",
       "description": "Source-faithful Grok Build resume-codex and resume-claude skills with the complete inert session reader, raw source snapshots, and cross-platform wrapper compatibility.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "productivity",
       "keywords": [
         "grok",
@@ -266,7 +266,7 @@
       "name": "grok-build-harness",
       "source": "./skills/grok-build-harness",
       "description": "Fresh-host bootstrap for the karlorz subagent harness \u2014 installs custom agents, agentrules, BYOK config, and the companion plugin set. Idempotent, backup-first, GROK_HOME-aware.",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "category": "operations",
       "keywords": [
         "grok",
@@ -288,7 +288,7 @@
       "name": "grok-search",
       "source": "./skills/grok-search",
       "description": "Thin marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via HTTP MCP.",
-      "version": "0.1.9",
+      "version": "0.1.10",
       "category": "development",
       "keywords": [
         "mcp",
