@@ -530,46 +530,39 @@ print("\n".join(sorted(name for name in expected if name not in installed)))
     local inspect_json
     inspect_json="$("$GROK" inspect --json 2>/dev/null || true)"
     if [ -n "$inspect_json" ]; then
-      local user_agent_found
-      user_agent_found="$(python3 -c '
-import json, sys, os
+      local inspect_meta
+      inspect_meta="$(python3 -c '
+import json, sys
 try:
     data = json.loads(sys.argv[1])
 except Exception:
+    print("found=false")
+    print("agents=0")
+    print("warns=0")
     sys.exit(0)
-found = False
-for a in data.get("agents", []):
-    name = a.get("name", "")
-    src = a.get("source", {})
-    if name == "grok-build-byok" and src.get("type") == "user":
-        found = True
-        break
-print("true" if found else "false")
+found = any(
+    a.get("name") == "grok-build-byok" and a.get("source", {}).get("type") == "user"
+    for a in data.get("agents", [])
+)
+print("found=" + ("true" if found else "false"))
+print("agents=" + str(len(data.get("agents", []))))
+print("warns=" + str(len(data.get("configWarnings") or [])))
 ' "$inspect_json")"
-      if [ "$user_agent_found" = "true" ]; then
+      local found=false agents=0 warns=0
+      eval "$inspect_meta"
+      if [ "$found" = "true" ]; then
         log "  ok  user agent grok-build-byok discovered"
       else
         warn "  AGENT MISSING: grok-build-byok user agent not found in grok inspect"
         missing=1
       fi
-
-      python3 -c '
-import json, sys
-try:
-    data = json.loads(sys.argv[1])
-except Exception:
-    sys.exit(0)
-print("  agents discovered: {}".format(len(data.get("agents", []))))
-print("  config warnings: {}".format(len(data.get("configWarnings") or [])))
-' "$inspect_json" || true
-      inspect_tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-inspect.XXXXXX")"
-      printf '%s\n' "$inspect_json" > "$inspect_tmp"
-      classify_args=(--grok-home "$GROK_HOME" --classify-inspect "$inspect_tmp")
+      log "  agents discovered: $agents"
+      log "  config warnings: $warns"
+      classify_args=(--grok-home "$GROK_HOME" --classify-inspect -)
       if grokgod_detected; then
         classify_args+=(--grokgod)
       fi
-      python3 "$CHECK_CONFIG" "${classify_args[@]}" 2>/dev/null | sed 's/^/    /' || true
-      rm -f "$inspect_tmp"
+      printf '%s\n' "$inspect_json" | python3 "$CHECK_CONFIG" "${classify_args[@]}" 2>/dev/null | sed 's/^/    /' || true
     fi
     # the pin aliases are load-bearing: [subagents.models] resolves through
     # them, so a missing alias breaks the whole routing economy

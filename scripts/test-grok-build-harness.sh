@@ -383,32 +383,37 @@ assert_eq "install.sh accepts --strict and exits 0 on valid install" "$?" "0"
 
 # 8. User agent named grok-build-byok assert in verify when grok binary is available and plugins not skipped
 FAKE_GROK_DIR="$TEST_ROOT/fake-grok-bin"
-mkdir -p "$FAKE_GROK_DIR"
-cat > "$FAKE_GROK_DIR/grok" <<'EOF'
+write_fake_grok() {
+  local agent_name="$1"
+  mkdir -p "$FAKE_GROK_DIR"
+  cat > "$FAKE_GROK_DIR/grok" <<EOF
 #!/usr/bin/env bash
-if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then exit 0; fi
-if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi
-if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then
-  if [ "${3:-}" = "--json" ]; then
+if [ "\$1" = "plugin" ] && [ "\$2" = "marketplace" ]; then exit 0; fi
+if [ "\$1" = "plugin" ] && [ "\$2" = "install" ]; then exit 0; fi
+if [ "\$1" = "plugin" ] && [ "\$2" = "list" ]; then
+  if [ "\${3:-}" = "--json" ]; then
     echo '[{"name":"grok-build-harness","status":"enabled","version":"0.5.0"},{"name":"superpowers","status":"enabled","version":"1.0.0"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
   else
     echo "plugins list"
   fi
   exit 0
 fi
-if [ "$1" = "models" ]; then
+if [ "\$1" = "models" ]; then
   echo "  - sonnet"
   echo "  - haiku"
   echo "  - deepseek-v4-flash"
   exit 0
 fi
-if [ "$1" = "inspect" ]; then
-  echo '{"agents":[{"name":"grok-build-byok","source":{"type":"user","path":"/some/path"}}],"configWarnings":[]}'
+if [ "\$1" = "inspect" ]; then
+  echo '{"agents":[{"name":"${agent_name}","source":{"type":"user","path":"/some/path"}}],"configWarnings":[]}'
   exit 0
 fi
 exit 0
 EOF
-chmod +x "$FAKE_GROK_DIR/grok"
+  chmod +x "$FAKE_GROK_DIR/grok"
+}
+
+write_fake_grok "grok-build-byok"
 
 FAKE_GROK_HOME="$TEST_ROOT/fake-grok-home"
 mkdir -p "$FAKE_GROK_HOME"
@@ -417,31 +422,7 @@ PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grok
 assert_eq "install.sh verify with fake grok and grok-build-byok user agent succeeds" "$?" "0"
 
 # Fake grok missing grok-build-byok user agent -> verify must fail
-cat > "$FAKE_GROK_DIR/grok" <<'EOF'
-#!/usr/bin/env bash
-if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then exit 0; fi
-if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi
-if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then
-  if [ "${3:-}" = "--json" ]; then
-    echo '[{"name":"grok-build-harness","status":"enabled","version":"0.5.0"},{"name":"superpowers","status":"enabled","version":"1.0.0"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
-  else
-    echo "plugins list"
-  fi
-  exit 0
-fi
-if [ "$1" = "models" ]; then
-  echo "  - sonnet"
-  echo "  - haiku"
-  echo "  - deepseek-v4-flash"
-  exit 0
-fi
-if [ "$1" = "inspect" ]; then
-  echo '{"agents":[{"name":"other-agent","source":{"type":"user","path":"/some/path"}}],"configWarnings":[]}'
-  exit 0
-fi
-exit 0
-EOF
-chmod +x "$FAKE_GROK_DIR/grok"
+write_fake_grok "other-agent"
 
 PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grokgod --verify --force -y >/dev/null 2>&1
 assert_eq "install.sh verify without grok-build-byok user agent fails" "$?" "1"

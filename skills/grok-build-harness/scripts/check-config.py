@@ -102,6 +102,18 @@ def get_runtime_extras(extras_file: Path) -> set[str]:
     return set()
 
 
+def load_key_sets(grok_home: Path, grokgod: bool = False) -> tuple[set[str], set[str], set[str]]:
+    """Return (template_keys, docs_keys, extras_keys)."""
+    extras_keys = get_runtime_extras(EXTRAS_PATH)
+    if grokgod:
+        extras_keys.add("plan_mode")
+    return (
+        get_template_keys(TEMPLATE_PATH),
+        get_docs_keys(grok_home, VENDORED_KEYS_PATH),
+        extras_keys,
+    )
+
+
 def validate_consent(consent_table: object) -> list[str]:
     """Validate [consent] structure.
     
@@ -145,41 +157,22 @@ def check_config(config_path: Path, grok_home: Path, strict: bool, grokgod: bool
         print(f"ERROR: failed to parse {config_path} as TOML", file=sys.stderr)
         return 1
 
-    template_keys = get_template_keys(TEMPLATE_PATH)
-    docs_keys = get_docs_keys(grok_home, VENDORED_KEYS_PATH)
-    extras_keys = get_runtime_extras(EXTRAS_PATH)
-    if grokgod:
-        extras_keys.add("plan_mode")
-
-    known_keys = template_keys | docs_keys | extras_keys
+    template_keys, docs_keys, extras_keys = load_key_sets(grok_home, grokgod)
 
     errors = []
     warnings = []
-    classified = []
 
-    # Validate extras schema (e.g. consent)
     if "consent" in parsed:
-        consent_errors = validate_consent(parsed["consent"])
-        if consent_errors:
-            errors.extend(consent_errors)
-        else:
-            classified.append("consent (runtime extra)")
+        errors.extend(validate_consent(parsed["consent"]))
 
     for key in parsed.keys():
-        if key == "consent":
+        if key in template_keys or key in docs_keys or key in extras_keys:
             continue
-        if key in template_keys:
-            classified.append(f"{key} (template-owned)")
-        elif key in docs_keys:
-            classified.append(f"{key} (docs-known)")
-        elif key in extras_keys:
-            classified.append(f"{key} (runtime extra)")
+        msg = f"unexpected top-level table/key: {key}"
+        if strict:
+            errors.append(msg)
         else:
-            msg = f"unexpected top-level table/key: {key}"
-            if strict:
-                errors.append(msg)
-            else:
-                warnings.append(msg)
+            warnings.append(msg)
 
     # Output results
     for msg in warnings:
@@ -208,11 +201,7 @@ def classify_inspect_warnings(inspect_data: object, grok_home: Path, grokgod: bo
     """Return classified inspect warning lines. Never includes secret values."""
     if not isinstance(inspect_data, dict):
         return []
-    template_keys = get_template_keys(TEMPLATE_PATH)
-    docs_keys = get_docs_keys(grok_home, VENDORED_KEYS_PATH)
-    extras_keys = get_runtime_extras(EXTRAS_PATH)
-    if grokgod:
-        extras_keys.add("plan_mode")
+    template_keys, docs_keys, extras_keys = load_key_sets(grok_home, grokgod)
     lines = []
     warnings = inspect_data.get("configWarnings") or []
     for warning in warnings:
