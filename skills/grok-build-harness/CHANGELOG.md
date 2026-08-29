@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.4.1] - 2026-08-29
+
+- Synchronize release metadata and marketplace catalog versions following the malformed 0.4.0 release.
+
 ## [0.4.0] - 2026-08-29
 
 - Add `[subagents.toggle] grok-build-byok = false` to config template (parent-only agent toggle).

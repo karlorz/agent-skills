@@ -12,6 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN="$ROOT/skills/grok-build-harness"
 INSTALL="$PLUGIN/scripts/install.sh"
 GENERATE="$PLUGIN/scripts/generate-config.py"
+PLUGIN_VERSION="$(awk -F'"' '/"version"[[:space:]]*:/{print $4; exit}' "$PLUGIN/.claude-plugin/plugin.json")"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/grok-build-harness-test.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
@@ -249,8 +250,8 @@ assert_contains "stamp file created after install" \
   "$([ -f "$STAMP_FILE" ] && echo "exists" || echo "missing")" "exists"
 assert_contains "stamp file contains schema" \
   "$(cat "$STAMP_FILE")" '"schema": "grok-build-harness-stamp/v1"'
-assert_contains "stamp file contains plugin_version 0.4.0" \
-  "$(cat "$STAMP_FILE")" '"plugin_version": "0.4.0"'
+assert_contains "stamp file contains plugin_version ${PLUGIN_VERSION}" \
+  "$(cat "$STAMP_FILE")" "\"plugin_version\": \"${PLUGIN_VERSION}\""
 
 # --- installer: grokgod auto-detect and plan_mode merge ----------------------
 GROKGOD_FAKE_HOME="$TEST_ROOT/fake-grokgod-user"

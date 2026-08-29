@@ -1,6 +1,6 @@
 {
   "name": "grok-build-harness",
-  "version": "0.3.2",
+  "version": "0.4.1",
   "description": "Fresh-host bootstrap for the karlorz subagent harness \u2014 installs custom agents, agentrules, BYOK config, and the companion plugin set. Idempotent, backup-first, GROK_HOME-aware.",
   "author": {
     "name": "karlorz"
