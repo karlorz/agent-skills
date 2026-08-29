@@ -30,6 +30,7 @@ PLUGIN_ROOT="$(cd "$HERE/.." && pwd)"
 ASSETS="$PLUGIN_ROOT/assets"
 GENERATE="$HERE/generate-config.py"
 MERGE="$HERE/merge-agents.py"
+CHECK_CONFIG="$HERE/check-config.py"
 
 # --- options -----------------------------------------------------------------
 GROK_HOME="${GROK_HOME:-$HOME/.grok}"
@@ -45,6 +46,7 @@ DRY_RUN=0
 FORCE=0
 FORCE_RENDER=0
 VERIFY=0
+STRICT=0
 ASSUME_YES=0
 REQUIRE_KEYS=0
 RESTRICTIVE=0
@@ -62,7 +64,7 @@ Usage:
              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
              [--require-keys] [--restrictive] [--force-render]
-             [--with-grokgod] [--skip-grokgod] [-y]
+             [--with-grokgod] [--skip-grokgod] [--strict] [-y]
 
 Options:
   --grok-home DIR        target grok home (default: $GROK_HOME or ~/.grok)
@@ -80,6 +82,7 @@ Options:
   --no-config            do not touch config.toml
   --with-grokgod         force grokgod plan_mode implement_via_subagents merge
   --skip-grokgod         skip grokgod plan_mode merge even if detected
+  --strict               fail verify if config has unexpected top-level keys
   --dry-run              print the plan; write nothing
   --force                overwrite existing files without prompting
   --verify               run verification after installing
@@ -107,6 +110,7 @@ while [ $# -gt 0 ]; do
     --force) FORCE=1; shift ;;
     --force-render) FORCE_RENDER=1; shift ;;
     --verify) VERIFY=1; shift ;;
+    --strict) STRICT=1; shift ;;
     --require-keys) REQUIRE_KEYS=1; shift ;;
     --restrictive) RESTRICTIVE=1; shift ;;
     --with-grokgod) WITH_GROKGOD=1; SKIP_GROKGOD=0; shift ;;
@@ -471,6 +475,19 @@ except Exception as e:
         log "  ok  plan_mode.implement_via_subagents = true"
       fi
     fi
+
+    # Schema-check config.toml across template, docs-known, and runtime extras layers
+    local check_args=(--config "$GROK_HOME/config.toml" --grok-home "$GROK_HOME")
+    [ "$STRICT" -eq 1 ] && check_args+=(--strict)
+    if grokgod_detected; then
+      check_args+=(--grokgod)
+    fi
+    if ! python3 "$CHECK_CONFIG" "${check_args[@]}"; then
+      warn "config.toml schema check failed"
+      missing=1
+    else
+      log "  ok  config.toml schema check"
+    fi
   fi
   if [ "$SKIP_PLUGINS" -eq 0 ] && [ -n "$GROK" ]; then
     log "plugins:"
@@ -510,10 +527,36 @@ print("\n".join(sorted(name for name in expected if name not in installed)))
       done <<< "$missing_plugins"
       missing=1
     fi
-    "$GROK" inspect --json 2>/dev/null | python3 -c '
+    local inspect_json
+    inspect_json="$("$GROK" inspect --json 2>/dev/null || true)"
+    if [ -n "$inspect_json" ]; then
+      local user_agent_found
+      user_agent_found="$(python3 -c '
+import json, sys, os
+try:
+    data = json.loads(sys.argv[1])
+except Exception:
+    sys.exit(0)
+found = False
+for a in data.get("agents", []):
+    name = a.get("name", "")
+    src = a.get("source", {})
+    if name == "grok-build-byok" and src.get("type") == "user":
+        found = True
+        break
+print("true" if found else "false")
+' "$inspect_json")"
+      if [ "$user_agent_found" = "true" ]; then
+        log "  ok  user agent grok-build-byok discovered"
+      else
+        warn "  AGENT MISSING: grok-build-byok user agent not found in grok inspect"
+        missing=1
+      fi
+
+      python3 -c '
 import json, sys
 try:
-    data = json.load(sys.stdin)
+    data = json.loads(sys.argv[1])
 except Exception:
     sys.exit(0)
 print("  agents discovered: {}".format(len(data.get("agents", []))))
@@ -521,7 +564,8 @@ warnings = data.get("configWarnings", [])
 print("  config warnings: {}".format(len(warnings)))
 for w in warnings:
     print("    {}: {} {}".format(w.get("kind", "?"), w.get("path", ""), w.get("message", "")))
-' || true
+' "$inspect_json" || true
+    fi
     # the pin aliases are load-bearing: [subagents.models] resolves through
     # them, so a missing alias breaks the whole routing economy
     local models alias found

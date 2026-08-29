@@ -138,6 +138,16 @@ enables them via `[plugins].enabled`. `--skip-codex`, `--skip-vault-sync`, and
   `[plan_mode] implement_via_subagents = true` into `config.toml` idempotently after
   config rendering.
 
+## Config schema check and host-runtime extras (v0.5.0)
+
+- **Three schema layers**:
+  1. *Template-owned*: top-level tables/keys emitted by `assets/config.toml.template`.
+  2. *Docs-known*: tables documented in `26-config-reference.md` (live `$GROK_HOME/docs/user-guide/26-config-reference.md` preferred, with vendored `assets/config-reference-keys.json` fallback). Includes inspect-lag tables such as `privacy` and `ui.notifications`.
+  3. *Runtime extras*: host/product-written tables absent from docs (`assets/config-runtime-extras.json`, today `["consent"]`).
+- **Consent validation and PII safety**: `[consent.answers.aup]` and `[consent.answers.tos]` require integer `version` fields when present. The optional `account` field is never printed or logged in output or test suites.
+- **Strict enforcement**: Unexpected top-level tables warn by default and fail `--verify` when `--strict` is passed.
+- **Parent agent verification**: `--verify` asserts that `grok inspect --json` discovers the `grok-build-byok` user agent when plugins are not skipped.
+
 ## Re-run safety (v0.3.0)
 
 Field-testing v0.2.0 on the live host surfaced three silent-degradation

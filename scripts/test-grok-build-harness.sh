@@ -12,6 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN="$ROOT/skills/grok-build-harness"
 INSTALL="$PLUGIN/scripts/install.sh"
 GENERATE="$PLUGIN/scripts/generate-config.py"
+CHECK_CONFIG="$PLUGIN/scripts/check-config.py"
 PLUGIN_VERSION="$(awk -F'"' '/"version"[[:space:]]*:/{print $4; exit}' "$PLUGIN/.claude-plugin/plugin.json")"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/grok-build-harness-test.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
@@ -59,6 +60,8 @@ run_generate() {
 bash -n "$INSTALL" && ok "install.sh parses (bash -n)" || fail "install.sh fails bash -n"
 python3 -m py_compile "$GENERATE" 2>/dev/null \
   && ok "generate-config.py compiles" || fail "generate-config.py fails to compile"
+python3 -m py_compile "$CHECK_CONFIG" 2>/dev/null \
+  && ok "check-config.py compiles" || fail "check-config.py fails to compile"
 
 # --- config generation: with keys --------------------------------------------
 run_generate "$TEST_ROOT/with-keys.toml" \
@@ -301,6 +304,147 @@ assert_contains "--verify prints stamp path" \
 # --- installer: unknown option exits 1 ----------------------------------------
 "$INSTALL" --definitely-not-a-flag >/dev/null 2>&1
 assert_eq "unknown option exits 1" "$?" "1"
+
+# --- check-config.py & schema checking tests ---------------------------------
+# 1. Valid consent with version int and account string (assert account not in output)
+CONSENT_VALID_CFG="$TEST_ROOT/consent-valid.toml"
+cat > "$CONSENT_VALID_CFG" <<'EOF'
+disabled_mcp_servers = ["image_mcp"]
+[privacy]
+privacy_banner_acked = "2026-08-29T00:00:00Z"
+[consent.answers.aup]
+version = 2
+account = "user@example.com"
+[consent.answers.tos]
+version = 2
+EOF
+CONSENT_VALID_OUT="$(python3 "$CHECK_CONFIG" --config "$CONSENT_VALID_CFG" 2>&1)"
+assert_eq "check-config: valid consent exits 0" "$?" "0"
+assert_not_contains "check-config: fixture account PII not in stdout" "$CONSENT_VALID_OUT" "user@example.com"
+
+# 2. Missing consent: OK (exit 0)
+CONSENT_MISSING_CFG="$TEST_ROOT/consent-missing.toml"
+cat > "$CONSENT_MISSING_CFG" <<'EOF'
+disabled_mcp_servers = ["image_mcp"]
+[privacy]
+privacy_banner_acked = "2026-08-29T00:00:00Z"
+EOF
+python3 "$CHECK_CONFIG" --config "$CONSENT_MISSING_CFG" >/dev/null 2>&1
+assert_eq "check-config: missing consent exits 0" "$?" "0"
+
+# 3. Invalid consent (version string instead of int): fail
+CONSENT_INVALID_CFG="$TEST_ROOT/consent-invalid.toml"
+cat > "$CONSENT_INVALID_CFG" <<'EOF'
+[consent.answers.aup]
+version = "two"
+EOF
+python3 "$CHECK_CONFIG" --config "$CONSENT_INVALID_CFG" >/dev/null 2>&1
+assert_eq "check-config: consent version non-int exits non-zero" "$?" "1"
+
+# 4. Unexpected top-level table: exit 0 without --strict; nonzero with --strict
+UNEXPECTED_CFG="$TEST_ROOT/unexpected.toml"
+cat > "$UNEXPECTED_CFG" <<'EOF'
+[future_unknown_table]
+foo = "bar"
+EOF
+python3 "$CHECK_CONFIG" --config "$UNEXPECTED_CFG" >/dev/null 2>&1
+assert_eq "check-config: unexpected table without --strict exits 0" "$?" "0"
+python3 "$CHECK_CONFIG" --config "$UNEXPECTED_CFG" --strict >/dev/null 2>&1
+assert_eq "check-config: unexpected table with --strict exits non-zero" "$?" "1"
+
+# 5. No live docs file: uses vendored keys (privacy classified docs-known, not unexpected)
+NO_DOCS_GROK_HOME="$TEST_ROOT/no-docs-grok-home"
+mkdir -p "$NO_DOCS_GROK_HOME"
+PRIVACY_CFG="$TEST_ROOT/privacy-only.toml"
+cat > "$PRIVACY_CFG" <<'EOF'
+[privacy]
+privacy_banner_acked = "2026-08-29T00:00:00Z"
+EOF
+GROK_HOME="$NO_DOCS_GROK_HOME" python3 "$CHECK_CONFIG" --config "$PRIVACY_CFG" --strict >/dev/null 2>&1
+assert_eq "check-config: vendored fallback knows privacy with --strict" "$?" "0"
+
+# 6. Live $GROK_HOME/docs/user-guide/26-config-reference.md wins over vendored
+# (e.g. a fixture docs file that omits privacy makes privacy unexpected)
+LIVE_DOCS_GROK_HOME="$TEST_ROOT/live-docs-grok-home"
+mkdir -p "$LIVE_DOCS_GROK_HOME/docs/user-guide"
+cat > "$LIVE_DOCS_GROK_HOME/docs/user-guide/26-config-reference.md" <<'EOF'
+# Configuration reference
+### `agent`
+### `cli`
+EOF
+GROK_HOME="$LIVE_DOCS_GROK_HOME" python3 "$CHECK_CONFIG" --config "$PRIVACY_CFG" --strict >/dev/null 2>&1
+assert_eq "check-config: live docs wins over vendored (privacy omitted in live docs -> fails --strict)" "$?" "1"
+
+# 7. install.sh accepts --strict flag
+STRICT_TEST_HOME="$TEST_ROOT/strict-test-home"
+export HARNESS_HUB_KEY=s-hub HARNESS_NEW_KEY=s-new HARNESS_CONTEXT7_KEY=s-ctx
+"$INSTALL" --grok-home "$STRICT_TEST_HOME" --skip-plugins --skip-grokgod --verify --strict --force -y >/dev/null 2>&1
+assert_eq "install.sh accepts --strict and exits 0 on valid install" "$?" "0"
+
+# 8. User agent named grok-build-byok assert in verify when grok binary is available and plugins not skipped
+FAKE_GROK_DIR="$TEST_ROOT/fake-grok-bin"
+mkdir -p "$FAKE_GROK_DIR"
+cat > "$FAKE_GROK_DIR/grok" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then exit 0; fi
+if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi
+if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then
+  if [ "${3:-}" = "--json" ]; then
+    echo '[{"name":"grok-build-harness","status":"enabled","version":"0.5.0"},{"name":"superpowers","status":"enabled","version":"1.0.0"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
+  else
+    echo "plugins list"
+  fi
+  exit 0
+fi
+if [ "$1" = "models" ]; then
+  echo "  - sonnet"
+  echo "  - haiku"
+  echo "  - deepseek-v4-flash"
+  exit 0
+fi
+if [ "$1" = "inspect" ]; then
+  echo '{"agents":[{"name":"grok-build-byok","source":{"type":"user","path":"/some/path"}}],"configWarnings":[]}'
+  exit 0
+fi
+exit 0
+EOF
+chmod +x "$FAKE_GROK_DIR/grok"
+
+FAKE_GROK_HOME="$TEST_ROOT/fake-grok-home"
+mkdir -p "$FAKE_GROK_HOME"
+export HARNESS_HUB_KEY=fake-hub HARNESS_NEW_KEY=fake-new HARNESS_CONTEXT7_KEY=fake-ctx
+PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grokgod --verify --force -y >/dev/null 2>&1
+assert_eq "install.sh verify with fake grok and grok-build-byok user agent succeeds" "$?" "0"
+
+# Fake grok missing grok-build-byok user agent -> verify must fail
+cat > "$FAKE_GROK_DIR/grok" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then exit 0; fi
+if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi
+if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then
+  if [ "${3:-}" = "--json" ]; then
+    echo '[{"name":"grok-build-harness","status":"enabled","version":"0.5.0"},{"name":"superpowers","status":"enabled","version":"1.0.0"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
+  else
+    echo "plugins list"
+  fi
+  exit 0
+fi
+if [ "$1" = "models" ]; then
+  echo "  - sonnet"
+  echo "  - haiku"
+  echo "  - deepseek-v4-flash"
+  exit 0
+fi
+if [ "$1" = "inspect" ]; then
+  echo '{"agents":[{"name":"other-agent","source":{"type":"user","path":"/some/path"}}],"configWarnings":[]}'
+  exit 0
+fi
+exit 0
+EOF
+chmod +x "$FAKE_GROK_DIR/grok"
+
+PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grokgod --verify --force -y >/dev/null 2>&1
+assert_eq "install.sh verify without grok-build-byok user agent fails" "$?" "1"
 
 printf '\n=== Results: %d passed, %d failed ===\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

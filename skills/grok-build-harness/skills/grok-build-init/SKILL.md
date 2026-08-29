@@ -60,6 +60,7 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
    (render `permission_mode = "plan"` instead of `"always-approve"` for
    shared hosts); `--with-grokgod` / `--skip-grokgod` (force or skip grokgod
    `[plan_mode] implement_via_subagents = true` merge; auto-detected by default);
+   `--strict` (fail verify if config has unexpected top-level keys);
    `--force-render` (rewrite an existing keyed config env-only
    when no keys are provided — the default is to skip the config render
    instead, to avoid silently downgrading a working keyed config); `--dry-run`
@@ -69,9 +70,11 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
    are exported).
 4. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
    the 14 enabled plugins (13 companions + grok-build-harness itself), `grok inspect --json` reports agents discovered
-   (expect the 2 user agents + plugin agents), stamp file is inspected,
+   (asserts the `grok-build-byok` user agent is discovered), stamp file is inspected,
    config does not pair `[agent] name = grok-build-byok` with `agent_type = "codex"`,
-   and no unresolved key tokens in config.toml.
+   schema-checks `config.toml` across template-owned, docs-known, and runtime extras layers
+   (validating consent extra while protecting PII; fails on unexpected tables with `--strict`),
+   and verifies no unresolved key tokens in config.toml.
 5. **Finish**: tell the user to start a new session so `~/.grok/AGENTS.md` and
    the agents load. The skillwiki activation file (`~/.grok/skillwiki.md` and
    the `AGENTS.md` marker block) is owned by the llm-wiki plugin's

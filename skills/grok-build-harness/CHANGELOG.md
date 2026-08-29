@@ -2,6 +2,14 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.0] - 2026-08-29
+
+- Add `check-config.py` and integrate live `config.toml` schema checking into `--verify` across 3 layers (template-owned, docs-known, runtime extras).
+- Support `$GROK_HOME/docs/user-guide/26-config-reference.md` live parsing with vendored fallback `assets/config-reference-keys.json`.
+- Add runtime extras catalog (`assets/config-runtime-extras.json`) and validate `[consent.answers.aup]` / `[consent.answers.tos]` structure without logging or leaking PII.
+- Add `--strict` flag to `check-config.py` and `install.sh` to fail on unexpected top-level config tables.
+- Add assertion in `--verify` ensuring discovered user agent `grok-build-byok` is present when plugins are not skipped.
+
 ## [0.4.1] - 2026-08-29
 
 - Synchronize release metadata and marketplace catalog versions following the malformed 0.4.0 release.
