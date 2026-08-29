@@ -1,6 +1,6 @@
 ---
 name: grok-search
-description: Live web search, docs fetch, and site mapping via grok-search MCP. Use when the user needs current web or documentation facts.
+description: This skill should be used when the user needs live web search, current docs, page fetch, or site mapping via grok-search MCP.
 ---
 
 # Grok Search
