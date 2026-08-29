@@ -1,6 +1,6 @@
 {
   "name": "grok-search",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Live web search, source extraction, URL fetching, and site mapping through the hosted GrokSearch HTTP MCP service.",
   "author": {
     "name": "karlorz"

@@ -71,6 +71,13 @@ function gitJson(repo, objectPath, label) {
   }
 }
 
+function gitJsonIfPresent(repo, objectPath, label) {
+  const exists = runGit(repo, ["cat-file", "-e", objectPath], {
+    allowStatus: [128],
+  });
+  return exists.status === 0 ? gitJson(repo, objectPath, label) : null;
+}
+
 function marketplaceEntry(manifest, skill, label) {
   const matches = Array.isArray(manifest.plugins)
     ? manifest.plugins.filter((plugin) => plugin && plugin.name === skill)
@@ -88,11 +95,13 @@ function parseSemver(value, label) {
 }
 
 function validatedManifestSet({ claude, codex, marketplacePlugin }, label) {
-  const versions = [claude.version, codex.version, marketplacePlugin.version];
+  const versions = [claude.version, marketplacePlugin.version];
+  if (codex) versions.push(codex.version);
   if (new Set(versions).size !== 1 || versions.some((value) => typeof value !== "string" || !value)) {
     fail(
-      `${label} manifest versions disagree: Claude=${versions[0] || "<missing>"} ` +
-        `Codex=${versions[1] || "<missing>"} marketplace=${versions[2] || "<missing>"}`,
+      `${label} manifest versions disagree: Claude=${claude.version || "<missing>"} ` +
+        `Codex=${codex?.version || "<not introduced>"} ` +
+        `marketplace=${marketplacePlugin.version || "<missing>"}`,
     );
   }
   parseSemver(versions[0], `${label} manifest version`);
@@ -146,7 +155,7 @@ function taggedVersion(repo, tag, skill) {
   const codexPath = `${tag}:skills/${skill}/.codex-plugin/plugin.json`;
   const marketplacePath = `${tag}:.claude-plugin/marketplace.json`;
   const claude = gitJson(repo, claudePath, "tagged Claude manifest");
-  const codex = gitJson(repo, codexPath, "tagged Codex manifest");
+  const codex = gitJsonIfPresent(repo, codexPath, "tagged Codex manifest");
   const marketplace = marketplaceEntry(
     gitJson(repo, marketplacePath, "tagged marketplace"),
     skill,

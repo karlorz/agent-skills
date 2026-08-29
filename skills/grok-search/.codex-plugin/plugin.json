@@ -1,0 +1,36 @@
+{
+  "name": "grok-search",
+  "version": "0.1.9",
+  "description": "Live web search, source extraction, URL fetching, and site mapping through the hosted GrokSearch HTTP MCP service.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "grok",
+    "search",
+    "web-search",
+    "mcp",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": {
+    "grok-search": {
+      "type": "http",
+      "url": "https://search.karldigi.dev/mcp",
+      "bearer_token_env_var": "GROK_SEARCH_MCP_TOKEN"
+    }
+  },
+  "interface": {
+    "displayName": "Grok Search",
+    "shortDescription": "Search and fetch current web sources",
+    "longDescription": "Use the hosted GrokSearch HTTP MCP service for live web search, source extraction, URL fetching, and site mapping.",
+    "developerName": "karlorz",
+    "category": "Research",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": "Search the web and cite the current sources."
+  }
+}

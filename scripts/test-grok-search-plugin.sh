@@ -18,6 +18,7 @@ mcp_path = root / ".mcp.json"
 skill_path = root / "skills" / "grok-search" / "SKILL.md"
 readme_path = root / "README.md"
 manifest_path = root / ".claude-plugin" / "plugin.json"
+codex_manifest_path = root / ".codex-plugin" / "plugin.json"
 example_path = root / "cursor-cli-mcp.example.json"
 changelog_path = root / "CHANGELOG.md"
 hooks_path = root / "claude-hooks" / "hooks.json"
@@ -45,6 +46,7 @@ for path in (
     skill_path,
     readme_path,
     manifest_path,
+    codex_manifest_path,
     example_path,
     changelog_path,
     hooks_path,
@@ -67,9 +69,10 @@ if not isinstance(servers, dict) or set(servers.keys()) != {"grok-search"}:
 server = servers["grok-search"]
 if server.get("type") != "http":
     raise SystemExit(f"{mcp_path}: type must be http")
-expected_url = "${GROK_SEARCH_MCP_URL:-https://search.karldigi.dev/mcp}"
-if server.get("url") != expected_url:
-    raise SystemExit(f"{mcp_path}: url must be exactly {expected_url}")
+production_url = "https://search.karldigi.dev/mcp"
+expected_shared_url = f"${{GROK_SEARCH_MCP_URL:-{production_url}}}"
+if server.get("url") != expected_shared_url:
+    raise SystemExit(f"{mcp_path}: url must be exactly {expected_shared_url}")
 
 headers = server.get("headers")
 if not isinstance(headers, dict) or headers.get("Authorization") != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
@@ -78,9 +81,6 @@ if not isinstance(headers, dict) or headers.get("Authorization") != "Bearer ${GR
 for forbidden in ("command", "args", "env"):
     if forbidden in server:
         raise SystemExit(f"{mcp_path}: server must not contain {forbidden!r}")
-if "grok-search-http" in servers:
-    raise SystemExit(f"{mcp_path}: must not contain grok-search-http key")
-
 # 3. Example config cursor-cli-mcp.example.json contract
 ex = json.loads(texts[example_path])
 ex_servers = ex.get("mcpServers")
@@ -90,8 +90,8 @@ if not isinstance(ex_servers, dict) or set(ex_servers.keys()) != {"grok-search"}
 ex_server = ex_servers["grok-search"]
 if ex_server.get("type") != "http":
     raise SystemExit(f"{example_path}: type must be http")
-if ex_server.get("url") != "https://search.karldigi.dev/mcp":
-    raise SystemExit(f"{example_path}: url must be exactly https://search.karldigi.dev/mcp")
+if ex_server.get("url") != production_url:
+    raise SystemExit(f"{example_path}: url must be exactly {production_url}")
 ex_headers = ex_server.get("headers")
 if not isinstance(ex_headers, dict) or ex_headers.get("Authorization") != "Bearer ${env:GROK_SEARCH_MCP_TOKEN}":
     raise SystemExit(f"{example_path}: headers.Authorization must be exactly Bearer ${{env:GROK_SEARCH_MCP_TOKEN}}")
@@ -100,7 +100,7 @@ for forbidden in ("command", "args", "env"):
         raise SystemExit(f"{example_path}: server must not contain {forbidden!r}")
 
 # 4. Claude/Grok JSON must avoid preview endpoints and CF credentials.
-for json_path in (mcp_path, example_path, manifest_path):
+for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
     json_text = texts[json_path]
     if "100.76.134.104" in json_text:
         raise SystemExit(f"{json_path}: must not contain hardcoded IP 100.76.134.104")
@@ -141,8 +141,8 @@ if not isinstance(cursor_manifest.get("description"), str) or not cursor_manifes
     raise SystemExit(f"{cursor_manifest_path}: description missing")
 if cursor_manifest.get("name") != "grok-search":
     raise SystemExit(f"{cursor_manifest_path}: name must be grok-search")
-if cursor_manifest.get("version") != "0.1.8":
-    raise SystemExit(f"{cursor_manifest_path}: version must be 0.1.8")
+if cursor_manifest.get("version") != "0.1.9":
+    raise SystemExit(f"{cursor_manifest_path}: version must be 0.1.9")
 if cursor_manifest.get("mcpServers") != "./mcp.json":
     raise SystemExit(f"{cursor_manifest_path}: mcpServers must point to ./mcp.json")
 if cursor_manifest.get("hooks") is not None:
@@ -169,7 +169,7 @@ if not isinstance(cursor_servers, dict) or set(cursor_servers) != {"grok-search"
 cursor_server = cursor_servers["grok-search"]
 if cursor_server.get("type") != "http":
     raise SystemExit(f"{cursor_mcp_path}: type must be http")
-if cursor_server.get("url") != "https://search.karldigi.dev/mcp":
+if cursor_server.get("url") != production_url:
     raise SystemExit(f"{cursor_mcp_path}: must use production URL")
 if (cursor_server.get("headers") or {}).get("Authorization") != "Bearer ${GROK_SEARCH_MCP_TOKEN}":
     raise SystemExit(f"{cursor_mcp_path}: must interpolate GROK_SEARCH_MCP_TOKEN")
@@ -189,22 +189,49 @@ if not cursor_entry:
 if cursor_entry.get("source") != "skills/grok-search":
     raise SystemExit(f"{cursor_marketplace_path}: grok-search source must be skills/grok-search")
 
-# 5. Manifest (.claude-plugin/plugin.json)
-manifest = json.loads(texts[manifest_path])
-if manifest.get("version") != "0.1.8":
-    raise SystemExit(f"{manifest_path}: version must be 0.1.8")
-manifest_desc = manifest.get("description", "")
+# 5. Host manifests and Codex-native MCP config
+codex_manifest = json.loads(texts[codex_manifest_path])
+codex_servers = codex_manifest.get("mcpServers")
+if not isinstance(codex_servers, dict) or set(codex_servers) != {"grok-search"}:
+    raise SystemExit(
+        f"{codex_manifest_path}: mcpServers must contain exactly one key: grok-search"
+    )
+if "hooks" in codex_manifest:
+    raise SystemExit(f"{codex_manifest_path}: Codex manifest must not expose Claude hooks")
+codex_interface = codex_manifest.get("interface")
+if not isinstance(codex_interface, dict):
+    raise SystemExit(f"{codex_manifest_path}: interface must be an object")
+if codex_interface.get("displayName") != "Grok Search":
+    raise SystemExit(f"{codex_manifest_path}: interface.displayName must be Grok Search")
+if codex_interface.get("category") != "Research":
+    raise SystemExit(f"{codex_manifest_path}: interface.category must be Research")
+if claude_manifest.get("version") != "0.1.9":
+    raise SystemExit(f"{manifest_path}: version must be 0.1.9")
+manifest_desc = claude_manifest.get("description", "")
 if "HTTP" not in manifest_desc and "http" not in manifest_desc:
     raise SystemExit(f"{manifest_path}: description must mention HTTP MCP")
 if "stdio" in manifest_desc.lower():
     raise SystemExit(f"{manifest_path}: description must not mention stdio-as-default")
 
+codex_server = codex_servers["grok-search"]
+if codex_server.get("type") != "http":
+    raise SystemExit(f"{codex_manifest_path}: Codex MCP type must be http")
+if codex_server.get("url") != production_url:
+    raise SystemExit(f"{codex_manifest_path}: Codex MCP url must be exactly {production_url}")
+if codex_server.get("bearer_token_env_var") != "GROK_SEARCH_MCP_TOKEN":
+    raise SystemExit(
+        f"{codex_manifest_path}: Codex MCP bearer_token_env_var must be GROK_SEARCH_MCP_TOKEN"
+    )
+for forbidden in ("headers", "http_headers", "env_http_headers", "command", "args", "env"):
+    if forbidden in codex_server:
+        raise SystemExit(f"{codex_manifest_path}: Codex MCP server must not contain {forbidden!r}")
+
 # 6. CHANGELOG.md
 changelog_text = texts[changelog_path]
-if "0.1.8" not in changelog_text:
-    raise SystemExit(f"{changelog_path}: must mention version 0.1.8")
-if "2026-08-25" not in changelog_text:
-    raise SystemExit(f"{changelog_path}: must mention release date 2026-08-25")
+if "0.1.9" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must mention version 0.1.9")
+if "2026-08-29" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must mention release date 2026-08-29")
 
 # 7. SKILL.md contract
 skill_text = texts[skill_path]
@@ -345,6 +372,7 @@ blob = "".join(
     texts[p]
     for p in (
         manifest_path,
+        codex_manifest_path,
         mcp_path,
         skill_path,
         readme_path,
@@ -359,13 +387,13 @@ blob = "".join(
 )
 allowed_bearer = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
 allowed_env_bearer = "Bearer ${env:GROK_SEARCH_MCP_TOKEN}"
-allowed_url = "${GROK_SEARCH_MCP_URL:-https://search.karldigi.dev/mcp}"
-allowed_prod = "https://search.karldigi.dev/mcp"
+allowed_shared_url = f"${{GROK_SEARCH_MCP_URL:-{production_url}}}"
+allowed_prod = production_url
 allowed_admin = "https://search.karldigi.dev/admin/gateway-keys"
 scanned = (
     blob.replace(allowed_bearer, "")
     .replace(allowed_env_bearer, "")
-    .replace(allowed_url, "")
+    .replace(allowed_shared_url, "")
     .replace(allowed_prod, "")
     .replace(allowed_admin, "")
     .replace("Bearer-only", "")

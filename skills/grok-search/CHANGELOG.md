@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-29
+
+### Fixed
+- Add a native Codex plugin manifest with an inline Codex-native HTTP MCP definition and an absolute production URL, preventing Codex from treating Bash `${VAR:-default}` syntax as a relative URL.
+- Keep bearer authentication environment-backed through Codex-native `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN` while preserving the existing Claude/Grok Authorization placeholder and endpoint override.
+
+### Changed
+- Codex and Cursor marketplace installs pin production. Claude/Grok retain `GROK_SEARCH_MCP_URL` as an optional endpoint override.
+
 ## [0.1.8] - 2026-08-25
 
 ### Changed

@@ -4,15 +4,15 @@ Thin marketplace plugin for [GrokSearch](https://github.com/karlorz/GrokSearch),
 
 ## Configuration & Environment
 
-For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https://search.karldigi.dev/mcp` (set `GROK_SEARCH_MCP_URL` only to override that endpoint). A gateway-keys bearer must be present in the agent's **process environment before MCP loading**:
+For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https://search.karldigi.dev/mcp`; set `GROK_SEARCH_MCP_URL` only to override that endpoint. **Codex and Cursor** marketplace packages pin production. A gateway-keys bearer must be available before MCP loading:
 
 ```bash
 export GROK_SEARCH_MCP_TOKEN="your-gateway-keys-token"
-# Optional override:
+# Optional for Claude/Grok only:
 export GROK_SEARCH_MCP_URL="https://search.karldigi.dev/mcp"
 ```
 
-Operators may store a token at `~/.config/grok-search/http-mcp.token` for convenience, but HTTP MCP does not auto-source that file or `mcp.env`. Export the gateway-keys bearer before starting Grok, Claude, or Orca sessions. For **Cursor**, configure the token via **Plugins → Configure** instead of process environment variables.
+Operators may store a token at `~/.config/grok-search/http-mcp.token` for convenience, but HTTP MCP does not auto-source that file or `mcp.env`. Export the gateway-keys bearer before starting Grok, Claude, or Orca sessions. For **Codex Desktop/IDE**, place the variable in Codex's supported `~/.codex/.env` file and fully restart Codex; never put the value in `config.toml` or plugin files. For **Cursor**, configure the token via **Plugins → Configure** instead of process environment variables.
 
 ### Operator Endpoints
 
@@ -51,6 +51,23 @@ Install from the `karlorz-agent-skills` marketplace catalog:
 ```bash
 claude plugin install grok-search@karlorz-agent-skills
 ```
+
+### Codex
+
+Install from the configured `karlorz-agent-skills` marketplace, ensure
+`GROK_SEARCH_MCP_TOKEN` is available to the Codex process, and fully restart
+Codex after installation or environment changes:
+
+```bash
+codex plugin add grok-search@karlorz-agent-skills
+codex mcp get grok-search
+```
+
+The Codex-native manifest embeds its own MCP definition so Codex never
+parses the Claude/Grok shell-style URL fallback. The healthy structural result
+uses the absolute production URL and reports `GROK_SEARCH_MCP_TOKEN` as the
+bearer-token environment variable. Do not print or paste the token value during
+verification.
 
 ### Cursor (Desktop + Agent CLI)
 

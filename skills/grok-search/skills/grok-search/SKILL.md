@@ -7,11 +7,12 @@ description: "This skill should be used when the user needs live web search, cur
 
 Use this skill to perform live web searches, plan search intent, fetch web content, map site topologies, and extract citations.
 
-Grok-search is HTTP MCP only (`type: http`). Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. The Cursor-native package pins production; the URL override is not configurable in Cursor. Every host requires an operator-provided gateway-keys bearer as `GROK_SEARCH_MCP_TOKEN` before MCP load. Do not start a local stdio `uvx` server.
+Grok-search is HTTP MCP only (`type: http`). Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. Codex and Cursor-native pin production; the URL override is not configurable in Cursor or the Codex marketplace package. Every host requires an operator-provided gateway-keys bearer as `GROK_SEARCH_MCP_TOKEN` before MCP load. Do not start a local stdio `uvx` server.
 
 ## First-run readiness
 
 - **Claude/Grok plugin hosts:** resolve the installed root from `GROK_PLUGIN_ROOT`, falling back to `CLAUDE_PLUGIN_ROOT`, and run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --apply --json` before the first grok-search MCP call. `missing_prereq` means the token is absent from process environment; stop and ask for a gateway-keys bearer. `in_sync` means the probe has a usable URL/token decision.
+- **Codex:** the native manifest embeds a Codex-specific production HTTP MCP definition with `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`; it never parses the Claude/Grok shell-style URL fallback. Codex Desktop/IDE may not inherit shell variables; place the token in Codex's supported environment file and fully restart Codex. Never put the token value in `config.toml` or plugin files.
 - **Cursor-native:** the plugin's **Plugins → Configure** UI requires the token variable and the manifest pins production, so Cursor-native does not run the probe or read a Cursor process environment variable. If `grok-search` tools are connected, continue; otherwise report the MCP connection error.
 - Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced. A restart cannot supply a missing token.
 - A 401 is an MCP handshake failure, not a readiness-probe status. Report it and stop.
@@ -21,8 +22,8 @@ Grok-search is HTTP MCP only (`type: http`). Claude/Grok use `GROK_SEARCH_MCP_UR
 ## Endpoint contract
 
 - Production: `https://search.karldigi.dev/mcp` — gateway-keys bearer (recommended; Cursor-native pins this endpoint)
-- Tailscale: `http://100.76.134.104:8800/mcp` — Bearer-only preview override for Claude/Grok
-- Cloudflare Access: `https://search.termolo.com/mcp` — preview override requiring operator-local Access headers
+- Tailscale: `http://100.76.134.104:8800/mcp` — Bearer-only preview override for Claude/Grok via `GROK_SEARCH_MCP_URL`
+- Cloudflare Access: `https://search.termolo.com/mcp` — Claude/Grok preview override requiring operator-local Access headers
 
 ## Tool workflow
 
