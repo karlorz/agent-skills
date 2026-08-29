@@ -99,11 +99,11 @@ OUT_B="$(HOME="$FAKE_HOME_B" bash "$AUDIT_SCRIPT")"
 if ! echo "$OUT_B" | grep -q "WARN.*skillwiki.cursor_pack_stale"; then
   fail "Case B: expected WARN for skillwiki.cursor_pack_stale"
 fi
-if ! echo "$OUT_B" | grep -q "Refresh or Enable Auto Refresh"; then
-  fail "Case B: footer should mention Refresh or Enable Auto Refresh"
+if ! echo "$OUT_B" | grep -q "cursor-github-marketplace-repin"; then
+  fail "Case B: footer should name cursor-github-marketplace-repin"
 fi
-if echo "$OUT_B" | grep -qi "reinstalling does not move" && ! echo "$OUT_B" | grep -qi "reinstall"; then
-  fail "Case B: check reinstall logic"
+if echo "$OUT_B" | grep -q "Team marketplace refresh path: Dashboard"; then
+  fail "Case B: footer must not send user-scope pins to Team Dashboard Refresh"
 fi
 if ! echo "$OUT_B" | grep -q "Reinstalling does not move the snapshot"; then
   fail "Case B: expected note that reinstalling does not move snapshot"

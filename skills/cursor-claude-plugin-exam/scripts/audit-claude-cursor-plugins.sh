@@ -158,10 +158,55 @@ fi
 cursor_pack_found=0
 cursor_pack_ver=""
 cursor_pack_path=""
+catalog_git_ref=""
+catalog_scope=""
+mkt_has_llm_wiki=0
+mkt_has_agent_skills=0
+catalog_agent=""
+if [[ -n "${CURSOR_AGENT_BIN:-}" ]]; then
+  catalog_agent="$CURSOR_AGENT_BIN"
+elif command -v cursor-agent >/dev/null 2>&1; then
+  catalog_agent="cursor-agent"
+elif command -v agent >/dev/null 2>&1; then
+  catalog_agent="agent"
+fi
+
+if [[ -n "$catalog_agent" ]] && command -v python3 >/dev/null 2>&1; then
+  while IFS=$'\t' read -r mkt_name mkt_ref mkt_scope; do
+    [[ -z "$mkt_name" ]] && continue
+    case "$mkt_name" in
+      llm-wiki)
+        catalog_git_ref="$mkt_ref"
+        catalog_scope="$mkt_scope"
+        mkt_has_llm_wiki=1
+        ;;
+      karlorz-agent-skills)
+        mkt_has_agent_skills=1
+        ;;
+    esac
+  done < <("$catalog_agent" plugin marketplace list --format json 2>/dev/null | python3 -c '
+import json,sys
+try:
+    rows=json.load(sys.stdin)
+except Exception:
+    raise SystemExit(0)
+for row in rows if isinstance(rows, list) else []:
+    if not isinstance(row, dict):
+        continue
+    name=row.get("name") or ""
+    if name in ("llm-wiki", "karlorz-agent-skills"):
+        print("%s\t%s\t%s" % (name, row.get("gitRef") or "", row.get("scope") or ""))
+' 2>/dev/null || true)
+fi
 
 if [[ -d "$CURSOR_MKT_ROOT" ]]; then
-  latest_cmkt=$(ls -d "${CURSOR_MKT_ROOT}"/*/ 2>/dev/null | sort | tail -1 || true)
-  latest_cmkt="${latest_cmkt%/}"
+  latest_cmkt=""
+  if [[ -n "$catalog_git_ref" && -d "${CURSOR_MKT_ROOT}/${catalog_git_ref}" ]]; then
+    latest_cmkt="${CURSOR_MKT_ROOT}/${catalog_git_ref}"
+  else
+    latest_cmkt=$(ls -d "${CURSOR_MKT_ROOT}"/*/ 2>/dev/null | sort | tail -1 || true)
+    latest_cmkt="${latest_cmkt%/}"
+  fi
   if [[ -n "${latest_cmkt:-}" ]]; then
     cursor_pack_found=1
     cursor_pack_path="$latest_cmkt"
@@ -462,15 +507,14 @@ else
   row "INFO" "cursor.user_skills" "no ~/.cursor/skills"
 fi
 
-# --- Marketplace registration ---
-if command -v agent >/dev/null 2>&1; then
-  mkt=$(agent plugin marketplace list 2>/dev/null || true)
-  if echo "$mkt" | grep -q 'karlorz-agent-skills'; then
+# --- Marketplace registration (same JSON list as catalog gitRef) ---
+if [[ -n "$catalog_agent" ]]; then
+  if [[ "$mkt_has_agent_skills" -eq 1 ]]; then
     row "PASS" "marketplace.karlorz-agent-skills" "registered (≠ Cursor-native install)"
   else
     row "INFO" "marketplace.karlorz-agent-skills" "not listed"
   fi
-  if echo "$mkt" | grep -q 'llm-wiki'; then
+  if [[ "$mkt_has_llm_wiki" -eq 1 ]]; then
     row "PASS" "marketplace.llm-wiki" "registered (≠ Cursor-native install)"
   else
     row "INFO" "marketplace.llm-wiki" "not listed"
@@ -491,16 +535,21 @@ else
 fi
 
 # Footer / Operator instructions
+echo
 if [[ "$stale_cursor_pack" -eq 1 ]]; then
-  echo
   echo "Catalog-refresh reminder: Cursor SkillWiki pack snapshot is stale."
-  echo "Team marketplace refresh path: Dashboard → Plugins → karlorz/llm-wiki → Refresh or Enable Auto Refresh."
-  echo "Reinstalling does not move the snapshot. Do not write local files."
+  echo "Reinstalling does not move the snapshot. Do not write local cache files while the catalog pin is still old."
 else
-  echo
-  echo "Catalog-refresh reminder: If updating marketplace plugins in Cursor Team,"
-  echo "navigate to Dashboard → Plugins → [plugin] → Refresh or Enable Auto Refresh."
+  echo "Catalog-refresh reminder: Cursor CLI does not auto-update marketplace plugins."
 fi
+case "$catalog_scope" in
+  team)
+    echo "Team marketplace admin row: Dashboard → Plugins → Refresh or Enable Auto Refresh."
+    ;;
+  *)
+    echo "User GitHub adds (scope=user for llm-wiki / karlorz-agent-skills): run cursor-github-marketplace-repin scripts/status.sh, then remove+add --git-ref if STALE."
+    ;;
+esac
 
 echo
 # ln-withhold rule

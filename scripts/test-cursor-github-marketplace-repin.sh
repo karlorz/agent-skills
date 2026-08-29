@@ -92,10 +92,23 @@ write_list() {
 
 # SKILL.md documents the repo-relative script first (sibling exam pattern).
 SKILL_BODY="$(cat "$SKILL_MD")"
+INSTALL_SCRIPT="$ROOT/skills/cursor-github-marketplace-repin/scripts/install-keep-plugins.sh"
 assert_contains "SKILL.md repo path" "$SKILL_BODY" \
   "bash skills/cursor-github-marketplace-repin/scripts/status.sh"
 assert_contains "SKILL.md home path" "$SKILL_BODY" \
   "bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/status.sh"
+assert_contains "SKILL.md no auto-update" "$SKILL_BODY" \
+  "does not auto-update"
+assert_contains "SKILL.md dashboard fallback" "$SKILL_BODY" \
+  "install-keep-plugins.sh"
+assert_contains "SKILL.md public ids warning" "$SKILL_BODY" \
+  "are **not** the user GitHub marketplace"
+[ -f "$INSTALL_SCRIPT" ] || fail "Missing $INSTALL_SCRIPT"
+INSTALL_BODY="$(cat "$INSTALL_SCRIPT")"
+assert_contains "helper Dashboard RPC" "$INSTALL_BODY" \
+  "InstallUserPlugin"
+assert_contains "helper never prints token env" "$INSTALL_BODY" \
+  "Never prints tokens"
 
 # Case A — both pins match latest tag object / HEAD
 write_list <<JSON

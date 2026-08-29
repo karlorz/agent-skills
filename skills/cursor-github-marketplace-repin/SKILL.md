@@ -30,6 +30,8 @@ not list these repos.
 - Reinstall / UI uninstall without `remove` + `add --git-ref` repeats the pin.
 - Copying files under `~/.cursor/plugins/cache/` while the catalog `gitRef` is
   still old. Cursor will restore the pinned snapshot.
+- Cursor CLI `plugin install` is missing on `2026.08.25`; do not treat that as
+  a completed KEEP reinstall.
 
 ## Status first
 
@@ -82,39 +84,54 @@ shared Cursor account list. Grok Bot uses the same list, so SkillWiki and
 vault-sync disappear from Grok Bot until they are installed again. `add`
 brings the marketplace back but does **not** reinstall the plugins.
 
+Cursor CLI **does not auto-update** marketplace plugins. On CLI `2026.08.25`
+and current `plugin --help`, the only subcommand is `marketplace`. There is
+**no** `plugin install`. `plugin install name@marketplace` fails with
+`too many arguments for 'plugin'`. Interactive equivalent: `/plugins`.
+
 After each successful remove+add (or add-only when status is `MISSING`),
 reinstall that marketplace's KEEP plugins. Idempotent. Do not `plugin
 uninstall` KEEP plugins as their own step.
 
-| Marketplace | KEEP plugins | Install after re-pin |
-| --- | --- | --- |
-| `llm-wiki` | `skillwiki`, `vault-sync` | `"$AGENT" plugin install skillwiki@llm-wiki` then `vault-sync@llm-wiki` |
-| `karlorz-agent-skills` | `grok-search`, `deep-research` | `"$AGENT" plugin install grok-search@karlorz-agent-skills` then `deep-research@karlorz-agent-skills` |
+| Marketplace | KEEP plugins |
+| --- | --- |
+| `llm-wiki` | `skillwiki`, `vault-sync` |
+| `karlorz-agent-skills` | `grok-search`, `deep-research` |
 
 ```bash
-# after llm-wiki pin is back
+# try CLI install first (may exist on a future CLI)
 "$AGENT" plugin install skillwiki@llm-wiki
 "$AGENT" plugin install vault-sync@llm-wiki
-
-# after karlorz-agent-skills pin is back
 "$AGENT" plugin install grok-search@karlorz-agent-skills
 "$AGENT" plugin install deep-research@karlorz-agent-skills
+
+# if that fails (no install subcommand), use the Dashboard fallback:
+bash skills/cursor-github-marketplace-repin/scripts/install-keep-plugins.sh
+# or after republish:
+bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/install-keep-plugins.sh
 ```
+
+`install-keep-plugins.sh` calls Dashboard `InstallUserPlugin` (same API as
+`/plugins`). Auth is `CURSOR_AUTH_TOKEN` or macOS keychain
+`cursor-access-token` / `cursor-user`. It never prints the token. Override
+base URL with `CURSOR_DASHBOARD_BASE` only in tests.
 
 `deep-research` must be in the Cursor catalog
 (`.cursor-plugin/marketplace.json` on karlorz/agent-skills), not only the
-Claude catalog. If `plugin install deep-research@karlorz-agent-skills` says
-the plugin is unknown, the Cursor marketplace pin is still the old catalog
-that listed only `grok-search` — finish the karlorz-agent-skills re-pin
-first, then install.
+Claude catalog. If the helper cannot find `deep-research` in
+`ListMarketplacePlugins` for `karlorz-agent-skills`, the Cursor marketplace
+pin is still the old catalog that listed only `grok-search` — finish the
+karlorz-agent-skills re-pin first, then install.
 
 `grok-search` may ask for `GROK_SEARCH_MCP_TOKEN` (Cursor Plugins →
 Configure). Do not invent a token. If it is already configured, leave it.
 
-Grok Bot public plugin ids when a Grok Bot reinstall is also needed:
-`skillwiki` = `57442251`, `vault-sync` = `57442252`, `grok-search` =
-`57442314`. `deep-research` has no public catalog id until it is in the
-Cursor marketplace catalog.
+Grok Bot **public** catalog ids (`skillwiki` `57442251`, `vault-sync`
+`57442252`, `grok-search` `57442314`) are **not** the user GitHub marketplace
+plugin ids. Rempin mints new ids. Do not `InstallUserPlugin` those public ids
+for these two groups. The helper looks up ids from `ListMarketplacePlugins`
+for the user marketplace. `deep-research` has a user-marketplace id after
+the karlorz-agent-skills pin includes it in the Cursor catalog.
 
 ## Verify
 

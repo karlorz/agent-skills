@@ -2,17 +2,8 @@
 # Read-only: compare Cursor user marketplace pins to GitHub for the two plugin groups.
 set -euo pipefail
 
-AGENT="${CURSOR_AGENT_BIN:-}"
-if [[ -z "$AGENT" ]]; then
-  if command -v cursor-agent >/dev/null 2>&1; then
-    AGENT="cursor-agent"
-  elif command -v agent >/dev/null 2>&1; then
-    AGENT="agent"
-  else
-    echo "FAIL: cursor-agent/agent not on PATH" >&2
-    exit 1
-  fi
-fi
+# shellcheck source=resolve-cursor-agent.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-cursor-agent.sh"
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "FAIL: python3 not on PATH" >&2
