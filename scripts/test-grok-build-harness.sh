@@ -237,6 +237,66 @@ PRES_RUN2="$("$INSTALL" --grok-home "$PRES_HOME" --skip-plugins --force -y 2>&1)
 assert_eq "re-render with preserved key stays idempotent" \
   "$(grep -c 'identical, skipping' <<<"$PRES_RUN2")" "5"
 
+# --- config generation: toggle present and implement_via_subagents absent ----
+assert_contains "template contains grok-build-byok = false" \
+  "$(cat "$TEST_ROOT/with-keys.toml")" 'grok-build-byok = false'
+assert_not_contains "template does NOT contain implement_via_subagents" \
+  "$(cat "$TEST_ROOT/with-keys.toml")" 'implement_via_subagents'
+
+# --- installer: stamp file written on install --------------------------------
+STAMP_FILE="$IDEM_HOME/.grok-build-harness-stamp.json"
+assert_contains "stamp file created after install" \
+  "$([ -f "$STAMP_FILE" ] && echo "exists" || echo "missing")" "exists"
+assert_contains "stamp file contains schema" \
+  "$(cat "$STAMP_FILE")" '"schema": "grok-build-harness-stamp/v1"'
+assert_contains "stamp file contains plugin_version 0.4.0" \
+  "$(cat "$STAMP_FILE")" '"plugin_version": "0.4.0"'
+
+# --- installer: grokgod auto-detect and plan_mode merge ----------------------
+GROKGOD_FAKE_HOME="$TEST_ROOT/fake-grokgod-user"
+mkdir -p "$GROKGOD_FAKE_HOME/.grokgod"
+echo "0.0.1" > "$GROKGOD_FAKE_HOME/.grokgod/.source-version"
+GROKGOD_INSTALL_HOME="$TEST_ROOT/grokgod-install-home"
+
+# When grokgod is detected via $HOME/.grokgod/.source-version
+HOME="$GROKGOD_FAKE_HOME" "$INSTALL" --grok-home "$GROKGOD_INSTALL_HOME" --skip-plugins --force -y >/dev/null 2>&1
+assert_contains "grokgod auto-detected: writes implement_via_subagents" \
+  "$(cat "$GROKGOD_INSTALL_HOME/config.toml")" 'implement_via_subagents = true'
+assert_contains "grokgod stamp records grokgod_detected = true" \
+  "$(cat "$GROKGOD_INSTALL_HOME/.grok-build-harness-stamp.json")" '"grokgod_detected": true'
+
+# When --skip-grokgod is passed with the fake grokgod directory
+GROKGOD_SKIP_HOME="$TEST_ROOT/grokgod-skip-home"
+HOME="$GROKGOD_FAKE_HOME" "$INSTALL" --grok-home "$GROKGOD_SKIP_HOME" --skip-grokgod --skip-plugins --force -y >/dev/null 2>&1
+assert_not_contains "--skip-grokgod skips implement_via_subagents merge" \
+  "$(cat "$GROKGOD_SKIP_HOME/config.toml")" 'implement_via_subagents'
+assert_contains "--skip-grokgod stamp records grokgod_detected = false" \
+  "$(cat "$GROKGOD_SKIP_HOME/.grok-build-harness-stamp.json")" '"grokgod_detected": false'
+
+# --- installer: last flag wins for grokgod ------------------------------------
+GROKGOD_LAST_HOME="$TEST_ROOT/grokgod-last-home"
+HOME="$GROKGOD_FAKE_HOME" "$INSTALL" --grok-home "$GROKGOD_LAST_HOME" \
+  --with-grokgod --skip-grokgod --skip-plugins --force -y >/dev/null 2>&1
+assert_not_contains "--skip-grokgod after --with-grokgod wins" \
+  "$(cat "$GROKGOD_LAST_HOME/config.toml")" 'implement_via_subagents'
+
+# --- installer: missing grok without --skip-plugins ---------------------------
+NO_GROK_HOME="$TEST_ROOT/no-grok-home"
+NO_GROK_OUT="$(PATH=/usr/bin:/bin HOME="$TEST_ROOT/empty-home" \
+  "$INSTALL" --grok-home "$NO_GROK_HOME" --skip-grokgod --force -y --no-config 2>&1 || true)"
+assert_eq "missing grok without --skip-plugins exits 1" \
+  "$(PATH=/usr/bin:/bin HOME="$TEST_ROOT/empty-home" \
+    "$INSTALL" --grok-home "$NO_GROK_HOME" --skip-grokgod --force -y --no-config >/dev/null 2>&1; echo $?)" "1"
+assert_contains "missing grok names the binary, not find_grok" \
+  "$NO_GROK_OUT" "grok binary not found"
+assert_not_contains "missing grok is not a command-not-found crash" \
+  "$NO_GROK_OUT" "find_grok: command not found"
+
+# --- installer: --verify after skip-plugins -----------------------------------
+VERIFY_OUT="$("$INSTALL" --grok-home "$IDEM_HOME" --skip-plugins --skip-grokgod --verify --force -y 2>&1)"
+assert_contains "--verify prints stamp path" \
+  "$VERIFY_OUT" ".grok-build-harness-stamp.json"
+
 # --- installer: unknown option exits 1 ----------------------------------------
 "$INSTALL" --definitely-not-a-flag >/dev/null 2>&1
 assert_eq "unknown option exits 1" "$?" "1"

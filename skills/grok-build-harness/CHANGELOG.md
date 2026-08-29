@@ -2,6 +2,14 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.4.0] - 2026-08-29
+
+- Add `[subagents.toggle] grok-build-byok = false` to config template (parent-only agent toggle).
+- Add harness stamp file (`.grok-build-harness-stamp.json`) recording schema, version, root, install time, and grokgod detection.
+- Add `--with-grokgod` and `--skip-grokgod` flags; auto-detect grokgod and idempotently merge `[plan_mode] implement_via_subagents = true` into config.toml (not part of the stock template).
+- Support plugin refresh before install when running from `installed-plugins`, re-executing updated installer.
+- Update `--verify` to inspect the stamp, warn when `[agent] name = grok-build-byok` is paired with non-comment `agent_type = "codex"`, and require `implement_via_subagents` when grokgod is detected.
+
 ## [0.3.2] - 2026-08-29
 
 - Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).

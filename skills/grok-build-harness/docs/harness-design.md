@@ -119,6 +119,25 @@ enables them via `[plugins].enabled`. `--skip-codex`, `--skip-vault-sync`, and
   survives every re-run. v0.2.0-format files (unmarked contract) get a
   one-time block-match migration (**ADR-2**).
 
+## Agent selection, BYOK, and Codex strict mode (v0.4.0)
+
+- **Parent-only agent toggle**: `[subagents.toggle] grok-build-byok = false`
+  ensures `grok-build-byok` is available as a top-level parent agent but is
+  never auto-selected or spawned as a subagent.
+- **`[agent] name` vs Codex auto-select**: Setting `[agent] name = "grok-build-byok"`
+  configures the default session parent agent. In upstream grok-build, `DEFAULT_AGENT_TYPE`
+  is `grok-build-plan` (`xai-grok-shell config.rs`), which is non-strict and fully
+  compatible with `grok-build-byok`. Conversely, `agent_type = "codex"` is an explicit
+  opt-in to Codex strict harness mode; pairing `[agent] name = "grok-build-byok"` with
+  `agent_type = "codex"` causes incompatible agent type conflicts upon model switch.
+  The harness template avoids `agent_type = "codex"` on BYOK models.
+- **grokgod plan_mode auto-detect**: `[plan_mode] implement_via_subagents = true`
+  is a grokgod feature (patch 0002). It is not part of the standard `config.toml.template`
+  so that stock grok-build hosts do not receive unrecognized keys. Instead, `install.sh`
+  auto-detects grokgod (or accepts `--with-grokgod` / `--skip-grokgod`) and merges
+  `[plan_mode] implement_via_subagents = true` into `config.toml` idempotently after
+  config rendering.
+
 ## Re-run safety (v0.3.0)
 
 Field-testing v0.2.0 on the live host surfaced three silent-degradation

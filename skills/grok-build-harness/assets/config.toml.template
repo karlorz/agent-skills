@@ -196,6 +196,9 @@ explore = "sonnet"
 browser-use = "sonnet"
 scout = "sonnet"
 
+[subagents.toggle]
+grok-build-byok = false
+
 [agent]
 name = "grok-build-byok"
 

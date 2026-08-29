@@ -36,12 +36,19 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
 
 ## Procedure
 
-1. **Collect API keys from the user** (or read `HARNESS_HUB_KEY`,
+1. **Update the plugin and locate installer**: On an existing install, refresh the plugin and find `install.sh`:
+
+   ```bash
+   grok plugin update grok-build-harness
+   INSTALL="$(find ~/.grok/installed-plugins -maxdepth 3 -type f -name install.sh -path '*grok-build-harness*' | head -1)"
+   ```
+
+2. **Collect API keys from the user** (or read `HARNESS_HUB_KEY`,
    `HARNESS_NEW_KEY`, `HARNESS_CONTEXT7_KEY`). Two gateway keys
    (hub.karldigi.dev, new.karldigi.dev) and the context7 MCP key. If the user
    declines, install continues env-only — the generated config keeps
    `env_key` lines so `HUB_API_KEY` exports work.
-2. **Run the installer** with the keys and any skip flags the user wants:
+3. **Run the installer** with the keys and any skip flags the user wants:
 
    ```bash
    bash "$INSTALL" --hub-key "$HUB_KEY" --new-key "$NEW_KEY" --context7-key "$CTX7_KEY" --verify
@@ -51,18 +58,21 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
    (heavy or host-specific plugins); `--require-keys` (hard-fail when hub/new
    gateway keys are missing — use for unattended runs); `--restrictive`
    (render `permission_mode = "plan"` instead of `"always-approve"` for
-   shared hosts); `--force-render` (rewrite an existing keyed config env-only
+   shared hosts); `--with-grokgod` / `--skip-grokgod` (force or skip grokgod
+   `[plan_mode] implement_via_subagents = true` merge; auto-detected by default);
+   `--force-render` (rewrite an existing keyed config env-only
    when no keys are provided — the default is to skip the config render
    instead, to avoid silently downgrading a working keyed config); `--dry-run`
    to preview without writing; `--no-config` to skip config.toml. When keys
    are missing the installer always warns that the config will be env-only
    (model aliases won't resolve until `HARNESS_HUB_KEY` / `HARNESS_NEW_KEY`
    are exported).
-3. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
+4. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
    the 14 enabled plugins (13 companions + grok-build-harness itself), `grok inspect --json` reports agents discovered
-   (expect the 2 user agents + plugin agents) and no unresolved key tokens in
-   config.toml.
-4. **Finish**: tell the user to start a new session so `~/.grok/AGENTS.md` and
+   (expect the 2 user agents + plugin agents), stamp file is inspected,
+   config does not pair `[agent] name = grok-build-byok` with `agent_type = "codex"`,
+   and no unresolved key tokens in config.toml.
+5. **Finish**: tell the user to start a new session so `~/.grok/AGENTS.md` and
    the agents load. The skillwiki activation file (`~/.grok/skillwiki.md` and
    the `AGENTS.md` marker block) is owned by the llm-wiki plugin's
    `install:activation` — the harness installer preserves any existing marker;
@@ -75,7 +85,8 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
 | `agents/grok-build-byok.md`, `agents/scout.md` | Custom parent agent + disposable read-only scout (verbatim) |
 | `agentrules.md` | Global subagent routing/workflow rules (verbatim) |
 | `AGENTS.md` | Subagent contract in a `<!-- grok-build-harness:begin/end -->` block — spliced in: all other content (user sections, skillwiki marker) is preserved |
-| `config.toml` | Rendered from the sanitized template: model aliases (sonnet/haiku → deepseek-v4-flash-max via hub), `[subagents.models]` pins, `[agent] name`, plugin enable list, context7 MCP |
+| `config.toml` | Rendered from the sanitized template: model aliases (sonnet/haiku → deepseek-v4-flash-max via hub), `[subagents.models]` pins, `[subagents.toggle] grok-build-byok = false`, `[agent] name`, plugin enable list, context7 MCP |
+| `.grok-build-harness-stamp.json` | Harness install stamp (`grok-build-harness-stamp/v1`): plugin version, root, install timestamp, and grokgod detection |
 
 Existing files are backed up to
 `~/.grok/backups/grok-build-harness-<timestamp>/` before overwrite; identical

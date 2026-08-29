@@ -16,13 +16,15 @@
 #   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
 #              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
 #              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
-#              [--require-keys] [--restrictive] [--force-render] [-y]
+#              [--require-keys] [--restrictive] [--force-render]
+#              [--with-grokgod] [--skip-grokgod] [-y]
 #
 # Keys can also come from HARNESS_HUB_KEY / HARNESS_NEW_KEY / HARNESS_CONTEXT7_KEY.
 # Everything is testable against a scratch tree: GROK_HOME=/tmp/grok-home ./install.sh --dry-run
 
 set -euo pipefail
 
+ORIGINAL_ARGS=("$@")
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$HERE/.." && pwd)"
 ASSETS="$PLUGIN_ROOT/assets"
@@ -46,6 +48,8 @@ VERIFY=0
 ASSUME_YES=0
 REQUIRE_KEYS=0
 RESTRICTIVE=0
+WITH_GROKGOD=0
+SKIP_GROKGOD=0
 
 usage() {
   cat <<'EOF'
@@ -57,7 +61,8 @@ Usage:
   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
-             [--require-keys] [--restrictive] [--force-render] [-y]
+             [--require-keys] [--restrictive] [--force-render]
+             [--with-grokgod] [--skip-grokgod] [-y]
 
 Options:
   --grok-home DIR        target grok home (default: $GROK_HOME or ~/.grok)
@@ -73,6 +78,8 @@ Options:
   --skip-playwright-cli  do not install/enable the playwright-cli plugin
   --skip-plugins         files + config only; no marketplace/plugin steps
   --no-config            do not touch config.toml
+  --with-grokgod         force grokgod plan_mode implement_via_subagents merge
+  --skip-grokgod         skip grokgod plan_mode merge even if detected
   --dry-run              print the plan; write nothing
   --force                overwrite existing files without prompting
   --verify               run verification after installing
@@ -102,6 +109,8 @@ while [ $# -gt 0 ]; do
     --verify) VERIFY=1; shift ;;
     --require-keys) REQUIRE_KEYS=1; shift ;;
     --restrictive) RESTRICTIVE=1; shift ;;
+    --with-grokgod) WITH_GROKGOD=1; SKIP_GROKGOD=0; shift ;;
+    --skip-grokgod) SKIP_GROKGOD=1; WITH_GROKGOD=0; shift ;;
     -y) ASSUME_YES=1; shift ;;
     -h|--help) usage ;;
     *) die "unknown option: $1 (run with --help)" ;;
@@ -243,6 +252,133 @@ find_grok() {
   fi
 }
 
+grokgod_detected() {
+  if [ "$WITH_GROKGOD" -eq 1 ]; then
+    return 0
+  fi
+  if [ "$SKIP_GROKGOD" -eq 1 ]; then
+    return 1
+  fi
+  if command -v grokgod >/dev/null 2>&1 \
+     || [ -x "$HOME/.grokgod/bin/grok" ] \
+     || [ -f "$HOME/.grokgod/.source-version" ]; then
+    return 0
+  fi
+  return 1
+}
+
+merge_grokgod_plan_mode() {
+  local cfg="$GROK_HOME/config.toml"
+  if ! grokgod_detected; then
+    return 0
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "plan_mode: would merge implement_via_subagents = true into $cfg"
+    return 0
+  fi
+  if [ ! -f "$cfg" ]; then
+    return 0
+  fi
+  if grep -q '^[[:space:]]*implement_via_subagents[[:space:]]*=' "$cfg" 2>/dev/null; then
+    log "plan_mode: implement_via_subagents already set in $cfg"
+    return 0
+  fi
+  if grep -q '^[[:space:]]*\[plan_mode\]' "$cfg"; then
+    local tmp
+    tmp="$(mktemp "$cfg.plan-mode.XXXXXX")"
+    trap 'rm -f "$tmp"' RETURN
+    awk '
+      BEGIN { added=0 }
+      /^[[:space:]]*\[plan_mode\]/ && added==0 {
+        print
+        print "implement_via_subagents = true"
+        added=1
+        next
+      }
+      { print }
+    ' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+    trap - RETURN
+    log "plan_mode: merged implement_via_subagents = true into existing [plan_mode] in $cfg"
+    return 0
+  fi
+  {
+    if [ -s "$cfg" ]; then
+      printf '\n'
+    fi
+    printf '[plan_mode]\nimplement_via_subagents = true\n'
+  } >> "$cfg"
+  log "plan_mode: wrote [plan_mode] implement_via_subagents = true to $cfg"
+}
+
+write_stamp() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "stamp: would write $GROK_HOME/.grok-build-harness-stamp.json"
+    return 0
+  fi
+  local stamp_file="$GROK_HOME/.grok-build-harness-stamp.json"
+  local plugin_version="unknown"
+  if [ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; then
+    plugin_version="$(python3 -c '
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    print(data.get("version", "unknown"))
+except Exception:
+    print("unknown")
+' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+  fi
+  local is_grokgod="false"
+  if grokgod_detected; then
+    is_grokgod="true"
+  fi
+  local installed_at
+  installed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")"
+  python3 -c '
+import json, sys
+stamp = {
+    "schema": "grok-build-harness-stamp/v1",
+    "plugin_version": sys.argv[1],
+    "plugin_root": sys.argv[2],
+    "installed_at": sys.argv[3],
+    "grokgod_detected": sys.argv[4] == "true"
+}
+with open(sys.argv[5], "w", encoding="utf-8") as f:
+    json.dump(stamp, f, indent=2)
+    f.write("\n")
+' "$plugin_version" "$PLUGIN_ROOT" "$installed_at" "$is_grokgod" "$stamp_file"
+  log "stamp: wrote $stamp_file"
+}
+
+maybe_refresh_plugin() {
+  # only when running from an installed plugin dir and not in dry-run / skip-plugins
+  if [ "$SKIP_PLUGINS" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; then
+    return 0
+  fi
+  if [ -n "${HARNESS_REFRESHED:-}" ]; then
+    return 0
+  fi
+  if [[ "$HERE" != *"/installed-plugins/"* ]]; then
+    return 0
+  fi
+  local grok_bin
+  grok_bin="$(find_grok)"
+  if [ -z "$grok_bin" ]; then
+    return 0
+  fi
+  log "plugin refresh: checking for grok-build-harness updates via grok plugin update"
+  if ! "$grok_bin" plugin update grok-build-harness 2>&1; then
+    warn "plugin update grok-build-harness failed; continuing with current version"
+  fi
+
+  local new_install
+  new_install="$(find "$GROK_HOME/installed-plugins" -maxdepth 3 -type f -name install.sh -path '*grok-build-harness*' 2>/dev/null | head -1 || true)"
+  if [ -n "$new_install" ] && [ -f "$new_install" ] && ! [ "$new_install" -ef "$HERE/install.sh" ]; then
+    log "re-executing updated installer from $new_install"
+    export HARNESS_REFRESHED=1
+    exec bash "$new_install" "${ORIGINAL_ARGS[@]}"
+  fi
+}
+
 marketplace_add() {
   local url="$1" name="$2" sources
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -281,6 +417,25 @@ install_plugin() {
 verify() {
   log "verifying install in $GROK_HOME"
   local missing=0
+  local stamp_file="$GROK_HOME/.grok-build-harness-stamp.json"
+  if [ -f "$stamp_file" ]; then
+    log "stamp file ($stamp_file):"
+    python3 -c '
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    print("  schema:           {}".format(data.get("schema", "?")))
+    print("  plugin_version:   {}".format(data.get("plugin_version", "?")))
+    print("  installed_at:     {}".format(data.get("installed_at", "?")))
+    print("  grokgod_detected: {}".format(data.get("grokgod_detected", False)))
+    print("  plugin_root:      {}".format(data.get("plugin_root", "?")))
+except Exception as e:
+    print("  invalid stamp: {}".format(e))
+' "$stamp_file" || true
+  else
+    log "stamp file: not found"
+  fi
+
   for f in "agents/grok-build-byok.md" "agents/scout.md" "agentrules.md" "AGENTS.md" "config.toml"; do
     if [ -f "$GROK_HOME/$f" ]; then
       log "  ok  $f"
@@ -295,6 +450,26 @@ verify() {
     if grep -vE '^[[:space:]]*#' "$GROK_HOME/config.toml" | grep -Eq '__[A-Z][A-Z0-9_]*__'; then
       warn "config.toml still contains unresolved key tokens"
       missing=1
+    fi
+
+    # Check for incompatible codex agent_type when grok-build-byok is configured
+    local byok_agent=0
+    if grep -vE '^[[:space:]]*#' "$GROK_HOME/config.toml" | grep -Eq '^[[:space:]]*name[[:space:]]*=[[:space:]]*"grok-build-byok"'; then
+      byok_agent=1
+    fi
+    if [ "$byok_agent" -eq 1 ]; then
+      if grep -vE '^[[:space:]]*#' "$GROK_HOME/config.toml" | grep -Eq '^[[:space:]]*agent_type[[:space:]]*=[[:space:]]*"codex"'; then
+        warn "config.toml pairs [agent] name = \"grok-build-byok\" with agent_type = \"codex\" — codex strict harness blocks byok parent; remove agent_type = \"codex\""
+      fi
+    fi
+
+    if grokgod_detected; then
+      if ! grep -vE '^[[:space:]]*#' "$GROK_HOME/config.toml" | grep -Eq '^[[:space:]]*implement_via_subagents[[:space:]]*=[[:space:]]*true'; then
+        warn "grokgod is detected but [plan_mode] implement_via_subagents = true is missing in config.toml"
+        missing=1
+      else
+        log "  ok  plan_mode.implement_via_subagents = true"
+      fi
     fi
   fi
   if [ "$SKIP_PLUGINS" -eq 0 ] && [ -n "$GROK" ]; then
@@ -372,6 +547,8 @@ for w in warnings:
 }
 
 # --- plan --------------------------------------------------------------------
+maybe_refresh_plugin
+
 log "grok-build-harness bootstrap"
 log "target: $GROK_HOME"
 log "plugins: ${ENABLED[*]}"
@@ -439,7 +616,10 @@ fi
 # our format as the final state and keeps re-runs fully idempotent.
 if [ "$NO_CONFIG" -eq 0 ]; then
   render_config
+  merge_grokgod_plan_mode
 fi
+
+write_stamp
 
 if [ "$DRY_RUN" -eq 1 ]; then
   log "dry run complete — no changes were made"
