@@ -560,11 +560,16 @@ try:
 except Exception:
     sys.exit(0)
 print("  agents discovered: {}".format(len(data.get("agents", []))))
-warnings = data.get("configWarnings", [])
-print("  config warnings: {}".format(len(warnings)))
-for w in warnings:
-    print("    {}: {} {}".format(w.get("kind", "?"), w.get("path", ""), w.get("message", "")))
+print("  config warnings: {}".format(len(data.get("configWarnings") or [])))
 ' "$inspect_json" || true
+      inspect_tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-inspect.XXXXXX")"
+      printf '%s\n' "$inspect_json" > "$inspect_tmp"
+      classify_args=(--grok-home "$GROK_HOME" --classify-inspect "$inspect_tmp")
+      if grokgod_detected; then
+        classify_args+=(--grokgod)
+      fi
+      python3 "$CHECK_CONFIG" "${classify_args[@]}" 2>/dev/null | sed 's/^/    /' || true
+      rm -f "$inspect_tmp"
     fi
     # the pin aliases are load-bearing: [subagents.models] resolves through
     # them, so a missing alias breaks the whole routing economy

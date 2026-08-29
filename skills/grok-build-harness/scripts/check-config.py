@@ -192,16 +192,70 @@ def check_config(config_path: Path, grok_home: Path, strict: bool, grokgod: bool
     return 0
 
 
+def classify_inspect_path(path: str, template_keys: set[str], docs_keys: set[str], extras_keys: set[str]) -> str:
+    """Classify an inspect configWarnings path (e.g. ui.notifications) by its root table."""
+    root = (path or "").split(".", 1)[0]
+    if root in extras_keys:
+        return "extra"
+    if root in docs_keys:
+        return "docs-lag"
+    if root in template_keys:
+        return "template-owned"
+    return "unexpected"
+
+
+def classify_inspect_warnings(inspect_data: object, grok_home: Path, grokgod: bool = False) -> list[str]:
+    """Return classified inspect warning lines. Never includes secret values."""
+    if not isinstance(inspect_data, dict):
+        return []
+    template_keys = get_template_keys(TEMPLATE_PATH)
+    docs_keys = get_docs_keys(grok_home, VENDORED_KEYS_PATH)
+    extras_keys = get_runtime_extras(EXTRAS_PATH)
+    if grokgod:
+        extras_keys.add("plan_mode")
+    lines = []
+    warnings = inspect_data.get("configWarnings") or []
+    for warning in warnings:
+        if not isinstance(warning, dict):
+            continue
+        path = str(warning.get("path") or "")
+        kind = str(warning.get("kind") or "unknown")
+        label = classify_inspect_path(path, template_keys, docs_keys, extras_keys)
+        lines.append(f"{kind} {path}: {label}")
+    return lines
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Schema-check config.toml")
     parser.add_argument("--config", type=Path, help="Path to config.toml")
     parser.add_argument("--grok-home", type=Path, help="Path to GROK_HOME")
     parser.add_argument("--strict", action="store_true", help="Fail on unexpected keys")
     parser.add_argument("--grokgod", action="store_true", help="Allow grokgod-specific runtime keys (e.g. plan_mode)")
+    parser.add_argument(
+        "--classify-inspect",
+        nargs="?",
+        const="-",
+        metavar="FILE",
+        help="Classify grok inspect --json configWarnings from FILE or stdin (-)",
+    )
     args = parser.parse_args()
 
     grok_home = args.grok_home or Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
     config_path = args.config or (grok_home / "config.toml")
+
+    if args.classify_inspect is not None:
+        if args.classify_inspect == "-":
+            raw = sys.stdin.read()
+        else:
+            raw = Path(args.classify_inspect).read_text(encoding="utf-8")
+        try:
+            inspect_data = json.loads(raw)
+        except Exception:
+            print("ERROR: failed to parse inspect JSON", file=sys.stderr)
+            sys.exit(1)
+        for line in classify_inspect_warnings(inspect_data, grok_home, args.grokgod):
+            print(line)
+        sys.exit(0)
 
     exit_code = check_config(config_path, grok_home, args.strict, args.grokgod)
     sys.exit(exit_code)

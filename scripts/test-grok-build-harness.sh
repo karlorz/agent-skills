@@ -446,5 +446,17 @@ chmod +x "$FAKE_GROK_DIR/grok"
 PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grokgod --verify --force -y >/dev/null 2>&1
 assert_eq "install.sh verify without grok-build-byok user agent fails" "$?" "1"
 
+# Inspect unknown-field paths are classified (consent extra, privacy/ui docs-lag)
+CLASSIFY_JSON="$TEST_ROOT/inspect-warnings.json"
+cat > "$CLASSIFY_JSON" <<'EOF'
+{"configWarnings":[{"kind":"unknown-field","path":"consent"},{"kind":"unknown-field","path":"privacy"},{"kind":"unknown-field","path":"ui.notifications"},{"kind":"unknown-field","path":"zzz_future"}]}
+EOF
+CLASSIFY_OUT="$(python3 "$CHECK_CONFIG" --grok-home "$NO_DOCS_GROK_HOME" --classify-inspect "$CLASSIFY_JSON")"
+assert_contains "classify-inspect: consent is extra" "$CLASSIFY_OUT" "unknown-field consent: extra"
+assert_contains "classify-inspect: privacy is docs-lag" "$CLASSIFY_OUT" "unknown-field privacy: docs-lag"
+assert_contains "classify-inspect: ui.notifications is docs-lag" "$CLASSIFY_OUT" "unknown-field ui.notifications: docs-lag"
+assert_contains "classify-inspect: unknown table is unexpected" "$CLASSIFY_OUT" "unknown-field zzz_future: unexpected"
+assert_not_contains "classify-inspect: no PII in output" "$CLASSIFY_OUT" "user@example.com"
+
 printf '\n=== Results: %d passed, %d failed ===\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

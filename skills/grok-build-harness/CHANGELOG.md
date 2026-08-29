@@ -9,6 +9,7 @@ All notable changes to this skill are documented in this file.
 - Add runtime extras catalog (`assets/config-runtime-extras.json`) and validate `[consent.answers.aup]` / `[consent.answers.tos]` structure without logging or leaking PII.
 - Add `--strict` flag to `check-config.py` and `install.sh` to fail on unexpected top-level config tables.
 - Add assertion in `--verify` ensuring discovered user agent `grok-build-byok` is present when plugins are not skipped.
+- Classify `grok inspect` `configWarnings` as extra / docs-lag / unexpected (`consent` extra; `privacy` and `ui.notifications` docs-lag on 1.0.12).
 
 ## [0.4.1] - 2026-08-29
 
