@@ -87,6 +87,12 @@ To verify that grok-search MCP is active and functioning properly:
    ```
 2. Confirm the agent discovers and invokes tools such as `get_config_info` or `web_search`. Live session tool execution is the ground truth, not `agent mcp list`.
 
+A healthy production `get_config_info` response identifies the configured
+remote streamable-HTTP endpoint and confirms that the client needs no local
+server stack. See the companion
+[SKILL.md](skills/grok-search/SKILL.md#diagnostics) for the canonical diagnostic
+safety contract.
+
 ## Archived stdio Client
 
 Previous versions supported local stdio execution via `uvx`. All legacy stdio scripts, migration utilities, and stdio examples have been archived under `archive/skills/grok-search-stdio/`.

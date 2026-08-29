@@ -46,6 +46,8 @@ Before every `web_search`, follow the planning tool descriptions as the source o
 ### Diagnostics
 
 - Use `get_config_info` only for connectivity or backend diagnostics. Never display credentials.
+- A healthy production response identifies the configured remote engine, `streamable_http` transport, and `https://search.karldigi.dev/mcp`, and explains that the client needs no local GrokSearch, GUDA, Tavily, Firecrawl, `uv`, or Python service.
+- Treat loopback or internal service URLs, filesystem paths, credential fields or masked fragments, upstream response bodies, and low-level exception details in the public diagnostic as a contract failure. Do not repeat sensitive output.
 - Call `toggle_builtin_tools` or `switch_model` only when explicitly requested.
 
 ## Errors
