@@ -72,10 +72,15 @@ function gitJson(repo, objectPath, label) {
 }
 
 function gitJsonIfPresent(repo, objectPath, label) {
-  const exists = runGit(repo, ["cat-file", "-e", objectPath], {
+  const result = runGit(repo, ["show", objectPath], {
     allowStatus: [128],
   });
-  return exists.status === 0 ? gitJson(repo, objectPath, label) : null;
+  if (result.status === 128) return null;
+  try {
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    fail(`cannot parse ${label} from ${objectPath}: ${error.message}`);
+  }
 }
 
 function marketplaceEntry(manifest, skill, label) {
@@ -114,12 +119,14 @@ function currentVersions(repo, skill) {
   const codexPath = path.join(pluginRoot, ".codex-plugin", "plugin.json");
   const marketplacePath = path.join(repo, ".claude-plugin", "marketplace.json");
 
-  for (const required of [claudePath, codexPath, marketplacePath]) {
+  for (const required of [claudePath, marketplacePath]) {
     if (!fs.existsSync(required)) fail(`required manifest missing: ${path.relative(repo, required)}`);
   }
 
   const claude = readJson(claudePath, path.relative(repo, claudePath));
-  const codex = readJson(codexPath, path.relative(repo, codexPath));
+  const codex = fs.existsSync(codexPath)
+    ? readJson(codexPath, path.relative(repo, codexPath))
+    : null;
   const marketplace = readJson(marketplacePath, path.relative(repo, marketplacePath));
   const marketplacePlugin = marketplaceEntry(marketplace, skill, "current marketplace");
   return validatedManifestSet({ claude, codex, marketplacePlugin }, "current");

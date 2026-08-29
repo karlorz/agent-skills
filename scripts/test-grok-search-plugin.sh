@@ -114,6 +114,11 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # without adding a repository dependency on a schema-validation library.
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
+expected_version = claude_manifest.get("version")
+if not isinstance(expected_version, str) or not re.fullmatch(
+    r"[0-9]+\.[0-9]+\.[0-9]+(?:-beta\.[0-9]+)?", expected_version
+):
+    raise SystemExit(f"{manifest_path}: version must be supported semver")
 allowed_cursor_manifest_fields = {
     "name",
     "description",
@@ -141,8 +146,8 @@ if not isinstance(cursor_manifest.get("description"), str) or not cursor_manifes
     raise SystemExit(f"{cursor_manifest_path}: description missing")
 if cursor_manifest.get("name") != "grok-search":
     raise SystemExit(f"{cursor_manifest_path}: name must be grok-search")
-if cursor_manifest.get("version") != "0.1.9":
-    raise SystemExit(f"{cursor_manifest_path}: version must be 0.1.9")
+if cursor_manifest.get("version") != expected_version:
+    raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if cursor_manifest.get("mcpServers") != "./mcp.json":
     raise SystemExit(f"{cursor_manifest_path}: mcpServers must point to ./mcp.json")
 if cursor_manifest.get("hooks") is not None:
@@ -205,8 +210,6 @@ if codex_interface.get("displayName") != "Grok Search":
     raise SystemExit(f"{codex_manifest_path}: interface.displayName must be Grok Search")
 if codex_interface.get("category") != "Research":
     raise SystemExit(f"{codex_manifest_path}: interface.category must be Research")
-if claude_manifest.get("version") != "0.1.9":
-    raise SystemExit(f"{manifest_path}: version must be 0.1.9")
 manifest_desc = claude_manifest.get("description", "")
 if "HTTP" not in manifest_desc and "http" not in manifest_desc:
     raise SystemExit(f"{manifest_path}: description must mention HTTP MCP")
@@ -228,10 +231,15 @@ for forbidden in ("headers", "http_headers", "env_http_headers", "command", "arg
 
 # 6. CHANGELOG.md
 changelog_text = texts[changelog_path]
-if "0.1.9" not in changelog_text:
-    raise SystemExit(f"{changelog_path}: must mention version 0.1.9")
-if "2026-08-29" not in changelog_text:
-    raise SystemExit(f"{changelog_path}: must mention release date 2026-08-29")
+release_heading = re.search(
+    r"^## \[(?!Unreleased\])([^]]+)\] - (\d{4}-\d{2}-\d{2})$",
+    changelog_text,
+    re.MULTILINE,
+)
+if not release_heading:
+    raise SystemExit(f"{changelog_path}: must contain a dated release heading")
+if release_heading.group(1) != expected_version:
+    raise SystemExit(f"{changelog_path}: latest release heading must match {expected_version}")
 
 # 7. SKILL.md contract
 skill_text = texts[skill_path]

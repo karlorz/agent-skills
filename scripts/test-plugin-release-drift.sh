@@ -62,12 +62,15 @@ EOF
 }
 
 init_fixture() {
-  local repo="$1"
+  local repo="$1" codex_mode="${2:-with-codex}"
 
   git -C "$repo" init -q
   git -C "$repo" config user.email "test@test"
   git -C "$repo" config user.name "test"
   write_manifests "$repo" "1.26.22"
+  if [ "$codex_mode" = "without-codex" ]; then
+    rm "$repo/skills/dev-loop/.codex-plugin/plugin.json"
+  fi
   git -C "$repo" add -A
   git -C "$repo" commit -q -m "release 1.26.22"
   git -C "$repo" tag dev-loop-1.26.22
@@ -100,6 +103,13 @@ UNCHANGED_OUT="$(run_checker "$UNCHANGED")" ||
   fail "unchanged tagged payload should pass"
 assert_contains "unchanged payload" "$UNCHANGED_OUT" "payload unchanged"
 
+NO_CODEX="$TMP/no-codex"
+mkdir -p "$NO_CODEX"
+init_fixture "$NO_CODEX" without-codex
+NO_CODEX_OUT="$(run_checker "$NO_CODEX")" ||
+  fail "plugin without a Codex manifest should pass"
+assert_contains "optional current Codex manifest" "$NO_CODEX_OUT" "payload unchanged"
+
 MUTATED="$TMP/mutated"
 mkdir -p "$MUTATED"
 init_fixture "$MUTATED"
@@ -124,14 +134,7 @@ assert_contains "advanced payload" "$ADVANCED_OUT" "version advanced"
 
 FIRST_CODEX="$TMP/first-codex"
 mkdir -p "$FIRST_CODEX"
-git -C "$FIRST_CODEX" init -q
-git -C "$FIRST_CODEX" config user.email "test@test"
-git -C "$FIRST_CODEX" config user.name "test"
-write_manifests "$FIRST_CODEX" "1.26.22"
-rm "$FIRST_CODEX/skills/dev-loop/.codex-plugin/plugin.json"
-git -C "$FIRST_CODEX" add -A
-git -C "$FIRST_CODEX" commit -q -m "release without Codex manifest"
-git -C "$FIRST_CODEX" tag dev-loop-1.26.22
+init_fixture "$FIRST_CODEX" without-codex
 write_manifests "$FIRST_CODEX" "1.26.23"
 FIRST_CODEX_OUT="$(run_checker "$FIRST_CODEX")" ||
   fail "first Codex manifest with an advanced version should pass"
