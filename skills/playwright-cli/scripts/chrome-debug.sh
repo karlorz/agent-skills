@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# chrome-debug-contract: v2
+# chrome-debug-contract: v3
 # Start Chrome with remote debugging in detached mode.
 # Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [--check-port] [--explain] [--launch-and-explain] [URL]
 #
@@ -578,6 +578,7 @@ build_chrome_args() {
     --remote-debugging-port="${DEBUG_PORT}"
     --remote-debugging-address=127.0.0.1
     --remote-allow-origins=*
+    --enable-unsafe-extension-debugging
     --user-data-dir="${PROFILE_DIR}"
     --disable-session-crashed-bubble
     --disable-default-apps
@@ -659,7 +660,7 @@ print(
             "logFile": os.environ["LOG_FILE_JSON"],
             "targetUrl": os.environ["TARGET_URL_JSON"],
             "launchArgs": launch_args,
-            "chromeDebugContract": "v2",
+            "chromeDebugContract": "v3",
         }
     )
 )
@@ -680,7 +681,7 @@ HEADLESS_LABEL=$(resolve_headless_label)
 PROFILE_DIR=${PROFILE_DIR}
 LOG_FILE=${LOG_FILE}
 TARGET_URL=${TARGET_URL}
-CHROME_DEBUG_CONTRACT=v2
+CHROME_DEBUG_CONTRACT=v3
 EOF_CONFIG
 }
 

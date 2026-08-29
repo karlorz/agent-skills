@@ -52,6 +52,8 @@ state = sys.argv[3]
 assert data["projectRoot"] == project, data
 assert data["profileDir"] == os.path.join(project, ".chrome-debug-profile"), data
 assert data["logFile"] == os.path.join(state, "chrome-debug.log"), data
+assert data["chromeDebugContract"] == "v3", data
+assert data["launchArgs"].count("--enable-unsafe-extension-debugging") == 1, data
 PY
 
 # Re-running is idempotent, and an existing richer config with the same CDP
@@ -95,5 +97,19 @@ bash "${SETUP}" \
   --state-dir "${STATE_DIR}" >/dev/null
 grep -Fq '# playwright-cli-managed-chrome-debug: v1' "${BIN_DIR}/chrome-debug" || fail "forced launcher was not installed"
 find "${BIN_DIR}" -maxdepth 1 -name 'chrome-debug.bak.*' -print -quit | grep -q . || fail "forced launcher did not create a backup"
+
+SKILL_MD="${SCRIPT_DIR}/../skills/playwright-cli/SKILL.md"
+python3 - "${SKILL_MD}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+skill_md = Path(sys.argv[1])
+links = re.findall(r'\]\(([^)#:\s]+\.md)\)', skill_md.read_text(encoding="utf-8"))
+assert links, "no local markdown links checked"
+for link in links:
+    target = skill_md.parent / link
+    assert target.is_file(), f"broken link in SKILL.md: {link} -> {target}"
+PY
 
 printf 'test-setup-playwright-cli: PASS\n'

@@ -2,7 +2,7 @@
 
 Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
-Contract stamp: **`chrome-debug-contract: v2`** (see `scripts/chrome-debug.sh` header).
+Contract stamp: **`chrome-debug-contract: v3`** (see `scripts/chrome-debug.sh` header).
 
 The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, and detached launch. The one-time setup script installs it as a stable user-level `chrome-debug` command so it works outside repositories that vendor the script.
 
@@ -136,6 +136,14 @@ playwright-cli kill-all
 chrome-debug --restart
 playwright-cli attach
 ```
+
+## Unpacked extension debugging (Chrome 137+)
+
+The launcher automatically passes `--enable-unsafe-extension-debugging`, enabling unattended installation of unpacked extensions over CDP without manual UI interaction:
+
+- **CDP method**: Load extensions dynamically using the Chrome DevTools Protocol `Extensions.loadUnpacked` method with the path to the unpacked extension directory.
+- **Persistence**: Installed extensions persist across restarts within the same profile directory.
+- **Caveat with `--refresh-from-default`**: Using `--refresh-from-default` resets/re-syncs the clone from the real Chrome profile, which will wipe dynamically loaded debug extensions and require re-running `Extensions.loadUnpacked`.
 
 ## Sync note
 
