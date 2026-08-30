@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.1] - 2026-08-30
+
+### Added
+- Daily-ops pack in SKILL.md: `ask.to` routing (`newbie` | `wiki-research` only), `post_message.to` may be `channel`, no-token issue checklist, macos-dev dual LaunchAgent reboot note (channel2 only).
+
 ## [0.3.0] - 2026-08-30
 
 ### Added

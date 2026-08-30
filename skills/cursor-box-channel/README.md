@@ -4,6 +4,8 @@ Thin marketplace plugin for cursor-box-channel. Marketplace install is HTTP Stre
 
 Optional read-only audit UI: `https://channel.termolo.com/console` (Cloudflare Access). This plugin is a wrapper around that live URL, not a second dashboard.
 
+SKILL.md has daily-ops routing and a no-token issue checklist.
+
 ## Install
 
 From `karlorz-agent-skills`:
