@@ -1,6 +1,6 @@
 ---
 name: cursor-box-channel
-description: "Use this when an agent needs cursor-box-channel HTTP MCP (ask, list_replies, heartbeat, claim, reply) or the read-only audit console at https://channel.termolo.com/console."
+description: "This skill should be used when an agent needs to ask, list replies, heartbeat, claim, or reply on cursor-box-channel HTTP MCP (attended-only), or open the read-only audit console."
 ---
 
 # Cursor Box Channel
