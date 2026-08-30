@@ -256,6 +256,30 @@ find_grok() {
   fi
 }
 
+command_version_ok() {
+  local bin="$1"
+  # Unset GROK_HOME so a --version probe cannot mkdir the install target
+  # (grok/grokgod may initialize $GROK_HOME on any invocation).
+  [ -n "$bin" ] && [ -x "$bin" ] && env -u GROK_HOME "$bin" --version >/dev/null 2>&1
+}
+
+require_host_tools() {
+  command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH (required for grok-build-init)"
+  [ "$SKIP_PLUGINS" -eq 1 ] && return 0
+  command -v git >/dev/null 2>&1 || die "git not found on PATH (required to clone plugin marketplaces); pass --skip-plugins to install files only"
+  local bin
+  bin="$(find_grok)"
+  if [ -z "$bin" ]; then
+    die "grok binary not found (looked in $GROK_HOME/bin and PATH); pass --skip-plugins to install files only"
+  fi
+  if ! command_version_ok "$bin"; then
+    die "grok is not runnable ($bin --version failed). On musl/Alpine use a musl grok build (often \$GROK_HOME/downloads/grok-linux-*); do not point PATH at a glibc grokgod shim. Pass --skip-plugins to install files only"
+  fi
+}
+
+# Auto-detect result only; --with-grokgod / --skip-grokgod still short-circuit.
+GROKGOD_DETECTED_CACHED=""
+
 grokgod_detected() {
   if [ "$WITH_GROKGOD" -eq 1 ]; then
     return 0
@@ -263,11 +287,23 @@ grokgod_detected() {
   if [ "$SKIP_GROKGOD" -eq 1 ]; then
     return 1
   fi
-  if command -v grokgod >/dev/null 2>&1 \
-     || [ -x "$HOME/.grokgod/bin/grok" ] \
-     || [ -f "$HOME/.grokgod/.source-version" ]; then
+  if [ -n "$GROKGOD_DETECTED_CACHED" ]; then
+    [ "$GROKGOD_DETECTED_CACHED" = "1" ]
+    return
+  fi
+  local bin=""
+  if command -v grokgod >/dev/null 2>&1; then
+    bin="$(command -v grokgod)"
+    if command_version_ok "$bin"; then
+      GROKGOD_DETECTED_CACHED=1
+      return 0
+    fi
+  fi
+  if command_version_ok "${HOME}/.grokgod/bin/grok"; then
+    GROKGOD_DETECTED_CACHED=1
     return 0
   fi
+  GROKGOD_DETECTED_CACHED=0
   return 1
 }
 
@@ -536,24 +572,18 @@ import json, sys
 try:
     data = json.loads(sys.argv[1])
 except Exception:
-    print("found=false")
     print("agents=0")
     print("warns=0")
     sys.exit(0)
-found = any(
-    a.get("name") == "grok-build-byok" and a.get("source", {}).get("type") == "user"
-    for a in data.get("agents", [])
-)
-print("found=" + ("true" if found else "false"))
 print("agents=" + str(len(data.get("agents", []))))
 print("warns=" + str(len(data.get("configWarnings") or [])))
 ' "$inspect_json")"
-      local found=false agents=0 warns=0
+      local agents=0 warns=0
       eval "$inspect_meta"
-      if [ "$found" = "true" ]; then
-        log "  ok  user agent grok-build-byok discovered"
+      if printf '%s\n' "$inspect_json" | python3 "$CHECK_CONFIG" --grok-home "$GROK_HOME" --assert-byok-inspect -; then
+        log "  ok  grok-build-byok under $GROK_HOME/agents"
       else
-        warn "  AGENT MISSING: grok-build-byok user agent not found in grok inspect"
+        warn "  AGENT MISSING: grok-build-byok not found under $GROK_HOME/agents in grok inspect"
         missing=1
       fi
       log "  agents discovered: $agents"
@@ -589,6 +619,7 @@ print("warns=" + str(len(data.get("configWarnings") or [])))
 }
 
 # --- plan --------------------------------------------------------------------
+require_host_tools
 maybe_refresh_plugin
 
 log "grok-build-harness bootstrap"

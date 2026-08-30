@@ -256,22 +256,67 @@ assert_contains "stamp file contains schema" \
 assert_contains "stamp file contains plugin_version ${PLUGIN_VERSION}" \
   "$(cat "$STAMP_FILE")" "\"plugin_version\": \"${PLUGIN_VERSION}\""
 
+# Isolate python3/git so PATH does not pick up a host grok/grokgod (Homebrew).
+HOST_TOOLS_BIN="$TEST_ROOT/host-tools-bin"
+mkdir -p "$HOST_TOOLS_BIN"
+ln -s "$(command -v python3)" "$HOST_TOOLS_BIN/python3"
+ln -s "$(command -v git)" "$HOST_TOOLS_BIN/git"
+HOST_TOOLS_PATH="$HOST_TOOLS_BIN:/usr/bin:/bin"
+
 # --- installer: grokgod auto-detect and plan_mode merge ----------------------
+GROKGOD_PATH="$HOST_TOOLS_PATH"
 GROKGOD_FAKE_HOME="$TEST_ROOT/fake-grokgod-user"
 mkdir -p "$GROKGOD_FAKE_HOME/.grokgod"
 echo "0.0.1" > "$GROKGOD_FAKE_HOME/.grokgod/.source-version"
 GROKGOD_INSTALL_HOME="$TEST_ROOT/grokgod-install-home"
 
-# When grokgod is detected via $HOME/.grokgod/.source-version
-HOME="$GROKGOD_FAKE_HOME" "$INSTALL" --grok-home "$GROKGOD_INSTALL_HOME" --skip-plugins --force -y >/dev/null 2>&1
-assert_contains "grokgod auto-detected: writes implement_via_subagents" \
-  "$(cat "$GROKGOD_INSTALL_HOME/config.toml")" 'implement_via_subagents = true'
-assert_contains "grokgod stamp records grokgod_detected = true" \
-  "$(cat "$GROKGOD_INSTALL_HOME/.grok-build-harness-stamp.json")" '"grokgod_detected": true'
+# File-only .source-version is not detection (musl host with a glibc stub).
+HOME="$GROKGOD_FAKE_HOME" PATH="$GROKGOD_PATH" \
+  "$INSTALL" --grok-home "$GROKGOD_INSTALL_HOME" --skip-plugins --force -y >/dev/null 2>&1
+assert_not_contains "file-only grokgod does not write implement_via_subagents" \
+  "$(cat "$GROKGOD_INSTALL_HOME/config.toml")" 'implement_via_subagents'
+assert_contains "file-only grokgod stamp records grokgod_detected = false" \
+  "$(cat "$GROKGOD_INSTALL_HOME/.grok-build-harness-stamp.json")" '"grokgod_detected": false'
+
+# Runnable $HOME/.grokgod/bin/grok --version
+mkdir -p "$GROKGOD_FAKE_HOME/.grokgod/bin"
+cat > "$GROKGOD_FAKE_HOME/.grokgod/bin/grok" <<'EOF'
+#!/bin/sh
+echo grokgod 0.0.1
+exit 0
+EOF
+chmod +x "$GROKGOD_FAKE_HOME/.grokgod/bin/grok"
+GROKGOD_RUN_HOME="$TEST_ROOT/grokgod-run-home"
+HOME="$GROKGOD_FAKE_HOME" PATH="$GROKGOD_PATH" \
+  "$INSTALL" --grok-home "$GROKGOD_RUN_HOME" --skip-plugins --force -y >/dev/null 2>&1
+assert_contains "runnable grokgod writes implement_via_subagents" \
+  "$(cat "$GROKGOD_RUN_HOME/config.toml")" 'implement_via_subagents = true'
+assert_contains "runnable grokgod stamp records grokgod_detected = true" \
+  "$(cat "$GROKGOD_RUN_HOME/.grok-build-harness-stamp.json")" '"grokgod_detected": true'
+
+# +x grokgod binary that fails --version
+cat > "$GROKGOD_FAKE_HOME/.grokgod/bin/grok" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+chmod +x "$GROKGOD_FAKE_HOME/.grokgod/bin/grok"
+GROKGOD_BROKEN_HOME="$TEST_ROOT/grokgod-broken-home"
+HOME="$GROKGOD_FAKE_HOME" PATH="$GROKGOD_PATH" \
+  "$INSTALL" --grok-home "$GROKGOD_BROKEN_HOME" --skip-plugins --force -y >/dev/null 2>&1
+assert_not_contains "unrunnable grokgod does not write implement_via_subagents" \
+  "$(cat "$GROKGOD_BROKEN_HOME/config.toml")" 'implement_via_subagents'
+
+# --with-grokgod forces merge without a runnable binary
+GROKGOD_FORCE_HOME="$TEST_ROOT/grokgod-force-home"
+HOME="$GROKGOD_FAKE_HOME" PATH="$GROKGOD_PATH" \
+  "$INSTALL" --grok-home "$GROKGOD_FORCE_HOME" --with-grokgod --skip-plugins --force -y >/dev/null 2>&1
+assert_contains "--with-grokgod writes implement_via_subagents without runnable binary" \
+  "$(cat "$GROKGOD_FORCE_HOME/config.toml")" 'implement_via_subagents = true'
 
 # When --skip-grokgod is passed with the fake grokgod directory
 GROKGOD_SKIP_HOME="$TEST_ROOT/grokgod-skip-home"
-HOME="$GROKGOD_FAKE_HOME" "$INSTALL" --grok-home "$GROKGOD_SKIP_HOME" --skip-grokgod --skip-plugins --force -y >/dev/null 2>&1
+HOME="$GROKGOD_FAKE_HOME" PATH="$GROKGOD_PATH" \
+  "$INSTALL" --grok-home "$GROKGOD_SKIP_HOME" --skip-grokgod --skip-plugins --force -y >/dev/null 2>&1
 assert_not_contains "--skip-grokgod skips implement_via_subagents merge" \
   "$(cat "$GROKGOD_SKIP_HOME/config.toml")" 'implement_via_subagents'
 assert_contains "--skip-grokgod stamp records grokgod_detected = false" \
@@ -279,22 +324,33 @@ assert_contains "--skip-grokgod stamp records grokgod_detected = false" \
 
 # --- installer: last flag wins for grokgod ------------------------------------
 GROKGOD_LAST_HOME="$TEST_ROOT/grokgod-last-home"
-HOME="$GROKGOD_FAKE_HOME" "$INSTALL" --grok-home "$GROKGOD_LAST_HOME" \
+HOME="$GROKGOD_FAKE_HOME" PATH="$GROKGOD_PATH" "$INSTALL" --grok-home "$GROKGOD_LAST_HOME" \
   --with-grokgod --skip-grokgod --skip-plugins --force -y >/dev/null 2>&1
 assert_not_contains "--skip-grokgod after --with-grokgod wins" \
   "$(cat "$GROKGOD_LAST_HOME/config.toml")" 'implement_via_subagents'
 
 # --- installer: missing grok without --skip-plugins ---------------------------
+NO_GROK_PATH="$HOST_TOOLS_PATH"
 NO_GROK_HOME="$TEST_ROOT/no-grok-home"
-NO_GROK_OUT="$(PATH=/usr/bin:/bin HOME="$TEST_ROOT/empty-home" \
-  "$INSTALL" --grok-home "$NO_GROK_HOME" --skip-grokgod --force -y --no-config 2>&1 || true)"
-assert_eq "missing grok without --skip-plugins exits 1" \
-  "$(PATH=/usr/bin:/bin HOME="$TEST_ROOT/empty-home" \
-    "$INSTALL" --grok-home "$NO_GROK_HOME" --skip-grokgod --force -y --no-config >/dev/null 2>&1; echo $?)" "1"
+NO_GROK_RC=0
+NO_GROK_OUT="$(PATH="$NO_GROK_PATH" HOME="$TEST_ROOT/empty-home" \
+  "$INSTALL" --grok-home "$NO_GROK_HOME" --skip-grokgod --force -y --no-config 2>&1)" || NO_GROK_RC=$?
+assert_eq "missing grok without --skip-plugins exits 1" "$NO_GROK_RC" "1"
 assert_contains "missing grok names the binary, not find_grok" \
   "$NO_GROK_OUT" "grok binary not found"
 assert_not_contains "missing grok is not a command-not-found crash" \
   "$NO_GROK_OUT" "find_grok: command not found"
+
+BROKEN_GROK_HOME="$TEST_ROOT/broken-grok-home"
+mkdir -p "$BROKEN_GROK_HOME/bin"
+printf '#!/bin/sh\nexit 1\n' > "$BROKEN_GROK_HOME/bin/grok"
+chmod +x "$BROKEN_GROK_HOME/bin/grok"
+BROKEN_GROK_RC=0
+BROKEN_GROK_OUT="$(PATH="$NO_GROK_PATH" HOME="$TEST_ROOT/empty-home" \
+  "$INSTALL" --grok-home "$BROKEN_GROK_HOME" --skip-grokgod --force -y --no-config 2>&1)" || BROKEN_GROK_RC=$?
+assert_eq "unrunnable grok without --skip-plugins exits 1" "$BROKEN_GROK_RC" "1"
+assert_contains "unrunnable grok says not runnable" \
+  "$BROKEN_GROK_OUT" "not runnable"
 
 # --- installer: --verify after skip-plugins -----------------------------------
 VERIFY_OUT="$("$INSTALL" --grok-home "$IDEM_HOME" --skip-plugins --skip-grokgod --verify --force -y 2>&1)"
@@ -381,18 +437,21 @@ export HARNESS_HUB_KEY=s-hub HARNESS_NEW_KEY=s-new HARNESS_CONTEXT7_KEY=s-ctx
 "$INSTALL" --grok-home "$STRICT_TEST_HOME" --skip-plugins --skip-grokgod --verify --strict --force -y >/dev/null 2>&1
 assert_eq "install.sh accepts --strict and exits 0 on valid install" "$?" "0"
 
-# 8. User agent named grok-build-byok assert in verify when grok binary is available and plugins not skipped
+# 8. grok-build-byok assert: path under GROK_HOME/agents, ignore source.type
+FAKE_GROK_HOME="$TEST_ROOT/fake-grok-home"
+mkdir -p "$FAKE_GROK_HOME/agents"
 FAKE_GROK_DIR="$TEST_ROOT/fake-grok-bin"
 write_fake_grok() {
-  local agent_name="$1"
+  local agent_name="$1" source_type="$2" agent_path="$3"
   mkdir -p "$FAKE_GROK_DIR"
   cat > "$FAKE_GROK_DIR/grok" <<EOF
 #!/usr/bin/env bash
+if [ "\$1" = "--version" ]; then echo "grok 1.0.0"; exit 0; fi
 if [ "\$1" = "plugin" ] && [ "\$2" = "marketplace" ]; then exit 0; fi
 if [ "\$1" = "plugin" ] && [ "\$2" = "install" ]; then exit 0; fi
 if [ "\$1" = "plugin" ] && [ "\$2" = "list" ]; then
   if [ "\${3:-}" = "--json" ]; then
-    echo '[{"name":"grok-build-harness","status":"enabled","version":"0.5.0"},{"name":"superpowers","status":"enabled","version":"1.0.0"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
+    echo '[{"name":"grok-build-harness","status":"enabled","version":"'"${PLUGIN_VERSION}"'"},{"name":"superpowers","status":"enabled","version":"1.0.0"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
   else
     echo "plugins list"
   fi
@@ -405,7 +464,7 @@ if [ "\$1" = "models" ]; then
   exit 0
 fi
 if [ "\$1" = "inspect" ]; then
-  echo '{"agents":[{"name":"${agent_name}","source":{"type":"user","path":"/some/path"}}],"configWarnings":[]}'
+  echo '{"agents":[{"name":"${agent_name}","source":{"type":"${source_type}","path":"${agent_path}"}}],"configWarnings":[]}'
   exit 0
 fi
 exit 0
@@ -413,19 +472,29 @@ EOF
   chmod +x "$FAKE_GROK_DIR/grok"
 }
 
-write_fake_grok "grok-build-byok"
+BYOK_PATH="$FAKE_GROK_HOME/agents/grok-build-byok.md"
+write_fake_grok "grok-build-byok" "project" "$BYOK_PATH"
 
-FAKE_GROK_HOME="$TEST_ROOT/fake-grok-home"
-mkdir -p "$FAKE_GROK_HOME"
 export HARNESS_HUB_KEY=fake-hub HARNESS_NEW_KEY=fake-new HARNESS_CONTEXT7_KEY=fake-ctx
 PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grokgod --verify --force -y >/dev/null 2>&1
-assert_eq "install.sh verify with fake grok and grok-build-byok user agent succeeds" "$?" "0"
+assert_eq "install.sh verify accepts project-type grok-build-byok under GROK_HOME/agents" "$?" "0"
 
-# Fake grok missing grok-build-byok user agent -> verify must fail
-write_fake_grok "other-agent"
-
+write_fake_grok "grok-build-byok" "user" "/some/path"
 PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grokgod --verify --force -y >/dev/null 2>&1
-assert_eq "install.sh verify without grok-build-byok user agent fails" "$?" "1"
+assert_eq "install.sh verify rejects grok-build-byok outside GROK_HOME/agents" "$?" "1"
+
+write_fake_grok "other-agent" "user" "$BYOK_PATH"
+PATH="$FAKE_GROK_DIR:$PATH" "$INSTALL" --grok-home "$FAKE_GROK_HOME" --skip-grokgod --verify --force -y >/dev/null 2>&1
+assert_eq "install.sh verify without grok-build-byok agent fails" "$?" "1"
+
+BYOK_OK_JSON="$TEST_ROOT/byok-ok.json"
+printf '%s\n' "{\"agents\":[{\"name\":\"grok-build-byok\",\"source\":{\"type\":\"project\",\"path\":\"$BYOK_PATH\"}}]}" > "$BYOK_OK_JSON"
+python3 "$CHECK_CONFIG" --grok-home "$FAKE_GROK_HOME" --assert-byok-inspect "$BYOK_OK_JSON"
+assert_eq "check-config --assert-byok-inspect accepts project-type home path" "$?" "0"
+BYOK_BAD_JSON="$TEST_ROOT/byok-bad.json"
+printf '%s\n' '{"agents":[{"name":"grok-build-byok","source":{"type":"user","path":"/some/path"}}]}' > "$BYOK_BAD_JSON"
+python3 "$CHECK_CONFIG" --grok-home "$FAKE_GROK_HOME" --assert-byok-inspect "$BYOK_BAD_JSON"
+assert_eq "check-config --assert-byok-inspect rejects path outside agents/" "$?" "1"
 
 # Inspect unknown-field paths are classified (consent extra, privacy/ui docs-lag)
 CLASSIFY_JSON="$TEST_ROOT/inspect-warnings.json"

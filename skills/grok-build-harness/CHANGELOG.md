@@ -2,6 +2,13 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.1] - 2026-08-30
+
+- Fail closed when `python3` is missing, and when plugins are enabled but `git` or a runnable `grok --version` is missing. Do not rewrite grokgod shims.
+- Detect grokgod only when `grokgod` / `~/.grokgod/bin/grok` successfully runs `--version` (`--with-grokgod` still forces plan_mode merge). Version probes unset `GROK_HOME` so they cannot mkdir the install target.
+- `--verify` treats `grok-build-byok` as present when inspect lists it under `$GROK_HOME/agents/`, regardless of `source.type` (`user` vs `project`).
+- Document Remote/SSH init: run `install.sh` directly; never `ssh -t grok whoami`.
+
 ## [0.5.0] - 2026-08-29
 
 - Add `check-config.py` and integrate live `config.toml` schema checking into `--verify` across 3 layers (template-owned, docs-known, runtime extras).

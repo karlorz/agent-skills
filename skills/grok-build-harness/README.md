@@ -22,6 +22,10 @@ No secrets are shipped. The template carries `__HUB_API_KEY__` /
 
 ## Quickstart (fresh host)
 
+Prereqs: `python3`, `git`, and a **runnable** `grok --version` (musl hosts: do
+not use a glibc grokgod shim). Remote SSH: run `install.sh` directly; do not
+`ssh -t grok whoami`.
+
 ```bash
 grok plugin marketplace add karlorz/agent-skills
 grok plugin install grok-build-harness --trust

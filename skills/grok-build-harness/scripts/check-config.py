@@ -197,6 +197,46 @@ def classify_inspect_path(path: str, template_keys: set[str], docs_keys: set[str
     return "unexpected"
 
 
+def agent_inspect_path(agent: dict) -> str:
+    """Return the agent file path from inspect JSON. Never includes secrets."""
+    src = agent.get("source")
+    if isinstance(src, dict) and src.get("path"):
+        return str(src["path"])
+    return str(agent.get("path") or "")
+
+
+def _canon_path(path):
+    """Resolve symlinks so /var/folders and /private/var/folders compare equal."""
+    try:
+        return str(Path(path).expanduser().resolve()).replace("\\", "/").rstrip("/")
+    except OSError:
+        return str(path).replace("\\", "/").rstrip("/")
+
+
+def byok_agent_found(inspect_data: object, grok_home: Path) -> bool:
+    """True when grok-build-byok is listed under $GROK_HOME/agents/.
+
+    Grok 1.0.5 reports those agents as source.type=project; 1.0.12 reports
+    user. The path under GROK_HOME/agents is the durable signal.
+    """
+    if not isinstance(inspect_data, dict):
+        return False
+    agents_dir = _canon_path(grok_home / "agents")
+    for agent in inspect_data.get("agents") or []:
+        if not isinstance(agent, dict) or agent.get("name") != "grok-build-byok":
+            continue
+        raw = agent_inspect_path(agent)
+        if not raw:
+            continue
+        p = Path(raw).expanduser()
+        if not p.is_absolute():
+            p = grok_home / p
+        resolved = _canon_path(p)
+        if resolved == agents_dir or resolved.startswith(agents_dir + "/"):
+            return True
+    return False
+
+
 def classify_inspect_warnings(inspect_data: object, grok_home: Path, grokgod: bool = False) -> list[str]:
     """Return classified inspect warning lines. Never includes secret values."""
     if not isinstance(inspect_data, dict):
@@ -227,21 +267,35 @@ def main() -> None:
         metavar="FILE",
         help="Classify grok inspect --json configWarnings from FILE or stdin (-)",
     )
+    parser.add_argument(
+        "--assert-byok-inspect",
+        nargs="?",
+        const="-",
+        metavar="FILE",
+        help="Exit 0 if inspect JSON has grok-build-byok under GROK_HOME/agents/",
+    )
     args = parser.parse_args()
 
     grok_home = args.grok_home or Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
     config_path = args.config or (grok_home / "config.toml")
 
-    if args.classify_inspect is not None:
-        if args.classify_inspect == "-":
+    def load_inspect_json(spec: str) -> object:
+        if spec == "-":
             raw = sys.stdin.read()
         else:
-            raw = Path(args.classify_inspect).read_text(encoding="utf-8")
+            raw = Path(spec).read_text(encoding="utf-8")
         try:
-            inspect_data = json.loads(raw)
+            return json.loads(raw)
         except Exception:
             print("ERROR: failed to parse inspect JSON", file=sys.stderr)
             sys.exit(1)
+
+    if args.assert_byok_inspect is not None:
+        inspect_data = load_inspect_json(args.assert_byok_inspect)
+        sys.exit(0 if byok_agent_found(inspect_data, grok_home) else 1)
+
+    if args.classify_inspect is not None:
+        inspect_data = load_inspect_json(args.classify_inspect)
         for line in classify_inspect_warnings(inspect_data, grok_home, args.grokgod):
             print(line)
         sys.exit(0)

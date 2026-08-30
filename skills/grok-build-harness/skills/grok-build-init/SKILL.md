@@ -12,7 +12,12 @@ plugin; it is idempotent and backup-first.
 
 ## Prerequisites
 
-- `grok` installed and authenticated (`grok --version`, `grok login`).
+- `python3` on PATH (installer scripts).
+- `git` on PATH (marketplace clone), unless you pass `--skip-plugins`.
+- `grok` installed, authenticated, and **runnable**: `grok --version` must succeed.
+  On musl/Alpine, a glibc grokgod binary often cannot exec; use a musl grok
+  (often `$GROK_HOME/downloads/grok-linux-*`) and do **not** leave PATH pointing
+  at a broken grokgod shim. The installer will not rewrite that shim.
 - On the fresh host, this plugin itself must be installed first:
 
   ```bash
@@ -22,6 +27,23 @@ plugin; it is idempotent and backup-first.
 
   Then start a new session (or press `r` in the Plugins tab) and run
   `/grok-build-init`.
+
+### Remote / SSH hosts
+
+Do **not** allocate a TTY and run unknown `grok` words such as `grok whoami`.
+Grok 1.0.x treats those as a chat turn and opens the TUI. Health checks:
+
+```bash
+grok --version
+grok inspect --json
+grok plugin list
+```
+
+Locate `install.sh` (below) and run it directly:
+
+```bash
+bash "$INSTALL" --hub-key "$HUB_KEY" --new-key "$NEW_KEY" --context7-key "$CTX7_KEY" --verify -y
+```
 
 ## Locating install.sh
 
@@ -70,7 +92,8 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
    are exported).
 4. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
    the 14 enabled plugins (13 companions + grok-build-harness itself), `grok inspect --json` reports agents discovered
-   (asserts the `grok-build-byok` user agent is discovered), stamp file is inspected,
+   (asserts `grok-build-byok` with a path under `$GROK_HOME/agents/`; Grok 1.0.5
+   may label that `source.type=project` and 1.0.12 `user` — type is ignored), stamp file is inspected,
    config does not pair `[agent] name = grok-build-byok` with `agent_type = "codex"`,
    schema-checks `config.toml` across template-owned, docs-known, and runtime extras layers
    (validating consent extra while protecting PII; fails on unexpected tables with `--strict`),
@@ -110,6 +133,10 @@ and a re-run with no keys over a keyed config skips the render (use
 - **Models don't resolve ("sonnet" unknown)** → the `[model.*]` aliases are
   missing or keys were not injected; re-run install.sh with keys, or export
   `HUB_API_KEY` / `NEW_API_KEY` (env_key fallback).
+- **`grok --version` fails on Alpine/musl** → the grokgod/glibc binary cannot
+  exec. Point `grok` at a musl build; do not rewrite the shim via this installer.
+- **SSH session opened a grok TUI** → a TTY plus an unknown subcommand (e.g.
+  `whoami`) is a chat turn. Use `install.sh` and `grok --version` / `inspect`.
 - **Test without touching the host** →
 
   ```bash

@@ -134,9 +134,12 @@ enables them via `[plugins].enabled`. `--skip-codex`, `--skip-vault-sync`, and
 - **grokgod plan_mode auto-detect**: `[plan_mode] implement_via_subagents = true`
   is a grokgod feature (patch 0002). It is not part of the standard `config.toml.template`
   so that stock grok-build hosts do not receive unrecognized keys. Instead, `install.sh`
-  auto-detects grokgod (or accepts `--with-grokgod` / `--skip-grokgod`) and merges
+  auto-detects grokgod when `grokgod --version` or `$HOME/.grokgod/bin/grok --version`
+  succeeds (or accepts `--with-grokgod` / `--skip-grokgod`) and merges
   `[plan_mode] implement_via_subagents = true` into `config.toml` idempotently after
-  config rendering.
+  config rendering. Those `--version` probes run with `GROK_HOME` unset so they
+  cannot mkdir the install target. A `+x` grokgod file that cannot exec (typical musl vs glibc)
+  is **not** detection; `.source-version` alone is not detection.
 
 ## Config schema check and host-runtime extras (v0.5.0)
 
@@ -146,7 +149,12 @@ enables them via `[plugins].enabled`. `--skip-codex`, `--skip-vault-sync`, and
   3. *Runtime extras*: host/product-written tables absent from docs (`assets/config-runtime-extras.json`, today `["consent"]`).
 - **Consent validation and PII safety**: `[consent.answers.aup]` and `[consent.answers.tos]` require integer `version` fields when present. The optional `account` field is never printed or logged in output or test suites.
 - **Strict enforcement**: Unexpected top-level tables warn by default and fail `--verify` when `--strict` is passed.
-- **Parent agent verification**: `--verify` asserts that `grok inspect --json` discovers the `grok-build-byok` user agent when plugins are not skipped.
+- **Parent agent verification**: `--verify` asserts that `grok inspect --json`
+  lists `grok-build-byok` with a path under `$GROK_HOME/agents/` when plugins
+  are not skipped. `source.type` is ignored (`user` on 1.0.12, `project` on 1.0.5).
+- **Host tools**: `install.sh` fails closed without `python3`. Without `--skip-plugins`
+  it also requires `git` and a grok binary whose `--version` succeeds. It does
+  not rewrite grokgod shims.
 
 ## Re-run safety (v0.3.0)
 
