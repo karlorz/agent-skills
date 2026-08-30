@@ -1,6 +1,6 @@
 ---
 name: cursor-box-channel
-description: "This skill should be used when an agent needs to ask, list replies, heartbeat, claim, or reply on cursor-box-channel HTTP MCP (attended-only)."
+description: "Use this when an agent needs cursor-box-channel HTTP MCP (ask, list_replies, heartbeat, claim, reply) or the read-only audit console at https://channel.termolo.com/console."
 ---
 
 # Cursor Box Channel
@@ -13,9 +13,18 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 
 - Plugin client variable: `CURSOR_BOX_MCP_TOKEN` (Cursor: Plugins → Configure). Claude/Grok/Codex need the same bearer in process environment.
 - Sidecar server env is `MCP_HTTP_TOKEN`. The operator sets the same secret in both places. Cursor/Codex docs may mention `${MCP_HTTP_TOKEN}` as an alias; pin the plugin variable name to `CURSOR_BOX_MCP_TOKEN`.
-- Origin Bearer is required. A 401 is a handshake failure; report it and stop.
+- Origin Bearer is required on `/mcp`. A 401 is a handshake failure; report it and stop.
 - Never print a real token. Never auto-write `~/.cursor/mcp.json` or Grok `config.toml`.
 - Attended-only: the queue waits if Grok Bot is closed. Do not invent a grok CLI wrapper or force a closed consumer.
+
+## Audit console (optional wrapper)
+
+- Live URL: `https://channel.termolo.com/console`
+- Browser gate is Cloudflare Access on `/console*` only. Do **not** send `CURSOR_BOX_MCP_TOKEN` to `/console`. `/mcp` stays Bearer-only.
+- Read-only: status, queue depth, replies, per-id lookup. No claim, retry, dead-letter, or send.
+- HTML fetches `/console` and `/console/api/*` only. Never call `/mcp` from the browser.
+- This replaces leftover `cbc-admin` read-only CLI. Do not start a second dashboard or `httpd.py`.
+- To print the URL with no secrets: `python3 "$PLUGIN_ROOT/scripts/open-console.py"` (falls back to `CLAUDE_PLUGIN_ROOT`).
 
 ## Tools
 

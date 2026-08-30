@@ -1,7 +1,7 @@
 {
   "name": "cursor-box-channel",
-  "version": "0.2.0",
-  "description": "Attended HTTP Streamable MCP at https://channel.termolo.com/mcp for ask, list_replies, heartbeat, claim, and reply.",
+  "version": "0.3.0",
+  "description": "Attended HTTP Streamable MCP at https://channel.termolo.com/mcp, plus an optional read-only audit wrapper for https://channel.termolo.com/console.",
   "author": {
     "name": "karlorz"
   },
@@ -24,8 +24,8 @@
   },
   "interface": {
     "displayName": "Cursor Box Channel",
-    "shortDescription": "Attended HTTP MCP channel",
-    "longDescription": "Use the hosted cursor-box-channel HTTP Streamable MCP for ask, list_replies, heartbeat, claim, and reply. Queue waits if Grok Bot is closed.",
+    "shortDescription": "Attended HTTP MCP plus audit console",
+    "longDescription": "Hosted cursor-box-channel HTTP Streamable MCP for ask, list_replies, heartbeat, claim, and reply, plus an optional Cloudflare Access console at https://channel.termolo.com/console.",
     "developerName": "karlorz",
     "category": "Productivity",
     "capabilities": [

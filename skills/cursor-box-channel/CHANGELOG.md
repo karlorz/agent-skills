@@ -2,6 +2,15 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.0] - 2026-08-30
+
+### Added
+- Optional read-only audit wrapper around `https://channel.termolo.com/console` (Cloudflare Access). Not a second dashboard.
+- Tiny `scripts/open-console.py` that prints the console URL and never reads tokens.
+
+### Changed
+- Skill documents `/console` vs `/mcp` path split. Leftover `cbc-admin` CLI is pointed at this console.
+
 ## [0.2.0] - 2026-08-30
 
 ### Changed
