@@ -28,6 +28,17 @@
         "deep-research",
         "source-triage"
       ]
+    },
+    {
+      "name": "cursor-box-channel",
+      "source": "skills/cursor-box-channel",
+      "description": "Attended HTTP Streamable MCP at https://channel.termolo.com/mcp for cross-agent ask, list_replies, heartbeat, claim, and reply.",
+      "category": "integrations",
+      "tags": [
+        "cursor-box",
+        "channel",
+        "mcp"
+      ]
     }
   ]
 }

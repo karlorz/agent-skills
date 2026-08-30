@@ -302,16 +302,14 @@
     {
       "name": "cursor-box-channel",
       "source": "./skills/cursor-box-channel",
-      "description": "Thin marketplace plugin for cursor-box-channel: stdio MCP interface to the local cursor-box macOS daemon bridge for cross-agent channel communication.",
-      "version": "0.1.0",
+      "description": "Thin marketplace plugin for cursor-box-channel: attended HTTP Streamable MCP at https://channel.termolo.com/mcp for ask, list_replies, heartbeat, claim, and reply.",
+      "version": "0.2.0",
       "category": "development",
       "keywords": [
         "mcp",
         "cursor-box",
         "channel",
-        "daemon",
-        "stdio",
-        "agent-bridge"
+        "http"
       ]
     }
   ]

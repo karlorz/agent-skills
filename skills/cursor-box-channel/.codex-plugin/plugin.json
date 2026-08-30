@@ -1,0 +1,36 @@
+{
+  "name": "cursor-box-channel",
+  "version": "0.2.0",
+  "description": "Attended HTTP Streamable MCP at https://channel.termolo.com/mcp for ask, list_replies, heartbeat, claim, and reply.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "cursor-box",
+    "channel",
+    "mcp",
+    "http",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": {
+    "cursor-box-channel": {
+      "type": "http",
+      "url": "https://channel.termolo.com/mcp",
+      "bearer_token_env_var": "CURSOR_BOX_MCP_TOKEN"
+    }
+  },
+  "interface": {
+    "displayName": "Cursor Box Channel",
+    "shortDescription": "Attended HTTP MCP channel",
+    "longDescription": "Use the hosted cursor-box-channel HTTP Streamable MCP for ask, list_replies, heartbeat, claim, and reply. Queue waits if Grok Bot is closed.",
+    "developerName": "karlorz",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": "Ask the cursor-box-channel and wait for a reply."
+  }
+}

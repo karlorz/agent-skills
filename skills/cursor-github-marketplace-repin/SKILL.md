@@ -96,7 +96,7 @@ uninstall` KEEP plugins as their own step.
 | Marketplace | KEEP plugins |
 | --- | --- |
 | `llm-wiki` | `skillwiki`, `vault-sync` |
-| `karlorz-agent-skills` | `grok-search`, `deep-research` |
+| `karlorz-agent-skills` | `grok-search`, `deep-research`, `cursor-box-channel` |
 
 ```bash
 # try CLI install first (may exist on a future CLI)
@@ -104,6 +104,7 @@ uninstall` KEEP plugins as their own step.
 "$AGENT" plugin install vault-sync@llm-wiki
 "$AGENT" plugin install grok-search@karlorz-agent-skills
 "$AGENT" plugin install deep-research@karlorz-agent-skills
+"$AGENT" plugin install cursor-box-channel@karlorz-agent-skills
 
 # if that fails (no install subcommand), use the Dashboard fallback:
 bash skills/cursor-github-marketplace-repin/scripts/install-keep-plugins.sh
@@ -116,15 +117,17 @@ bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/install-keep-plugi
 `cursor-access-token` / `cursor-user`. It never prints the token. Override
 base URL with `CURSOR_DASHBOARD_BASE` only in tests.
 
-`deep-research` must be in the Cursor catalog
+`deep-research` and `cursor-box-channel` must be in the Cursor catalog
 (`.cursor-plugin/marketplace.json` on karlorz/agent-skills), not only the
-Claude catalog. If the helper cannot find `deep-research` in
-`ListMarketplacePlugins` for `karlorz-agent-skills`, the Cursor marketplace
-pin is still the old catalog that listed only `grok-search` — finish the
-karlorz-agent-skills re-pin first, then install.
+Claude catalog. If the helper cannot find `deep-research` or
+`cursor-box-channel` in `ListMarketplacePlugins` for
+`karlorz-agent-skills`, the Cursor marketplace pin is still the old catalog
+that listed only `grok-search` — finish the karlorz-agent-skills re-pin
+first, then install.
 
-`grok-search` may ask for `GROK_SEARCH_MCP_TOKEN` (Cursor Plugins →
-Configure). Do not invent a token. If it is already configured, leave it.
+`grok-search` may ask for `GROK_SEARCH_MCP_TOKEN` and
+`cursor-box-channel` may ask for `CURSOR_BOX_MCP_TOKEN` (Cursor Plugins →
+Configure). Do not invent a token. If a token is already configured, leave it.
 
 Grok Bot **public** catalog ids (`skillwiki` `57442251`, `vault-sync`
 `57442252`, `grok-search` `57442314`) are **not** the user GitHub marketplace
@@ -137,7 +140,7 @@ the karlorz-agent-skills pin includes it in the Cursor catalog.
 
 Re-run `status.sh` until both groups print `PIN MATCHES`. Then confirm the
 KEEP plugins above are installed again (`skillwiki`, `vault-sync`,
-`grok-search`, `deep-research`).
+`grok-search`, `deep-research`, `cursor-box-channel`).
 
 `gitRef` is a 40-character SHA, not the tag string. For llm-wiki annotated
 tags it must equal status.sh `tag=` (tag object). The peeled `commit=` may

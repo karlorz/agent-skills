@@ -1,0 +1,30 @@
+{
+  "name": "cursor-box-channel",
+  "version": "0.2.0",
+  "description": "Attended HTTP Streamable MCP at https://channel.termolo.com/mcp for cross-agent ask, list_replies, heartbeat, claim, and reply.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "cursor-box",
+    "channel",
+    "mcp"
+  ],
+  "variables": {
+    "type": "object",
+    "properties": {
+      "CURSOR_BOX_MCP_TOKEN": {
+        "type": "string",
+        "title": "cursor-box-channel HTTP MCP bearer",
+        "description": "Bearer token for https://channel.termolo.com/mcp. Same secret as sidecar MCP_HTTP_TOKEN."
+      }
+    },
+    "required": [
+      "CURSOR_BOX_MCP_TOKEN"
+    ]
+  },
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json"
+}

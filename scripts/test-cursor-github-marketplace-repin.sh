@@ -109,6 +109,10 @@ assert_contains "helper Dashboard RPC" "$INSTALL_BODY" \
   "InstallUserPlugin"
 assert_contains "helper never prints token env" "$INSTALL_BODY" \
   "Never prints tokens"
+assert_contains "SKILL.md KEEP cursor-box-channel" "$SKILL_BODY" \
+  "cursor-box-channel@karlorz-agent-skills"
+assert_contains "helper KEEP cursor-box-channel" "$INSTALL_BODY" \
+  "cursor-box-channel@karlorz-agent-skills"
 
 # Case A — both pins match latest tag object / HEAD
 write_list <<JSON
