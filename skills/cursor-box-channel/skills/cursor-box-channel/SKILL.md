@@ -1,41 +1,28 @@
 ---
 name: cursor-box-channel
-description: "This skill should be used when an agent needs to post broadcast updates to the developer channel or ask targeted questions to newbie or wiki-research peers via cursor-box-channel."
+description: "This skill should be used when an agent needs to ask, list replies, heartbeat, claim, or reply on cursor-box-channel HTTP MCP (attended-only)."
 ---
 
 # Cursor Box Channel
 
-Use this skill to interact with the local cursor-box daemon bridge for cross-agent communication.
+Use this skill for attended HTTP Streamable MCP at `https://channel.termolo.com/mcp`.
 
-The cursor-box-channel integration operates via local stdio MCP connecting to the macOS background daemon. All networking, token storage in macOS Keychain, retries, and SSE streaming are handled by the launchd daemon.
+Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI wrapper. The Mac launchd+stdio daemon still exists in the `karlorz/cursor-box-channel` repo, but this plugin talks to the hosted channel.
 
-## First-Run Environment & Prerequisites
+## First-run
 
-If the stdio adapter fails to connect, or if the launchd daemon, unix socket, Keychain token, or binary wrapper is missing:
-- Ask the operator to install or verify the daemon from the `karlorz/cursor-box-channel` repository:
-  ```bash
-  # In karlorz/cursor-box-channel:
-  bash deploy/macos/install-daemon.sh --apply
-  ```
-- Do not attempt to start or load the launchd daemon yourself.
-- Do not auto-write or modify `~/.cursor/mcp.json` or Grok `config.toml`.
-- Never dual-call or invoke any leftover Python `server.py` mailbox server.
+- Plugin client variable: `CURSOR_BOX_MCP_TOKEN` (Cursor: Plugins → Configure). Claude/Grok/Codex need the same bearer in process environment.
+- Sidecar server env is `MCP_HTTP_TOKEN`. The operator sets the same secret in both places. Cursor/Codex docs may mention `${MCP_HTTP_TOKEN}` as an alias; pin the plugin variable name to `CURSOR_BOX_MCP_TOKEN`.
+- Origin Bearer is required. A 401 is a handshake failure; report it and stop.
+- Never print a real token. Never auto-write `~/.cursor/mcp.json` or Grok `config.toml`.
+- Attended-only: the queue waits if Grok Bot is closed. Do not invent a grok CLI wrapper or force a closed consumer.
 
-## Allowed Targets & Methods
+## Tools
 
-The service strictly supports three target destinations:
-1. `channel`: Broadcast developer feed. Use `post_message` for broadcast updates. (`ask_message` is forbidden on `channel`).
-2. `newbie`: Onboarding / newbie peer agent. Use `post_message` or `ask_message`.
-3. `wiki-research`: Wiki / research peer agent. Use `post_message` or `ask_message`.
+- `ask`: post a question and wait for a reply (queue waits if Grok Bot is closed).
+- `list_replies`: list pending or completed replies.
+- `heartbeat`: keep the attended session alive.
+- `claim`: claim a queued item for this session.
+- `reply`: send a reply to a claimed or asked item.
 
-Targets are strictly limited to the three destinations above; no other targets are exposed.
-
-## Tool Execution Discipline
-
-- `post_message`: Send a one-way notification or broadcast update to `channel`, `newbie`, or `wiki-research`.
-- `ask_message`: Direct query to `newbie` or `wiki-research`. Awaits response or returns pending status.
-- `list_replies`: Check pending replies or conversation history for previous questions.
-
-## Consumer Limitations
-
-- **Grok Bot consumer blocker**: Grok Bot members are external consumers of the gateway protocol; this plugin cannot auto-start or force execution of Grok Bot peers. If a question times out, it remains in `pending` state honestly.
+If tools are connected, continue. If the token is missing or MCP is disconnected, stop and ask the operator to set `CURSOR_BOX_MCP_TOKEN`.

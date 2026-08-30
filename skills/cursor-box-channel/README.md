@@ -1,54 +1,33 @@
 # cursor-box-channel
 
-Thin marketplace plugin for cursor-box-channel, providing stdio MCP connectivity to the local macOS daemon bridge for cross-agent communication.
+Thin marketplace plugin for cursor-box-channel. Marketplace install is HTTP Streamable MCP at `https://channel.termolo.com/mcp` with a required origin Bearer.
 
-## Architecture
+## Install
 
-The plugin executes a lightweight stdio runner script that connects to the local `cursor-box-mcp` Node adapter installed by `karlorz/cursor-box-channel`:
-
-```text
-Grok / Cursor / Claude (stdio MCP)
-       │
-       ▼
-  scripts/run-cursor-box-mcp.sh
-       │
-       ▼
-  ~/Library/Application Support/cursor-box-channel/bin/cursor-box-mcp (Node adapter)
-       │
-       ▼ (unix domain socket)
-  launchd daemon (com.karlchow.cursor-box-channel)
-```
-
-Networking, Keychain credentials, and remote gateway synchronization are entirely managed by the background launchd daemon.
-
-## Installation & Setup
-
-### Claude Code
-
-Install from the `karlorz-agent-skills` marketplace catalog:
+From `karlorz-agent-skills`:
 
 ```bash
 claude plugin install cursor-box-channel@karlorz-agent-skills
 ```
 
-Plugin install does not write `~/.cursor/mcp.json` automatically.
+Cursor: install the plugin, then **Plugins → Configure** and enter `CURSOR_BOX_MCP_TOKEN`. Codex: `codex plugin add cursor-box-channel@karlorz-agent-skills` and set the same bearer.
 
-### Prerequisites
+## Token
 
-Ensure the daemon and MCP adapter are installed on your macOS host from the `karlorz/cursor-box-channel` repository:
+- Plugin client variable (pinned): `CURSOR_BOX_MCP_TOKEN`
+- Sidecar server env: `MCP_HTTP_TOKEN`
+- Operator sets the same secret in both places. Cursor/Codex docs may mention `${MCP_HTTP_TOKEN}` as an alias; the plugin variable name stays `CURSOR_BOX_MCP_TOKEN`.
+- Never print a real token.
 
-```bash
-# In karlorz/cursor-box-channel:
-bash deploy/macos/install-daemon.sh --apply
-```
+Claude/Grok default URL is `https://channel.termolo.com/mcp` (`CURSOR_BOX_MCP_URL` override). Cursor-native and Codex pin that URL.
 
-If the wrapper or daemon is missing, the runner fails with a clear error prompt directing the operator to install the daemon.
+## Attended-only
 
-### Diagnostic Note on `agent mcp list`
+The queue waits if Grok Bot is closed. There is no grok CLI wrapper. Origin Bearer is required.
 
-`agent mcp list` inspects static `~/.cursor/mcp.json` configuration rather than plugin `.mcp.json` manifests. This is a known CLI diagnostic note and does not reflect runtime plugin MCP availability when third-party plugins are active.
+The Mac launchd+stdio daemon still exists in `karlorz/cursor-box-channel`. Marketplace install does not use that stdio runner.
 
-For headless CLI sessions (`agent -p`) invoked without plugin flags, refer to `cursor-cli-mcp.example.json`.
+Plugin install does not write `~/.cursor/mcp.json`. `agent mcp list` inspects static `~/.cursor/mcp.json`, not plugin MCP. For headless `agent -p` without plugin flags, see `cursor-cli-mcp.example.json`.
 
 ## License
 

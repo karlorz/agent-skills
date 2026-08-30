@@ -13,6 +13,7 @@ SPECS=(
   vault-sync@llm-wiki
   grok-search@karlorz-agent-skills
   deep-research@karlorz-agent-skills
+  cursor-box-channel@karlorz-agent-skills
 )
 
 token_from_keychain() {

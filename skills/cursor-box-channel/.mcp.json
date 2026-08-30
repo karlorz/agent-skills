@@ -1,10 +1,11 @@
 {
   "mcpServers": {
     "cursor-box-channel": {
-      "command": "bash",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/scripts/run-cursor-box-mcp.sh"
-      ]
+      "type": "http",
+      "url": "${CURSOR_BOX_MCP_URL:-https://channel.termolo.com/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${CURSOR_BOX_MCP_TOKEN}"
+      }
     }
   }
 }
