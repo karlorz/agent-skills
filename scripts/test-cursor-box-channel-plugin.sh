@@ -108,8 +108,8 @@ claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
 codex_manifest = json.loads(texts[codex_manifest_path])
 expected_version = claude_manifest.get("version")
-if expected_version != "0.2.0":
-    raise SystemExit(f"{manifest_path}: version must be 0.2.0")
+if expected_version != "0.3.0":
+    raise SystemExit(f"{manifest_path}: version must be 0.3.0")
 if cursor_manifest.get("version") != expected_version:
     raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if codex_manifest.get("version") != expected_version:
@@ -159,6 +159,8 @@ for forbidden in ("headers", "http_headers", "env_http_headers", "command", "arg
 
 # 5. CHANGELOG
 changelog_text = texts[changelog_path]
+if "## [0.3.0] - 2026-08-30" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must contain ## [0.3.0] - 2026-08-30")
 if "## [0.2.0] - 2026-08-30" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain ## [0.2.0] - 2026-08-30")
 if "0.1.0" not in changelog_text or "2026-08-24" not in changelog_text:
@@ -192,6 +194,8 @@ if "first-run" not in body.lower() and "first run" not in body.lower():
     raise SystemExit(f"{skill_path}: must mention first-run setup")
 if "karlorz/cursor-box-channel" not in body:
     raise SystemExit(f"{skill_path}: must reference karlorz/cursor-box-channel repo")
+if "https://channel.termolo.com/console" not in body:
+    raise SystemExit(f"{skill_path}: must mention https://channel.termolo.com/console")
 if "stdio (default)" in body.lower() or "via stdio mcp" in body.lower():
     raise SystemExit(f"{skill_path}: must not present stdio as default")
 if len(skill_text.split()) > 1500:
@@ -219,6 +223,8 @@ if "agent mcp list" not in readme_text:
     raise SystemExit(f"{readme_path}: must mention agent mcp list diagnostic note")
 if "does not write" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must note plugin install does not write ~/.cursor/mcp.json")
+if "https://channel.termolo.com/console" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention https://channel.termolo.com/console")
 
 # 8. Cursor catalog + KEEP list
 cursor_marketplace = json.loads(texts[cursor_marketplace_path])
@@ -263,6 +269,7 @@ scanned = (
     blob.replace(allowed_bearer, "")
     .replace(allowed_shared_url, "")
     .replace(allowed_prod, "")
+    .replace("https://channel.termolo.com/console", "")
     .replace("Bearer token", "")
     .replace("origin Bearer", "")
     .replace("required origin Bearer", "")
