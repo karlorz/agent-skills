@@ -5,6 +5,7 @@ set -euo pipefail
 MIN_CLI_VERSION="0.1.17"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_LAUNCHER="${SCRIPT_DIR}/chrome-debug.sh"
+SOURCE_HELPER="${SCRIPT_DIR}/cdp-load-unpacked.py"
 SOURCE_CONFIG="$(dirname "${SCRIPT_DIR}")/.playwright/cli.config.json"
 
 PROJECT_DIR="${PWD}"
@@ -124,6 +125,10 @@ PROJECT_DIR="$(cd "${PROJECT_DIR}" && pwd)"
 
 if [[ ! -f "${SOURCE_LAUNCHER}" ]]; then
   printf 'setup-playwright-cli: bundled launcher is missing: %s\n' "${SOURCE_LAUNCHER}" >&2
+  exit 1
+fi
+if [[ ! -f "${SOURCE_HELPER}" ]]; then
+  printf 'setup-playwright-cli: bundled load-unpacked helper is missing: %s\n' "${SOURCE_HELPER}" >&2
   exit 1
 fi
 if [[ ! -f "${SOURCE_CONFIG}" ]]; then
@@ -281,6 +286,7 @@ install_launcher() {
     printf '[OK] backed up unmanaged command: %s\n' "${backup}"
   fi
   install -m 0755 "${SOURCE_LAUNCHER}" "${TARGET_LAUNCHER}"
+  install -m 0755 "${SOURCE_HELPER}" "${DATA_DIR}/cdp-load-unpacked.py"
 
   launcher_quote="$(shell_quote "${TARGET_LAUNCHER}")"
   state_quote="$(shell_quote "${STATE_DIR}")"

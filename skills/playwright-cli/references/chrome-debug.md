@@ -2,17 +2,17 @@
 
 Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
-Contract stamp: **`chrome-debug-contract: v3`** (see `scripts/chrome-debug.sh` header).
+Contract stamp: **`chrome-debug-contract: v4`** (see `scripts/chrome-debug.sh` header).
 
-The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, and detached launch. The one-time setup script installs it as a stable user-level `chrome-debug` command so it works outside repositories that vendor the script.
+The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, detached launch, and CDP `Extensions.loadUnpacked`. The one-time setup script installs it as a stable user-level `chrome-debug` command. **Do not vendor a second copy in consumer repos.**
 
 Prefer:
 
 ```bash
 chrome-debug
-# or, when the consumer repo has a Makefile target or vendored script:
+chrome-debug --load-unpacked /path/to/unpacked-extension
+# consumer Makefile should call the installed command, not a copied script
 make chrome-debug
-bash scripts/chrome-debug.sh
 ```
 
 ## One-time user setup
@@ -64,6 +64,9 @@ chrome-debug --launch-and-explain
 
 # Kill existing debug Chrome + stale playwright-cli daemons, same profile mode
 chrome-debug --restart
+
+# Install or refresh an unpacked extension on the live :9222 profile (no picker)
+chrome-debug --load-unpacked /path/to/unpacked-extension
 ```
 
 ## Profile modes
@@ -114,12 +117,13 @@ ssh -L 9222:127.0.0.1:9222 user@remote-host
 | `CHROME_DEBUG_PROJECT_ROOT` | launcher cwd | Project root used by explicit repo-local mode |
 | `CHROME_DEBUG_LOG` | user state or bundled log | Chrome launcher log path |
 | `CHROME_DEBUG_COMMAND_NAME` | bundled path / `chrome-debug` | Command name shown in help and diagnostics |
+| `CHROME_DEBUG_LOAD_UNPACKED` | *(empty)* | Colon-separated extra unpacked extension paths |
 | `CHROME` | *(auto-detect)* | Chrome/Chromium binary |
 
 ## Typical workflow
 
 ```bash
-chrome-debug                          # or make chrome-debug / bundled script
+chrome-debug                          # or a consumer Makefile that calls this command
 playwright-cli attach
 playwright-cli goto https://example.com
 playwright-cli snapshot
@@ -139,16 +143,24 @@ playwright-cli attach
 
 ## Unpacked extension debugging (Chrome 137+)
 
-The launcher automatically passes `--enable-unsafe-extension-debugging`, enabling unattended installation of unpacked extensions over CDP without manual UI interaction:
+The launcher always passes `--enable-unsafe-extension-debugging` so branded Chrome 137+ accepts CDP `Extensions.loadUnpacked` on the TCP debug port (`:9222`), not only over a pipe.
 
-- **CDP method**: Load extensions dynamically using the Chrome DevTools Protocol `Extensions.loadUnpacked` method with the path to the unpacked extension directory.
-- **Persistence**: Installed extensions persist across restarts within the same profile directory.
-- **Caveat with `--refresh-from-default`**: Using `--refresh-from-default` resets/re-syncs the clone from the real Chrome profile, which will wipe dynamically loaded debug extensions and require re-running `Extensions.loadUnpacked`.
+```bash
+chrome-debug --load-unpacked /abs/path/to/extension
+```
+
+- **Re-apply**: Chrome 152 does **not** persist CDP-loaded unpacked extensions across process restart (they never land in Secure Preferences). This launcher writes the paths to `${PROFILE_DIR}/.chrome-debug-load-unpacked` and re-runs `Extensions.loadUnpacked` after every start, `--restart`, and reuse of an already-running debug Chrome.
+- **Stable path**: pass a directory that will still exist after the session (repo `apps/browser-extension`, not a disposable worktree). Vanished sidecar paths are skipped with a warning.
+- **`--refresh-from-default`**: still wipes the clone. The sidecar is restored after sync when it existed; pass `--load-unpacked` again if the sidecar was empty.
+- **Do not** raw-CDP `Extensions.loadUnpacked`, open `chrome://extensions` Load unpacked, or start a second pipe-debug Chrome against the collect profile.
 
 ## Sync note
 
-This script is the **SSOT** in `karlorz/agent-skills` (`skills/playwright-cli/scripts/chrome-debug.sh`). Consumer repos (trends, cmux, portfolio-lab, …) should re-copy when the contract version bumps:
+This skill is the **SSOT**. Install the user-level command; do **not** copy `chrome-debug.sh` into consumer repos:
 
 ```bash
-cp path/to/agent-skills/skills/playwright-cli/scripts/chrome-debug.sh scripts/chrome-debug.sh
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" --project "$PWD"
+chrome-debug --load-unpacked /path/to/unpacked-extension
 ```
+
+A consumer Makefile may wrap `chrome-debug` (for example to always pass a repo extension path). It must not vendor a second launcher.

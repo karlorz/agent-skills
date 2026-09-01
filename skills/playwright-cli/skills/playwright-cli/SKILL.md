@@ -47,10 +47,10 @@ is missing and the user authorizes installation.
 ```bash
 # 1) Preferred after one-time setup: works from any repository
 chrome-debug
+chrome-debug --load-unpacked /path/to/unpacked-extension
 
-# Consumer-repo fallbacks:
+# Consumer-repo fallback: make chrome-debug should call the installed command
 make chrome-debug
-bash scripts/chrome-debug.sh
 
 # 2) Attach (uses .playwright/cli.config.json cdpEndpoint when present)
 playwright-cli attach
@@ -119,8 +119,10 @@ Details: [../../references/chrome-debug.md](../../references/chrome-debug.md)
 - **`playwright-cli open` without need** when a logged-in session is required — use chrome-debug + attach instead
 - **`--repo-local-profile` by default** — creates empty profile; only on explicit request
 - **Skipping attach** after launch — interaction commands need an attached session
-- **Assuming `make chrome-debug` is invalid** — use it when the consumer Makefile provides it
-- **Assuming the consumer repo vendors the launcher** — prefer the installed `chrome-debug` command
+- **Assuming `make chrome-debug` is invalid** — use it when the consumer Makefile wraps the installed `chrome-debug` command
+- **Vendoring `chrome-debug.sh` in a consumer repo** — one SSOT: this skill + the installed `chrome-debug` command
+- **Raw CDP `Extensions.loadUnpacked` or `chrome://extensions` Load unpacked** — use `chrome-debug --load-unpacked PATH` so restart re-applies it
+- **Installing an unpacked extension from a disposable worktree** — Chrome drops it when the path vanishes
 - Forgetting snapshot before click/fill (need element refs)
 
 ### Fallback: disposable browser (Microsoft default)

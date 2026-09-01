@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# chrome-debug-contract: v3
+# chrome-debug-contract: v4
 # Start Chrome with remote debugging in detached mode.
-# Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [--check-port] [--explain] [--launch-and-explain] [URL]
+# Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [--check-port] [--explain] [--launch-and-explain] [--load-unpacked PATH] [URL]
 #
 # Profile default: default-user (global clone of real Chrome). Do not use
 # --repo-local-profile unless isolation was requested explicitly.
@@ -34,6 +34,8 @@ PROFILE_MARKER=""
 PROFILE_LABEL=""
 PROFILE_SOURCE_DIR=""
 CHROME_ARGS=()
+LOAD_UNPACKED_CLI=()
+LOAD_UNPACKED_PATHS=()
 
 get_repo_local_profile_dir() {
   printf '%s\n' "${PROJECT_ROOT}/.chrome-debug-profile"
@@ -93,6 +95,9 @@ Options:
   --profile-directory NAME
                    Pick a Chrome profile subdirectory (Default, Profile 1, etc.) when using
                    --default-user-profile
+  --load-unpacked PATH
+                   CDP Extensions.loadUnpacked PATH (repeatable). Re-applied on later
+                   start/restart/reuse via ${PROFILE_DIR}/.chrome-debug-load-unpacked
   -h, --help      Show this help message
 
 Environment:
@@ -103,6 +108,7 @@ Environment:
   CHROME_DEBUG_PROJECT_ROOT   project root used only by --repo-local-profile
   CHROME_DEBUG_LOG            launcher log path
   CHROME_DEBUG_COMMAND_NAME   command name shown in help and diagnostics
+  CHROME_DEBUG_LOAD_UNPACKED  colon-separated extra unpacked extension paths
   CHROME                       Chrome/Chromium binary path
 EOF_USAGE
 }
@@ -571,6 +577,150 @@ Next action   : ${next_action}
 EOF_EXPLAIN
 }
 
+load_unpacked_sidecar_path() {
+  printf '%s\n' "${PROFILE_DIR}/.chrome-debug-load-unpacked"
+}
+
+cdp_load_unpacked_helper_path() {
+  printf '%s\n' "${SCRIPT_DIR}/cdp-load-unpacked.py"
+}
+
+path_list_has() {
+  local needle="$1"
+  shift
+  local item
+  for item in "$@"; do
+    if [[ "${item}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+validate_unpacked_dir() {
+  local raw="$1"
+  local resolved
+  if [[ ! -d "${raw}" ]]; then
+    log_error "Unpacked extension path does not exist: ${raw}"
+    return 1
+  fi
+  resolved="$(cd "${raw}" && pwd)"
+  if [[ ! -f "${resolved}/manifest.json" ]]; then
+    log_error "Unpacked extension path has no manifest.json: ${resolved}"
+    return 1
+  fi
+  printf '%s\n' "${resolved}"
+}
+
+collect_env_load_unpacked_raw() {
+  local raw="${CHROME_DEBUG_LOAD_UNPACKED:-}"
+  if [[ -z "${raw}" ]]; then
+    return 0
+  fi
+  local IFS=':'
+  # shellcheck disable=SC2086
+  printf '%s\n' ${raw}
+}
+
+resolve_explicit_load_unpacked_paths() {
+  LOAD_UNPACKED_PATHS=()
+  local raw resolved
+  if [[ ${#LOAD_UNPACKED_CLI[@]} -gt 0 ]]; then
+    for raw in "${LOAD_UNPACKED_CLI[@]}"; do
+      resolved="$(validate_unpacked_dir "${raw}")" || exit 1
+      if [[ ${#LOAD_UNPACKED_PATHS[@]} -eq 0 ]] || ! path_list_has "${resolved}" "${LOAD_UNPACKED_PATHS[@]}"; then
+        LOAD_UNPACKED_PATHS+=("${resolved}")
+      fi
+    done
+  fi
+  while IFS= read -r raw; do
+    [[ -z "${raw}" ]] && continue
+    resolved="$(validate_unpacked_dir "${raw}")" || exit 1
+    if [[ ${#LOAD_UNPACKED_PATHS[@]} -eq 0 ]] || ! path_list_has "${resolved}" "${LOAD_UNPACKED_PATHS[@]}"; then
+      LOAD_UNPACKED_PATHS+=("${resolved}")
+    fi
+  done < <(collect_env_load_unpacked_raw)
+}
+
+read_load_unpacked_sidecar() {
+  local sidecar="$1"
+  if [[ ! -f "${sidecar}" ]]; then
+    return 0
+  fi
+  local line
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+    printf '%s\n' "${line}"
+  done < "${sidecar}"
+}
+
+write_load_unpacked_sidecar() {
+  local sidecar="$1"
+  shift
+  local dir
+  dir="$(dirname "${sidecar}")"
+  mkdir -p "${dir}"
+  if [[ $# -eq 0 ]]; then
+    rm -f "${sidecar}"
+    return 0
+  fi
+  printf '%s\n' "$@" > "${sidecar}"
+}
+
+apply_load_unpacked() {
+  local sidecar helper raw resolved path output
+  local -a merged
+  sidecar="$(load_unpacked_sidecar_path)"
+  helper="$(cdp_load_unpacked_helper_path)"
+
+  if [[ ${#LOAD_UNPACKED_PATHS[@]} -gt 0 ]]; then
+    for raw in "${LOAD_UNPACKED_PATHS[@]}"; do
+      merged+=("${raw}")
+    done
+  fi
+  while IFS= read -r raw; do
+    [[ -z "${raw}" ]] && continue
+    if [[ ! -d "${raw}" || ! -f "${raw}/manifest.json" ]]; then
+      log_info "Skipping vanished unpacked path from sidecar: ${raw}"
+      continue
+    fi
+    resolved="$(cd "${raw}" && pwd)"
+    if [[ ${#merged[@]} -eq 0 ]] || ! path_list_has "${resolved}" "${merged[@]}"; then
+      merged+=("${resolved}")
+    fi
+  done < <(read_load_unpacked_sidecar "${sidecar}")
+
+  if [[ ${#merged[@]} -gt 0 ]]; then
+    write_load_unpacked_sidecar "${sidecar}" "${merged[@]}"
+  else
+    write_load_unpacked_sidecar "${sidecar}"
+    return 0
+  fi
+
+  if [[ ! -f "${helper}" ]]; then
+    log_error "CDP load-unpacked helper is missing: ${helper}"
+    log_error "Re-run playwright-cli setup so cdp-load-unpacked.py is installed beside chrome-debug.sh."
+    return 1
+  fi
+
+  local -a helper_args
+  helper_args=(--port "${DEBUG_PORT}" --reload-http --timeout-ms 20000 --retries 12 --retry-delay-ms 500)
+  for path in "${merged[@]}"; do
+    helper_args+=(--path "${path}")
+    log_info "Loading unpacked extension: ${path}"
+  done
+
+  if ! output="$(python3 "${helper}" "${helper_args[@]}" 2>&1)"; then
+    log_error "Extensions.loadUnpacked failed:"
+    log_error "${output}"
+    return 1
+  fi
+  log_ok "Unpacked extension(s) loaded via CDP."
+  if [[ -n "${output}" ]]; then
+    log_info "${output}"
+  fi
+}
+
 build_chrome_args() {
   CHROME_ARGS=(
     --no-first-run
@@ -624,6 +774,10 @@ print_config() {
   if [[ "${JSON_OUTPUT}" == "1" ]]; then
     local launch_args_payload
     launch_args_payload="$(printf '%s\x1f' "${CHROME_ARGS[@]}")"
+    local load_unpacked_payload=""
+    if [[ ${#LOAD_UNPACKED_PATHS[@]} -gt 0 ]]; then
+      load_unpacked_payload="$(printf '%s\x1f' "${LOAD_UNPACKED_PATHS[@]}")"
+    fi
     CHROME_BIN_JSON="${chrome_bin}" \
     DEBUG_PORT_JSON="${DEBUG_PORT}" \
     PROFILE_DIR_JSON="${PROFILE_DIR}" \
@@ -637,6 +791,7 @@ print_config() {
     LOG_FILE_JSON="${LOG_FILE}" \
     TARGET_URL_JSON="${TARGET_URL}" \
     LAUNCH_ARGS_JSON_SOURCE="${launch_args_payload}" \
+    LOAD_UNPACKED_JSON_SOURCE="${load_unpacked_payload}" \
     python3 - <<'PY'
 import json
 import os
@@ -660,7 +815,10 @@ print(
             "logFile": os.environ["LOG_FILE_JSON"],
             "targetUrl": os.environ["TARGET_URL_JSON"],
             "launchArgs": launch_args,
-            "chromeDebugContract": "v3",
+            "loadUnpackedPaths": [
+                path for path in os.environ.get("LOAD_UNPACKED_JSON_SOURCE", "").split("\x1f") if path
+            ],
+            "chromeDebugContract": "v4",
         }
     )
 )
@@ -681,7 +839,8 @@ HEADLESS_LABEL=$(resolve_headless_label)
 PROFILE_DIR=${PROFILE_DIR}
 LOG_FILE=${LOG_FILE}
 TARGET_URL=${TARGET_URL}
-CHROME_DEBUG_CONTRACT=v3
+LOAD_UNPACKED_PATHS=$(printf '%s ' "${LOAD_UNPACKED_PATHS[@]+"${LOAD_UNPACKED_PATHS[@]}"}")
+CHROME_DEBUG_CONTRACT=v4
 EOF_CONFIG
 }
 
@@ -728,6 +887,14 @@ while [[ $# -gt 0 ]]; do
       fi
       PROFILE_DIRECTORY_NAME="$1"
       ;;
+    --load-unpacked)
+      shift
+      if [[ $# -eq 0 ]]; then
+        log_error "--load-unpacked requires a path."
+        exit 1
+      fi
+      LOAD_UNPACKED_CLI+=("$1")
+      ;;
     -h|--help)
       print_usage
       exit 0
@@ -772,6 +939,7 @@ fi
 
 resolve_profile_config "${CHROME_BIN}"
 build_chrome_args
+resolve_explicit_load_unpacked_paths
 
 if [[ "${CHECK_PORT_ONLY}" == "1" ]]; then
   emit_port_status
@@ -836,6 +1004,7 @@ fi
 if port_is_healthy; then
   if [[ -n "$(list_profile_pids)" ]]; then
     log_ok "Found existing debug Chrome instance on port ${DEBUG_PORT}; reusing profile ${PROFILE_DIR}."
+    apply_load_unpacked
     exit 0
   fi
 
@@ -862,8 +1031,18 @@ if profile_requires_clone_sync; then
   stop_profile_processes
   cleanup_profile_locks
 fi
+SAVED_SIDECAR_PATHS=()
+if clone_sync_requested; then
+  while IFS= read -r _sidecar_line; do
+    [[ -z "${_sidecar_line}" ]] && continue
+    SAVED_SIDECAR_PATHS+=("${_sidecar_line}")
+  done < <(read_load_unpacked_sidecar "$(load_unpacked_sidecar_path)")
+fi
 if profile_requires_clone_sync && (clone_sync_requested || ! default_clone_exists); then
   sync_default_user_profile
+fi
+if clone_sync_requested && [[ ${#SAVED_SIDECAR_PATHS[@]} -gt 0 ]]; then
+  write_load_unpacked_sidecar "$(load_unpacked_sidecar_path)" "${SAVED_SIDECAR_PATHS[@]}"
 fi
 if profile_supports_local_seeding; then
   stop_profile_processes
@@ -927,6 +1106,10 @@ for _ in {1..60}; do
     if port_is_healthy; then
       echo
       log_ok "Chrome is listening on port ${DEBUG_PORT}."
+      # Chrome 152 can rotate the browser websocket during startup; wait and
+      # let the helper retry against a fresh /json/version each attempt.
+      sleep 2
+      apply_load_unpacked
       exit 0
     fi
   fi

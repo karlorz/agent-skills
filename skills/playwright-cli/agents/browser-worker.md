@@ -62,7 +62,7 @@ Agent(description: "Screenshot page", model: "sonnet", prompt: "Take a full-page
 Stale session recovery prompt:
 
 ```
-Agent(description: "Restart Chrome CDP", model: "haiku", prompt: "playwright-cli kill-all; chrome-debug --restart; playwright-cli attach. Keep default-user profile.")
+Agent(description: "Restart Chrome CDP", model: "haiku", prompt: "playwright-cli kill-all; chrome-debug --restart; playwright-cli attach. Keep default-user profile. If an unpacked extension is required, pass chrome-debug --load-unpacked PATH (saved paths are re-applied on restart). Do not start a second pipe-debug Chrome against the collect :9222 profile.")
 ```
 
 ## Error Handling

@@ -31,6 +31,7 @@ bash "${SETUP}" \
 
 [[ -x "${BIN_DIR}/chrome-debug" ]] || fail "launcher command was not installed"
 [[ -x "${DATA_DIR}/chrome-debug.sh" ]] || fail "launcher payload was not installed"
+[[ -f "${DATA_DIR}/cdp-load-unpacked.py" ]] || fail "load-unpacked helper was not installed"
 [[ -f "${PROJECT}/.playwright/cli.config.json" ]] || fail "project config was not initialized"
 grep -Fq 'http://localhost:9222' "${PROJECT}/.playwright/cli.config.json" || fail "project config lacks CDP endpoint"
 
@@ -52,7 +53,7 @@ state = sys.argv[3]
 assert data["projectRoot"] == project, data
 assert data["profileDir"] == os.path.join(project, ".chrome-debug-profile"), data
 assert data["logFile"] == os.path.join(state, "chrome-debug.log"), data
-assert data["chromeDebugContract"] == "v3", data
+assert data["chromeDebugContract"] == "v4", data
 assert data["launchArgs"].count("--enable-unsafe-extension-debugging") == 1, data
 PY
 
@@ -111,5 +112,7 @@ for link in links:
     target = skill_md.parent / link
     assert target.is_file(), f"broken link in SKILL.md: {link} -> {target}"
 PY
+
+bash "${SCRIPT_DIR}/test-chrome-debug-load-unpacked.sh"
 
 printf 'test-setup-playwright-cli: PASS\n'
