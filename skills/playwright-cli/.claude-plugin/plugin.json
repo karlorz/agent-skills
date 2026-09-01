@@ -1,6 +1,6 @@
 {
   "name": "playwright-cli",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Set up and automate playwright-cli (MS command surface ≥0.1.17) with a user-level chrome-debug command, project config initialization, attach-first global Chrome profile, browser-worker, and Linux/LXC support.",
   "author": {
     "name": "karlorz"

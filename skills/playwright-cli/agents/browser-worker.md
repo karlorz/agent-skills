@@ -24,8 +24,9 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 
 ## Responsibilities
 
+- Phase 0: Detect/upgrade `~/.local/bin/chrome-debug` against this skill (`setup-playwright-cli.sh --skip-cli --skip-project-config --apply-if-needed`). Apply managed upgrades; if unmanaged, report `--force-launcher` and stop.
 - Phase 0: Launch Chrome via the installed `chrome-debug` command (default-user profile; optional `--check-port`, `--restart`)
-- Phase 0 fallback: use `make chrome-debug` or the consumer's vendored `scripts/chrome-debug.sh` only when the global command is unavailable
+- Phase 0 fallback: use `make chrome-debug` only when the global command is unavailable. Do not vendor a second launcher.
 - Phase 0: Kill stale sessions with `playwright-cli kill-all` when attach is stale
 - Phase 1: Attach via `playwright-cli attach` (or `attach --cdp=http://localhost:9222`)
 - Navigate: `playwright-cli goto <url>`
@@ -54,7 +55,7 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 The orchestrator spawns this agent for mechanical browser tasks:
 
 ```
-Agent(description: "Launch Chrome", model: "haiku", prompt: "Launch Chrome with CDP on port 9222 using default-user profile. Prefer chrome-debug --check-port; if free run chrome-debug (no profile flags); then playwright-cli attach. Fall back to make chrome-debug or a vendored script only if the global command is unavailable. Do not use --repo-local-profile.")
+Agent(description: "Launch Chrome", model: "haiku", prompt: "First run setup-playwright-cli.sh --skip-cli --skip-project-config --apply-if-needed from PLAYWRIGHT_CLI_PLUGIN_ROOT so ~/.local/bin/chrome-debug matches this skill. Then chrome-debug --check-port; if free run chrome-debug (no profile flags); then playwright-cli attach. Fall back to make chrome-debug only if the global command is unavailable. Do not use --repo-local-profile.")
 Agent(description: "Navigate and snapshot", model: "sonnet", prompt: "Go to <url>, wait for load, take a snapshot. Report element refs.")
 Agent(description: "Screenshot page", model: "sonnet", prompt: "Take a full-page screenshot. Save as <filename>.")
 ```

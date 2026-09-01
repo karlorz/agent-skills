@@ -36,9 +36,25 @@ The script is idempotent. It:
   explicitly approves the corresponding `--force-*` flag.
 
 Use `--dry-run` to preview, `--skip-cli` when npm installation is out of scope,
-or `--skip-project-config` for launcher-only setup. Do not run setup merely because
-the skill activated; run it when the user asks for setup/init or a required command
-is missing and the user authorizes installation.
+or `--skip-project-config` for launcher-only setup.
+
+### chrome-debug launcher doctor (ALWAYS before chrome-debug)
+
+The installed `~/.local/bin/chrome-debug` can lag this skill. **Detect, suggest,
+and apply** on every collect/debug Chrome session — do not wait for the user to
+ask:
+
+```bash
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" \
+  --skip-cli --skip-project-config --apply-if-needed --project "$PWD"
+```
+
+- Exit 0 / `status: current` — already at this skill's `chrome-debug-contract`.
+- `status: upgrade` or `missing` — the command **applies** the bundled launcher
+  into `${XDG_BIN_HOME:-$HOME/.local/bin}/chrome-debug` (macOS included).
+- Exit 4 / `status: unmanaged` — **suggest** `--force-launcher` after reviewing
+  the existing command; do not overwrite without that flag.
+- Report-only: add `--check` (exit 0 current, 3 upgrade/missing, 4 unmanaged).
 
 ## Karlorz defaults (read first)
 
@@ -73,6 +89,8 @@ playwright-cli snapshot
 ### Phase 0 sequence (ALWAYS before attach)
 
 ```bash
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" \
+  --skip-cli --skip-project-config --apply-if-needed --project "$PWD"
 chrome-debug --check-port
 # If free:
 chrome-debug

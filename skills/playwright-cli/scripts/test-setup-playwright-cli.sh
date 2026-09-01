@@ -99,6 +99,48 @@ bash "${SETUP}" \
 grep -Fq '# playwright-cli-managed-chrome-debug: v1' "${BIN_DIR}/chrome-debug" || fail "forced launcher was not installed"
 find "${BIN_DIR}" -maxdepth 1 -name 'chrome-debug.bak.*' -print -quit | grep -q . || fail "forced launcher did not create a backup"
 
+check_out="$(bash "${SETUP}" --check --skip-cli --skip-project-config --project "${PROJECT}" --bin-dir "${BIN_DIR}" --data-dir "${DATA_DIR}" --state-dir "${STATE_DIR}")" || fail "fresh install --check failed"
+printf '%s\n' "${check_out}" | grep -Fq 'status    : current' || fail "expected current launcher after install"
+
+printf '# chrome-debug-contract: v3\n' > "${DATA_DIR}/chrome-debug.sh"
+check_rc=0
+bash "${SETUP}" --check --skip-cli --skip-project-config --project "${PROJECT}" --bin-dir "${BIN_DIR}" --data-dir "${DATA_DIR}" --state-dir "${STATE_DIR}" >/tmp/chrome-debug-check.out || check_rc=$?
+[[ "${check_rc}" -eq 3 ]] || fail "stale payload --check exit ${check_rc}, want 3"
+grep -Fq 'status    : upgrade' /tmp/chrome-debug-check.out || fail "stale payload did not report upgrade"
+
+bash "${SETUP}" \
+  --skip-cli \
+  --skip-project-config \
+  --apply-if-needed \
+  --project "${PROJECT}" \
+  --bin-dir "${BIN_DIR}" \
+  --data-dir "${DATA_DIR}" \
+  --state-dir "${STATE_DIR}" >/tmp/chrome-debug-apply.out
+grep -Fq '[APPLY]' /tmp/chrome-debug-apply.out || grep -Fq '[UPGRADE]' /tmp/chrome-debug-apply.out || fail "apply-if-needed did not upgrade stale payload"
+grep -E '^# chrome-debug-contract: v4' "${DATA_DIR}/chrome-debug.sh" >/dev/null || fail "apply-if-needed did not restore bundled launcher"
+
+bash "${SETUP}" \
+  --skip-cli \
+  --skip-project-config \
+  --apply-if-needed \
+  --project "${PROJECT}" \
+  --bin-dir "${BIN_DIR}" \
+  --data-dir "${DATA_DIR}" \
+  --state-dir "${STATE_DIR}" >/tmp/chrome-debug-apply2.out
+grep -Fq 'no chrome-debug upgrade needed' /tmp/chrome-debug-apply2.out || fail "second apply-if-needed should no-op"
+
+UNMANAGED_DIR="${TEST_ROOT}/unmanaged-bin"
+mkdir -p "${UNMANAGED_DIR}"
+printf '%s\n' '#!/usr/bin/env bash' 'echo unmanaged' > "${UNMANAGED_DIR}/chrome-debug"
+chmod +x "${UNMANAGED_DIR}/chrome-debug"
+unmanaged_rc=0
+bash "${SETUP}" --check --skip-cli --skip-project-config --project "${PROJECT}" --bin-dir "${UNMANAGED_DIR}" --data-dir "${DATA_DIR}" --state-dir "${STATE_DIR}" >/tmp/chrome-debug-unmanaged.out || unmanaged_rc=$?
+[[ "${unmanaged_rc}" -eq 4 ]] || fail "unmanaged --check exit ${unmanaged_rc}, want 4"
+apply_unmanaged_rc=0
+bash "${SETUP}" --skip-cli --skip-project-config --apply-if-needed --project "${PROJECT}" --bin-dir "${UNMANAGED_DIR}" --data-dir "${DATA_DIR}" --state-dir "${STATE_DIR}" >/tmp/chrome-debug-unmanaged-apply.out 2>/tmp/chrome-debug-unmanaged-apply.err || apply_unmanaged_rc=$?
+[[ "${apply_unmanaged_rc}" -eq 4 ]] || fail "unmanaged apply-if-needed exit ${apply_unmanaged_rc}, want 4"
+grep -Fq unmanaged "${UNMANAGED_DIR}/chrome-debug" || fail "apply-if-needed overwrote unmanaged chrome-debug"
+
 SKILL_MD="${SCRIPT_DIR}/../skills/playwright-cli/SKILL.md"
 python3 - "${SKILL_MD}" <<'PY'
 from pathlib import Path

@@ -29,6 +29,30 @@ user data storage, and initializes the current project's `.playwright/cli.config
 It preserves richer existing configs that already target `http://localhost:9222`.
 Use `--dry-run` to preview all actions.
 
+Detect / upgrade a stale `~/.local/bin/chrome-debug` (macOS included) against
+this skill's bundled launcher:
+
+```bash
+# report only (exit 0 current, 3 upgrade/missing, 4 unmanaged)
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" --check --skip-cli --skip-project-config
+
+# apply a managed upgrade in place; refuse unmanaged wrappers
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" \
+  --skip-cli --skip-project-config --apply-if-needed --project "$PWD"
+```
+
+Detect / upgrade a stale `~/.local/bin/chrome-debug` (macOS included) against
+this skill's bundled launcher:
+
+```bash
+# report only (exit 0 current, 3 upgrade/missing, 4 unmanaged)
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" --check --skip-cli --skip-project-config
+
+# apply a managed upgrade in place; refuse unmanaged wrappers
+bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" \
+  --skip-cli --skip-project-config --apply-if-needed --project "$PWD"
+```
+
 ## Default profile (global)
 
 **Default mode is `default-user`:** a debug-safe **clone** of your real Chrome user-data directory.

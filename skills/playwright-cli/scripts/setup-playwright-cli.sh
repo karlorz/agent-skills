@@ -19,6 +19,8 @@ INIT_PROJECT_CONFIG=1
 FORCE_LAUNCHER=0
 FORCE_PROJECT_CONFIG=0
 DRY_RUN=0
+CHECK_ONLY=0
+APPLY_IF_NEEDED=0
 
 usage() {
   cat <<'EOF'
@@ -38,6 +40,9 @@ Options:
   --skip-project-config      Do not initialize .playwright/cli.config.json
   --force-launcher           Replace an existing unmanaged command at the target path
   --force-project-config     Replace a config that does not already target CDP port 9222
+  --check                    Report whether ~/.local/bin/chrome-debug matches this skill
+                             (exit 0 current, 3 upgrade/missing, 4 unmanaged)
+  --apply-if-needed          Upgrade a missing or stale managed launcher; refuse unmanaged
   --dry-run                  Show planned actions without writing or installing
   -h, --help                 Show this help
 
@@ -101,6 +106,14 @@ while [[ $# -gt 0 ]]; do
       FORCE_PROJECT_CONFIG=1
       shift
       ;;
+    --check)
+      CHECK_ONLY=1
+      shift
+      ;;
+    --apply-if-needed)
+      APPLY_IF_NEEDED=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -137,9 +150,104 @@ if [[ ! -f "${SOURCE_CONFIG}" ]]; then
 fi
 
 TARGET_LAUNCHER="${DATA_DIR}/chrome-debug.sh"
+TARGET_HELPER="${DATA_DIR}/cdp-load-unpacked.py"
 TARGET_COMMAND="${BIN_DIR}/chrome-debug"
 TARGET_CONFIG="${PROJECT_DIR}/.playwright/cli.config.json"
 MANAGED_MARKER="# playwright-cli-managed-chrome-debug: v1"
+
+extract_contract() {
+  local file="$1"
+  local stamp
+  if [[ ! -f "${file}" ]]; then
+    printf '%s\n' "missing"
+    return 0
+  fi
+  stamp="$(grep -E '^# chrome-debug-contract: ' "${file}" 2>/dev/null | head -n 1 | awk '{print $3}')"
+  if [[ -z "${stamp}" ]]; then
+    printf '%s\n' "unknown"
+    return 0
+  fi
+  printf '%s\n' "${stamp}"
+}
+
+launcher_wrapper_state() {
+  if [[ ! -e "${TARGET_COMMAND}" ]]; then
+    printf '%s\n' "missing"
+    return 0
+  fi
+  if grep -Fq "${MANAGED_MARKER}" "${TARGET_COMMAND}" 2>/dev/null; then
+    printf '%s\n' "managed"
+    return 0
+  fi
+  printf '%s\n' "unmanaged"
+}
+
+helper_state() {
+  if [[ ! -f "${TARGET_HELPER}" ]]; then
+    printf '%s\n' "missing"
+    return 0
+  fi
+  if cmp -s "${SOURCE_HELPER}" "${TARGET_HELPER}"; then
+    printf '%s\n' "current"
+    return 0
+  fi
+  printf '%s\n' "stale"
+}
+
+payload_matches_bundle() {
+  [[ -f "${TARGET_LAUNCHER}" ]] && cmp -s "${SOURCE_LAUNCHER}" "${TARGET_LAUNCHER}" \
+    && [[ -f "${TARGET_HELPER}" ]] && cmp -s "${SOURCE_HELPER}" "${TARGET_HELPER}"
+}
+
+classify_launcher() {
+  local wrapper
+  wrapper="$(launcher_wrapper_state)"
+  if [[ "${wrapper}" == "unmanaged" ]]; then
+    printf '%s\n' "unmanaged"
+    return 0
+  fi
+  if [[ "${wrapper}" == "missing" && ! -e "${TARGET_LAUNCHER}" && ! -f "${TARGET_HELPER}" ]]; then
+    printf '%s\n' "missing"
+    return 0
+  fi
+  if [[ "${wrapper}" == "managed" ]] && payload_matches_bundle; then
+    printf '%s\n' "current"
+    return 0
+  fi
+  printf '%s\n' "upgrade"
+}
+
+print_launcher_check() {
+  local status bundled installed helper wrapper next
+  status="$(classify_launcher)"
+  bundled="$(extract_contract "${SOURCE_LAUNCHER}")"
+  installed="$(extract_contract "${TARGET_LAUNCHER}")"
+  helper="$(helper_state)"
+  wrapper="$(launcher_wrapper_state)"
+  case "${status}" in
+    current)
+      next="none (chrome-debug is current)"
+      ;;
+    unmanaged)
+      next="bash ${SCRIPT_DIR}/setup-playwright-cli.sh --skip-cli --skip-project-config --force-launcher --project \"\$PWD\""
+      ;;
+    *)
+      next="bash ${SCRIPT_DIR}/setup-playwright-cli.sh --skip-cli --skip-project-config --apply-if-needed --project \"\$PWD\""
+      ;;
+  esac
+  printf '[CHECK] chrome-debug launcher\n'
+  printf '  bundled   : %s (%s)\n' "${bundled}" "${SOURCE_LAUNCHER}"
+  printf '  installed : %s (%s)\n' "${installed}" "${TARGET_LAUNCHER}"
+  printf '  helper    : %s (%s)\n' "${helper}" "${TARGET_HELPER}"
+  printf '  wrapper   : %s (%s)\n' "${wrapper}" "${TARGET_COMMAND}"
+  printf '  status    : %s\n' "${status}"
+  printf '  next      : %s\n' "${next}"
+  case "${status}" in
+    current) return 0 ;;
+    unmanaged) return 4 ;;
+    *) return 3 ;;
+  esac
+}
 
 version_at_least() {
   local actual="$1"
@@ -285,8 +393,13 @@ install_launcher() {
     cp -p "${TARGET_COMMAND}" "${backup}"
     printf '[OK] backed up unmanaged command: %s\n' "${backup}"
   fi
+  if payload_matches_bundle && [[ "$(launcher_wrapper_state)" == "managed" ]]; then
+    printf '[OK] chrome-debug already current (%s)\n' "$(extract_contract "${TARGET_LAUNCHER}")"
+    return 0
+  fi
+  printf '[UPGRADE] chrome-debug %s -> %s\n' "$(extract_contract "${TARGET_LAUNCHER}")" "$(extract_contract "${SOURCE_LAUNCHER}")"
   install -m 0755 "${SOURCE_LAUNCHER}" "${TARGET_LAUNCHER}"
-  install -m 0755 "${SOURCE_HELPER}" "${DATA_DIR}/cdp-load-unpacked.py"
+  install -m 0755 "${SOURCE_HELPER}" "${TARGET_HELPER}"
 
   launcher_quote="$(shell_quote "${TARGET_LAUNCHER}")"
   state_quote="$(shell_quote "${STATE_DIR}")"
@@ -341,6 +454,26 @@ initialize_project_config() {
   mv "${tmp_config}" "${TARGET_CONFIG}"
   printf '[OK] initialized project config: %s\n' "${TARGET_CONFIG}"
 }
+
+if [[ "${CHECK_ONLY}" == "1" ]]; then
+  print_launcher_check
+  exit $?
+fi
+
+if [[ "${APPLY_IF_NEEDED}" == "1" ]]; then
+  launcher_status="$(classify_launcher)"
+  print_launcher_check || true
+  if [[ "${launcher_status}" == "current" ]]; then
+    printf '[OK] no chrome-debug upgrade needed\n'
+    exit 0
+  fi
+  if [[ "${launcher_status}" == "unmanaged" && "${FORCE_LAUNCHER}" != "1" ]]; then
+    printf '[SUGGEST] unmanaged chrome-debug at %s; rerun with --force-launcher after reviewing that file.\n' "${TARGET_COMMAND}" >&2
+    exit 4
+  fi
+  printf '[APPLY] upgrading managed chrome-debug launcher\n'
+  INSTALL_LAUNCHER=1
+fi
 
 preflight_launcher
 preflight_project_config
