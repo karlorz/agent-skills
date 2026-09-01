@@ -22,6 +22,11 @@ fail() {
 
 [[ -x "${LAUNCHER}" ]] || fail "missing launcher ${LAUNCHER}"
 
+# Homebrew bash 5.3 + set -u treats `local -a name` (no =()) as unbound.
+if grep -E '^[[:space:]]*local -a [A-Za-z_][A-Za-z0-9_]*[[:space:]]*$' "${LAUNCHER}"; then
+  fail "local -a arrays must be initialized with =() for bash 5.3 nounset"
+fi
+
 EXT_DIR="${TEST_ROOT}/ext"
 mkdir -p "${EXT_DIR}"
 printf '%s\n' '{"name":"fixture-ext","version":"1.0.0","manifest_version":3}' > "${EXT_DIR}/manifest.json"

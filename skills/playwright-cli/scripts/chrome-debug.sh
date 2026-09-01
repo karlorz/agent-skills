@@ -669,7 +669,7 @@ write_load_unpacked_sidecar() {
 
 apply_load_unpacked() {
   local sidecar helper raw resolved path output
-  local -a merged
+  local -a merged=()
   sidecar="$(load_unpacked_sidecar_path)"
   helper="$(cdp_load_unpacked_helper_path)"
 
@@ -703,7 +703,7 @@ apply_load_unpacked() {
     return 1
   fi
 
-  local -a helper_args
+  local -a helper_args=()
   helper_args=(--port "${DEBUG_PORT}" --reload-http --timeout-ms 20000 --retries 12 --retry-delay-ms 500)
   for path in "${merged[@]}"; do
     helper_args+=(--path "${path}")
