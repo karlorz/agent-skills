@@ -34,7 +34,6 @@ try_cli_install() {
   set +e
   out="$("$AGENT" plugin install "$spec" 2>&1)"
   st=$?
-  set -e
   if [[ $st -eq 0 ]]; then
     echo "CLI install ok: $spec"
     return 0
