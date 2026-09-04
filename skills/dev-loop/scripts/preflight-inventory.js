@@ -315,6 +315,24 @@ function parseYamlKeyValue(text) {
   };
 }
 
+function isYamlBlockScalarHeader(value) {
+  return /^[>|][+-]?\d*$/.test(String(value ?? "").trim());
+}
+
+function consumeYamlBlockScalar(header, lines, nextIndex, parentIndent) {
+  const literal = String(header).trim().startsWith("|");
+  const chunks = [];
+  let index = nextIndex;
+  while (index < lines.length && lines[index].indent > parentIndent) {
+    chunks.push(lines[index].text);
+    index += 1;
+  }
+  const value = literal
+    ? chunks.join("\n")
+    : chunks.join(" ").replace(/\s+/g, " ").trim();
+  return { value, index };
+}
+
 function looksLikeYamlMapping(text) {
   const colon = text.indexOf(":");
   return colon !== -1 && (colon === text.length - 1 || /\s/.test(text[colon + 1]));
@@ -358,8 +376,14 @@ function parseYamlBlock(lines, index, indent) {
       const keyValue = looksLikeYamlMapping(rest) ? parseYamlKeyValue(rest) : null;
       if (keyValue) {
         const item = {};
-        if (keyValue.value) item[keyValue.key] = parseYamlScalar(keyValue.value);
-        if (!keyValue.value && lines[index + 1] && lines[index + 1].indent > line.indent) {
+        if (isYamlBlockScalarHeader(keyValue.value)) {
+          const block = consumeYamlBlockScalar(keyValue.value, lines, index + 1, line.indent);
+          item[keyValue.key] = block.value;
+          index = block.index;
+        } else if (keyValue.value) {
+          item[keyValue.key] = parseYamlScalar(keyValue.value);
+          index += 1;
+        } else if (lines[index + 1] && lines[index + 1].indent > line.indent) {
           const child = parseYamlBlock(lines, index + 1, lines[index + 1].indent);
           item[keyValue.key] = child.value;
           index = child.index;
@@ -386,6 +410,13 @@ function parseYamlBlock(lines, index, indent) {
     const keyValue = parseYamlKeyValue(line.text);
     if (!keyValue) {
       index += 1;
+      continue;
+    }
+
+    if (isYamlBlockScalarHeader(keyValue.value)) {
+      const block = consumeYamlBlockScalar(keyValue.value, lines, index + 1, line.indent);
+      container[keyValue.key] = block.value;
+      index = block.index;
       continue;
     }
 

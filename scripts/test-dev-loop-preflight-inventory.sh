@@ -190,6 +190,27 @@ write_work_spec "$WORK/2026-06-05-proposed-legacy" proposed medium "Proposed Leg
 write_plan "$WORK/2026-06-05-proposed-legacy"
 write_work_spec "$WORK/2026-06-05-completed" completed medium "Completed"
 write_plan "$WORK/2026-06-05-completed"
+mkdir -p "$WORK/2026-06-05-completed-folded-description"
+cat > "$WORK/2026-06-05-completed-folded-description/spec.md" <<'EOF'
+---
+title: "Completed Folded Description"
+name: completed-folded-description
+description: >
+  Fill in the TL;DR section of a concept page
+  and add missing_tldr placeholder detection.
+kind: feature
+status: completed
+priority: medium
+project: "[[agent-skills]]"
+created: 2026-06-05
+updated: 2026-06-05
+started: 2026-06-05
+completed: 2026-06-05
+---
+
+# Completed Folded Description
+EOF
+write_plan "$WORK/2026-06-05-completed-folded-description"
 write_work_spec "$WORK/2026-06-05-done-alias" done medium "Done Alias"
 write_plan "$WORK/2026-06-05-done-alias"
 write_work_spec "$WORK/2026-06-05-spec-only" planned medium "Spec Only"
@@ -227,6 +248,11 @@ assert_json "$all_json" '
   assert(ids.includes("2026-06-05-proposed-legacy"), "legacy proposed work missing");
   assert(data.candidates.find((candidate) => candidate.id === "2026-06-05-proposed-legacy").repairable === true, "legacy proposed should be repairable");
   assert(!ids.includes("2026-06-05-completed"), "completed work should be skipped");
+  assert(!ids.includes("2026-06-05-completed-folded-description"), "completed work with folded description: > should be skipped");
+  assert(
+    data.skipped.some((item) => item.id === "2026-06-05-completed-folded-description" && item.reason === "completed"),
+    "folded-description completed item should be skipped as completed, not missing_status hygiene"
+  );
   assert(!ids.includes("2026-06-05-done-alias"), "done-status work should be skipped like completed");
   assert(!ids.includes("_archive"), "archive container should be skipped");
   assert(!ids.includes("2026-06-05-history-item"), "history work should be ignored");

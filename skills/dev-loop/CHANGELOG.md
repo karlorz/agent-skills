@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.26.36] - 2026-09-04
+
+- Preflight inventory now parses YAML folded/literal block scalars (`>`, `|`) so `status: completed` after `description: >` is not dropped as `missing_status` hygiene.
+
 ## [1.26.35] - 2026-08-29
 
 - Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).
