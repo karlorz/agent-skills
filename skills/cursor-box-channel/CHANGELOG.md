@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.2] - 2026-09-04
+
+### Added
+- Non-block monitor guidance in SKILL.md: hold is not the answer, poll `message_status` with `wait_seconds=0`, server-enforced `wait_seconds` max 15, and end turn if not final.
+
 ## [0.3.1] - 2026-08-30
 
 ### Added

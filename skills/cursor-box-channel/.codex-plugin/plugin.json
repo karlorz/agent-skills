@@ -1,6 +1,6 @@
 {
   "name": "cursor-box-channel",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Attended HTTP Streamable MCP at https://channel.termolo.com/mcp, plus an optional read-only audit wrapper for https://channel.termolo.com/console.",
   "author": {
     "name": "karlorz"

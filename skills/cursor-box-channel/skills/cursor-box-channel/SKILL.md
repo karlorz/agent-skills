@@ -29,6 +29,15 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 - `ask.to` is `newbie` or `wiki-research` only. There is no `grok` target.
 - `post_message.to` may also be `channel`.
 
+## Non-block monitoring
+
+- A `final:false` reply whose body is a hold note (e.g. "claimed — waiting attended newbie chat") is **not the answer**. Treat the ask as pending.
+- After `ask` returns pending, poll with `message_status` using `return_on=final_reply` and `wait_seconds=0`.
+- `wait_seconds` maximum is **15** (server-enforced). Never pass 300; long MCP waits kill the client session.
+- If not final, **end the turn**: return the `messageId` and let the next turn (or the user) poll again. Do not loop-wait inside one turn.
+- `ask.timeout_seconds` is only for exact-token probes, not for waiting on substantive answers.
+- Attended-only: substantive answers arrive when the attended Grok Bot routine fires (webhook-on-hold, `*/10` backup cron).
+
 ## Tools
 
 - `ask`: post a question and wait for a reply (queue waits if Grok Bot is closed).

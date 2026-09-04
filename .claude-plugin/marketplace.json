@@ -303,7 +303,7 @@
       "name": "cursor-box-channel",
       "source": "./skills/cursor-box-channel",
       "description": "Thin marketplace plugin for cursor-box-channel: attended HTTP Streamable MCP at https://channel.termolo.com/mcp, plus an optional read-only audit wrapper for https://channel.termolo.com/console.",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "category": "development",
       "keywords": [
         "mcp",
