@@ -24,7 +24,7 @@ codex_manifest_path = root / ".codex-plugin" / "plugin.json"
 example_path = root / "cursor-cli-mcp.example.json"
 changelog_path = root / "CHANGELOG.md"
 cursor_marketplace_path = repo_root / ".cursor-plugin" / "marketplace.json"
-keep_skill_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "SKILL.md"
+keep_skill_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "skills" / "cursor-github-marketplace-repin" / "SKILL.md"
 keep_install_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "scripts" / "install-keep-plugins.sh"
 
 texts = {}

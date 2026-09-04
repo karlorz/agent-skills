@@ -4,7 +4,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATUS_SCRIPT="$ROOT/skills/cursor-github-marketplace-repin/scripts/status.sh"
-SKILL_MD="$ROOT/skills/cursor-github-marketplace-repin/SKILL.md"
+SKILL_MD="$ROOT/skills/cursor-github-marketplace-repin/skills/cursor-github-marketplace-repin/SKILL.md"
+CURSOR_MANIFEST="$ROOT/skills/cursor-github-marketplace-repin/.cursor-plugin/plugin.json"
+CURSOR_MARKETPLACE="$ROOT/.cursor-plugin/marketplace.json"
 
 [ -f "$STATUS_SCRIPT" ] || { echo "Missing status script: $STATUS_SCRIPT"; exit 1; }
 
@@ -113,6 +115,18 @@ assert_contains "SKILL.md KEEP cursor-box-channel" "$SKILL_BODY" \
   "cursor-box-channel@karlorz-agent-skills"
 assert_contains "helper KEEP cursor-box-channel" "$INSTALL_BODY" \
   "cursor-box-channel@karlorz-agent-skills"
+assert_contains "SKILL.md KEEP rempin plugin" "$SKILL_BODY" \
+  "cursor-github-marketplace-repin@karlorz-agent-skills"
+assert_contains "helper KEEP rempin plugin" "$INSTALL_BODY" \
+  "cursor-github-marketplace-repin@karlorz-agent-skills"
+[ -f "$CURSOR_MANIFEST" ] || fail "Missing $CURSOR_MANIFEST"
+assert_contains "Cursor manifest name" "$(cat "$CURSOR_MANIFEST")" \
+  '"name": "cursor-github-marketplace-repin"'
+MARKET_BODY="$(cat "$CURSOR_MARKETPLACE")"
+assert_contains "Cursor catalog lists rempin" "$MARKET_BODY" \
+  '"name": "cursor-github-marketplace-repin"'
+assert_contains "Cursor catalog source" "$MARKET_BODY" \
+  '"source": "skills/cursor-github-marketplace-repin"'
 
 # Case A — both pins match latest tag object / HEAD
 write_list <<JSON

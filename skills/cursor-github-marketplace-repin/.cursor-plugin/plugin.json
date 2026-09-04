@@ -1,0 +1,17 @@
+{
+  "name": "cursor-github-marketplace-repin",
+  "version": "0.1.0",
+  "description": "Re-pin Cursor user GitHub marketplaces llm-wiki and karlorz-agent-skills, then reinstall KEEP plugins.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "cursor",
+    "marketplace",
+    "re-pin",
+    "plugins"
+  ],
+  "skills": "./skills/"
+}

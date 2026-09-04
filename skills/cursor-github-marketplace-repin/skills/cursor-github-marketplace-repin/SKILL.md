@@ -30,8 +30,9 @@ not list these repos.
 - Reinstall / UI uninstall without `remove` + `add --git-ref` repeats the pin.
 - Copying files under `~/.cursor/plugins/cache/` while the catalog `gitRef` is
   still old. Cursor will restore the pinned snapshot.
-- Cursor CLI `plugin install` is missing on `2026.08.25`; do not treat that as
-  a completed KEEP reinstall.
+- Cursor CLI `plugin install` is missing on `2026.08.25` and still missing
+  as of `2026.09.02`; do not treat a failed `plugin install` as a completed
+  KEEP reinstall.
 
 ## Status first
 
@@ -44,6 +45,15 @@ Or from the operator's installed skills directory (after republishing):
 ```bash
 bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/status.sh
 ```
+
+This skill is a **Cursor catalog plugin** on `karlorz-agent-skills`
+(`.cursor-plugin/marketplace.json`). It is not a Claude Code plugin.
+`marketplace remove` uninstalls the catalog copy; run
+`install-keep-plugins.sh` from this repo or from
+`~/.cursor/skills/cursor-github-marketplace-repin/scripts/` so KEEP can
+reinstall it. That home scripts copy is not removed by marketplace
+`remove`. `install-keep-plugins.sh` (`SPECS`) is the KEEP list that
+actually runs.
 
 Read the printed `status:` lines. Do not re-pin from memory or from example
 SHAs in this file.
@@ -85,7 +95,7 @@ vault-sync disappear from Grok Bot until they are installed again. `add`
 brings the marketplace back but does **not** reinstall the plugins.
 
 Cursor CLI **does not auto-update** marketplace plugins. On CLI `2026.08.25`
-and current `plugin --help`, the only subcommand is `marketplace`. There is
+and still on `2026.09.02`, `plugin --help` only lists `marketplace`. There is
 **no** `plugin install`. `plugin install name@marketplace` fails with
 `too many arguments for 'plugin'`. Interactive equivalent: `/plugins`.
 
@@ -96,7 +106,7 @@ uninstall` KEEP plugins as their own step.
 | Marketplace | KEEP plugins |
 | --- | --- |
 | `llm-wiki` | `skillwiki`, `vault-sync` |
-| `karlorz-agent-skills` | `grok-search`, `deep-research`, `cursor-box-channel` |
+| `karlorz-agent-skills` | `grok-search`, `deep-research`, `cursor-box-channel`, `cursor-github-marketplace-repin` |
 
 ```bash
 # try CLI install first (may exist on a future CLI)
@@ -105,6 +115,7 @@ uninstall` KEEP plugins as their own step.
 "$AGENT" plugin install grok-search@karlorz-agent-skills
 "$AGENT" plugin install deep-research@karlorz-agent-skills
 "$AGENT" plugin install cursor-box-channel@karlorz-agent-skills
+"$AGENT" plugin install cursor-github-marketplace-repin@karlorz-agent-skills
 
 # if that fails (no install subcommand), use the Dashboard fallback:
 bash skills/cursor-github-marketplace-repin/scripts/install-keep-plugins.sh
@@ -117,13 +128,12 @@ bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/install-keep-plugi
 `cursor-access-token` / `cursor-user`. It never prints the token. Override
 base URL with `CURSOR_DASHBOARD_BASE` only in tests.
 
-`deep-research` and `cursor-box-channel` must be in the Cursor catalog
+`deep-research`, `cursor-box-channel`, and
+`cursor-github-marketplace-repin` must be in the Cursor catalog
 (`.cursor-plugin/marketplace.json` on karlorz/agent-skills), not only the
-Claude catalog. If the helper cannot find `deep-research` or
-`cursor-box-channel` in `ListMarketplacePlugins` for
-`karlorz-agent-skills`, the Cursor marketplace pin is still the old catalog
-that listed only `grok-search` — finish the karlorz-agent-skills re-pin
-first, then install.
+Claude catalog. If the helper cannot find those names in
+`ListMarketplacePlugins` for `karlorz-agent-skills`, finish the
+karlorz-agent-skills re-pin first, then install.
 
 `grok-search` may ask for `GROK_SEARCH_MCP_TOKEN` and
 `cursor-box-channel` may ask for `CURSOR_BOX_MCP_TOKEN` (Cursor Plugins →
@@ -140,7 +150,8 @@ the karlorz-agent-skills pin includes it in the Cursor catalog.
 
 Re-run `status.sh` until both groups print `PIN MATCHES`. Then confirm the
 KEEP plugins above are installed again (`skillwiki`, `vault-sync`,
-`grok-search`, `deep-research`, `cursor-box-channel`).
+`grok-search`, `deep-research`, `cursor-box-channel`,
+`cursor-github-marketplace-repin`).
 
 `gitRef` is a 40-character SHA, not the tag string. For llm-wiki annotated
 tags it must equal status.sh `tag=` (tag object). The peeled `commit=` may

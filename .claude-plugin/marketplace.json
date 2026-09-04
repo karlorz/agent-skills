@@ -311,6 +311,19 @@
         "channel",
         "http"
       ]
+    },
+    {
+      "name": "cursor-github-marketplace-repin",
+      "source": "./skills/cursor-github-marketplace-repin",
+      "description": "Re-pin Cursor user GitHub marketplaces llm-wiki and karlorz-agent-skills, then reinstall KEEP plugins.",
+      "version": "0.1.0",
+      "category": "development",
+      "keywords": [
+        "cursor",
+        "marketplace",
+        "re-pin",
+        "plugins"
+      ]
     }
   ]
 }
