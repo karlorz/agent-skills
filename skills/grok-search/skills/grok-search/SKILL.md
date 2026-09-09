@@ -36,7 +36,8 @@ Before every `web_search`, follow the planning tool descriptions as the source o
 3. Call `plan_sub_query` for each sub-query.
 4. For complexity levels that require them, call `plan_search_term`, `plan_tool_mapping`, and `plan_execution` in the order described by the tools.
 5. Call `web_search`. Leave `extra_sources` at its default unless the user explicitly requests extra provider hits.
-6. When `web_search` returns a `session_id`, call `get_sources` to retrieve full source metadata and cite canonical URLs.
+6. Treat `content == ""` or `content` starting with `upstream_error:` / `upstream_empty:` as a **failed search**, not “no results.” Report the envelope literally, retry `web_search` once, then `web_fetch` an authoritative URL. Do not tell the user the web had no hits.
+7. When `web_search` returns a `session_id` and non-empty answer content, call `get_sources` to retrieve full source metadata and cite canonical URLs.
 
 ### Fetching and site exploration
 
@@ -53,3 +54,5 @@ Before every `web_search`, follow the planning tool descriptions as the source o
 ## Errors
 
 Report search, fetch, and handshake failures literally. Do not speculate, invent credentials, or switch to the leftover preview alias.
+
+A successful MCP tool result can still be a failed search: HTTP 200 with `content: ""` or `upstream_error:` / `upstream_empty:` means GrokSearch got no answer text. New API output tokens do not prove MCP `content` is usable. Retry once, then fetch.

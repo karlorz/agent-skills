@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Skill: treat MCP `web_search` `content == ""` or `upstream_error:` / `upstream_empty:` as a failed search (retry once, then `web_fetch`). New API token counts are not proof of usable MCP content.
+
 ## [0.1.11] - 2026-08-29
 
 ### Changed
@@ -13,8 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.10] - 2026-08-29
 
 - Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).
-
-## [Unreleased]
 
 ## [0.1.9] - 2026-08-29
 
