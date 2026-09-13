@@ -3,7 +3,7 @@
 
 Token substitution:
   __HUB_API_KEY__        hub.karldigi.dev gateway key (5 models)
-  __NEW_API_KEY__        new.karldigi.dev gateway key (gpt-5.6-luna, glm-5.2)
+  __NEW_API_KEY__        new.karldigi.dev gateway key (gpt-5.6-sol, gpt-5.6-luna, flash-*)
   __CONTEXT7_API_KEY__   context7 MCP key
   __ENABLED_PLUGINS__    comma-separated plugin names for [plugins].enabled
 

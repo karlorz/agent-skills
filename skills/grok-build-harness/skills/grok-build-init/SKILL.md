@@ -111,7 +111,7 @@ or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/insta
 | `agents/grok-build-byok.md`, `agents/scout.md` | Custom parent agent + disposable read-only scout (verbatim) |
 | `agentrules.md` | Global subagent routing/workflow rules (verbatim) |
 | `AGENTS.md` | Subagent contract in a `<!-- grok-build-harness:begin/end -->` block — spliced in: all other content (user sections, skillwiki marker) is preserved |
-| `config.toml` | Rendered from the sanitized template: model aliases (sonnet/haiku → deepseek-v4-flash-max via hub), `[subagents.models]` pins, `[subagents.toggle] grok-build-byok = false`, `[agent] name`, plugin enable list, context7 MCP |
+| `config.toml` | Rendered from the sanitized template (cursor-box 2026-09-12 SSOT): grok-4.6 default + auto-compact 48%, gpt-5.6-sol, flash-max / flash-non-reasoning, no GLM, `[subagents.models]` pins, `[agent] name`, plugin enable list, context7 MCP |
 | `.grok-build-harness-stamp.json` | Harness install stamp (`grok-build-harness-stamp/v1`): plugin version, root, install timestamp, and grokgod detection |
 
 Existing files are backed up to
@@ -133,6 +133,15 @@ and a re-run with no keys over a keyed config skips the render (use
 - **Models don't resolve ("sonnet" unknown)** → the `[model.*]` aliases are
   missing or keys were not injected; re-run install.sh with keys, or export
   `HUB_API_KEY` / `NEW_API_KEY` (env_key fallback).
+- **Stale / overwritten Grok config** → `check-config.py --verify` (via
+  `install.sh --verify`) warns when live `config.toml` has GLM tables,
+  `[model."gpt-5.6-auto"]`, `flash-non-reasoning` wired to `mimo-v2.5`,
+  missing `grok-4.6` auto-compact 48%, a sibling `config 2.toml` conflict
+  copy, or a CC Switch `grokbuild` current template that still contains
+  `glm-5.x`. Reference host is cursor-box `2026-09-12`. Do not restore
+  `config 2.toml`. Do not `install.sh --force-render` over a good keyed
+  config. After a warning, compare with cursor-box
+  `/home/box/.grok/config.toml` (structure only; keep this host's keys).
 - **`grok --version` fails on Alpine/musl** → the grokgod/glibc binary cannot
   exec. Point `grok` at a musl build; do not rewrite the shim via this installer.
 - **SSH session opened a grok TUI** → a TTY plus an unknown subcommand (e.g.

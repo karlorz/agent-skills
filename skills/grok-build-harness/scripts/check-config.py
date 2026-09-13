@@ -146,6 +146,88 @@ def validate_consent(consent_table: object) -> list[str]:
     return errors
 
 
+def operator_drift(content: str, parsed: object, grok_home: Path) -> tuple[list[str], list[str]]:
+    """Warn when live config matches a known-bad overwrite (CC Switch / conflict copy).
+
+    Never prints secret values. Warnings by default; --strict promotes them.
+    """
+    warnings: list[str] = []
+    errors: list[str] = []
+    models = parsed.get("model") if isinstance(parsed, dict) else None
+    if not isinstance(models, dict):
+        models = {}
+
+    glm_ids = [k for k in models if str(k).startswith("glm-5")]
+    if glm_ids:
+        warnings.append(
+            "stale GLM model table(s) present ("
+            + ", ".join(sorted(glm_ids))
+            + ") — operator SSOT has no GLM; likely CC Switch / old template"
+        )
+
+    if "gpt-5.6-auto" in models:
+        warnings.append(
+            'picker [model."gpt-5.6-auto"] is stale — SSOT table id is gpt-5.6-sol'
+        )
+
+    fnr = models.get("flash-non-reasoning")
+    if isinstance(fnr, dict):
+        wire = str(fnr.get("model") or "")
+        if wire in ("mimo-v2.5", "glm-5.3", "glm-5.2"):
+            warnings.append(
+                f"flash-non-reasoning wire is {wire} — SSOT is public alias flash-non-reasoning "
+                "(grok-4.20-0309-non-reasoning)"
+            )
+
+    grok46 = models.get("grok-4.6")
+    pct = grok46.get("auto_compact_threshold_percent") if isinstance(grok46, dict) else None
+    if pct != 48:
+        warnings.append(
+            "[model.\"grok-4.6\"] auto_compact_threshold_percent is not 48 "
+            f"(got {pct!r}) — wiki 2026-09-09 SSOT"
+        )
+
+    models_tbl = parsed.get("models") if isinstance(parsed, dict) else None
+    if isinstance(models_tbl, dict):
+        default = models_tbl.get("default")
+        if default and default != "grok-4.6":
+            warnings.append(f'[models].default is {default!r} — SSOT is grok-4.6')
+        summary = models_tbl.get("session_summary")
+        if summary and summary != "flash-non-reasoning":
+            warnings.append(
+                f"[models].session_summary is {summary!r} — SSOT is flash-non-reasoning"
+            )
+
+    conflict = grok_home / "config 2.toml"
+    if conflict.is_file():
+        warnings.append(
+            "sibling config 2.toml exists (Finder/conflict copy, often glm-5.2) — "
+            "do not restore it over config.toml"
+        )
+
+    db = Path.home() / ".cc-switch" / "cc-switch.db"
+    if db.is_file():
+        try:
+            import sqlite3
+
+            con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            row = con.execute(
+                "SELECT settings_config FROM providers "
+                "WHERE app_type='grokbuild' AND is_current=1"
+            ).fetchone()
+            con.close()
+            blob = (row[0] if row else "") or ""
+            if "glm-5." in blob:
+                warnings.append(
+                    "CC Switch grokbuild current template still contains glm-5.x — "
+                    "a provider apply can overwrite ~/.grok/config.toml"
+                )
+        except Exception:
+            pass
+
+    return warnings, errors
+
+
 def check_config(config_path: Path, grok_home: Path, strict: bool, grokgod: bool = False) -> int:
     if not config_path.is_file():
         print(f"config file not found: {config_path}", file=sys.stderr)
@@ -164,6 +246,13 @@ def check_config(config_path: Path, grok_home: Path, strict: bool, grokgod: bool
 
     if "consent" in parsed:
         errors.extend(validate_consent(parsed["consent"]))
+
+    drift_warn, drift_err = operator_drift(content, parsed, grok_home)
+    errors.extend(drift_err)
+    if strict:
+        errors.extend(drift_warn)
+    else:
+        warnings.extend(drift_warn)
 
     for key in parsed.keys():
         if key in template_keys or key in docs_keys or key in extras_keys:
