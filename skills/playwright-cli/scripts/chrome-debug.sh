@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# chrome-debug-contract: v4
+# chrome-debug-contract: v5
 # Start Chrome with remote debugging in detached mode.
 # Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [--check-port] [--explain] [--launch-and-explain] [--load-unpacked PATH] [URL]
 #
@@ -83,7 +83,8 @@ Options:
   --explain       Print a short diagnosis and suggested next action without launching Chrome
   --launch-and-explain
                    Print the diagnosis first, then continue with the normal launch flow
-  --restart       Kill any existing Chrome debug instance + stale playwright-cli sessions, then launch fresh
+  --restart       Kill any existing Chrome debug instance + stale playwright-cli sessions, then launch fresh.
+                   Refuses when port status is owned_by_cmux (cmux-cdp-proxy). macos-dev chrome-debug attach is unchanged.
   --default-user-profile
                    Clone the normal Chrome profile into a debug-safe user-data directory (default)
   --refresh-from-default
@@ -432,9 +433,44 @@ port_is_healthy() {
   curl -fs "http://127.0.0.1:${DEBUG_PORT}/json/version" >/dev/null 2>&1
 }
 
+port_listener_pids() {
+  local pids
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -nP -iTCP:"${DEBUG_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)"
+    if [[ -n "${pids}" ]]; then
+      printf '%s\n' ${pids}
+      return 0
+    fi
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -lntp 2>/dev/null | awk -v port=":${DEBUG_PORT}" '
+      index($0, port) {
+        if (match($0, /pid=[0-9]+/)) {
+          print substr($0, RSTART + 4, RLENGTH - 4)
+        }
+      }
+    '
+  fi
+}
+
+port_owner_is_cmux() {
+  local pid comm cmdline
+  while read -r pid; do
+    [[ -z "${pid}" ]] && continue
+    comm="$(ps -p "${pid}" -o comm= 2>/dev/null || true)"
+    cmdline="$(ps -p "${pid}" -o command= 2>/dev/null || true)"
+    if [[ "${comm}" == *cmux-cdp-proxy* || "${cmdline}" == *cmux-cdp-proxy* ]]; then
+      return 0
+    fi
+  done < <(port_listener_pids)
+  return 1
+}
+
 resolve_port_status() {
   if port_is_healthy; then
-    if [[ -n "$(list_profile_pids)" ]]; then
+    if port_owner_is_cmux; then
+      printf '%s\n' "owned_by_cmux"
+    elif [[ -n "$(list_profile_pids)" ]]; then
       printf '%s\n' "owned_by_profile"
     else
       printf '%s\n' "occupied_by_other"
@@ -475,6 +511,9 @@ PY
     free)
       log_ok "Port ${DEBUG_PORT} is free."
       ;;
+    owned_by_cmux)
+      log_ok "Port ${DEBUG_PORT} is serving DevTools via cmux-cdp-proxy (cmux-devtools Chrome). Attach only; do not --restart."
+      ;;
     owned_by_profile)
       log_ok "Port ${DEBUG_PORT} is already serving DevTools for profile ${PROFILE_DIR}."
       ;;
@@ -514,6 +553,10 @@ emit_explanation() {
         summary="Port ${DEBUG_PORT} is free; Chrome is not currently serving DevTools there."
         next_action="Run ${COMMAND_NAME} (default-user profile) to start the debug browser."
       fi
+      ;;
+    owned_by_cmux)
+      summary="Port ${DEBUG_PORT} is owned by cmux-cdp-proxy in front of the live cmux-devtools Chrome."
+      next_action="Reuse playwright-cli attach. Do not run chrome-debug --restart."
       ;;
     owned_by_profile)
       summary="Port ${DEBUG_PORT} is already owned by the configured ${PROFILE_LABEL}."
@@ -818,7 +861,7 @@ print(
             "loadUnpackedPaths": [
                 path for path in os.environ.get("LOAD_UNPACKED_JSON_SOURCE", "").split("\x1f") if path
             ],
-            "chromeDebugContract": "v4",
+            "chromeDebugContract": "v5",
         }
     )
 )
@@ -840,7 +883,7 @@ PROFILE_DIR=${PROFILE_DIR}
 LOG_FILE=${LOG_FILE}
 TARGET_URL=${TARGET_URL}
 LOAD_UNPACKED_PATHS=$(printf '%s ' "${LOAD_UNPACKED_PATHS[@]+"${LOAD_UNPACKED_PATHS[@]}"}")
-CHROME_DEBUG_CONTRACT=v4
+CHROME_DEBUG_CONTRACT=v5
 EOF_CONFIG
 }
 
@@ -966,51 +1009,66 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   exit 0
 fi
 
-if [[ "${FORCE_RESTART}" == "1" ]] && port_is_healthy; then
-  log_info "Restart requested — killing existing Chrome debug instance and stale playwright-cli sessions."
-  if command -v playwright-cli >/dev/null 2>&1; then
-    playwright-cli kill-all 2>/dev/null || true
-  fi
-  # Kill the exact process holding port 9222 (more reliable than pgrep by profile marker)
-  port_pid="$(lsof -ti "tcp:${DEBUG_PORT}" 2>/dev/null || true)"
-  if [[ -n "${port_pid}" ]]; then
-    log_info "Killing process ${port_pid} holding port ${DEBUG_PORT}."
-    kill "${port_pid}" 2>/dev/null || true
-    sleep 1
-    port_pid="$(lsof -ti "tcp:${DEBUG_PORT}" 2>/dev/null || true)"
-    if [[ -n "${port_pid}" ]]; then
-      log_info "Process still alive; sending SIGKILL."
-      kill -9 "${port_pid}" 2>/dev/null || true
-    fi
-  fi
-  stop_profile_processes
-  cleanup_profile_locks
-  log_info "Waiting for port ${DEBUG_PORT} to be free."
-  for _ in {1..40}; do
-    if ! port_is_healthy; then
-      log_ok "Port ${DEBUG_PORT} is free."
-      break
-    fi
-    sleep 0.5
-  done
-  if port_is_healthy; then
-    log_error "Chrome did not release port ${DEBUG_PORT} after restart request."
-    log_error "Close Chrome manually and rerun."
+if [[ "${FORCE_RESTART}" == "1" ]]; then
+  port_status="$(resolve_port_status)"
+  if [[ "${port_status}" == "owned_by_cmux" ]]; then
+    log_error "Port ${DEBUG_PORT} is owned by cmux-cdp-proxy. Refusing --restart."
+    log_error "Reuse playwright-cli attach. Do not kill the cmux Chrome or proxy."
     exit 1
   fi
-  log_ok "Previous instance stopped."
+  if [[ "${port_status}" != "free" ]]; then
+    log_info "Restart requested — killing existing Chrome debug instance and stale playwright-cli sessions."
+    if command -v playwright-cli >/dev/null 2>&1; then
+      playwright-cli kill-all 2>/dev/null || true
+    fi
+    port_pid=""
+    while read -r port_pid; do
+      [[ -z "${port_pid}" ]] && continue
+      log_info "Killing process ${port_pid} holding port ${DEBUG_PORT}."
+      kill "${port_pid}" 2>/dev/null || true
+    done < <(port_listener_pids)
+    sleep 1
+    while read -r port_pid; do
+      [[ -z "${port_pid}" ]] && continue
+      log_info "Process still alive; sending SIGKILL."
+      kill -9 "${port_pid}" 2>/dev/null || true
+    done < <(port_listener_pids)
+    stop_profile_processes
+    cleanup_profile_locks
+    log_info "Waiting for port ${DEBUG_PORT} to be free."
+    for _ in {1..40}; do
+      if ! port_is_healthy; then
+        log_ok "Port ${DEBUG_PORT} is free."
+        break
+      fi
+      sleep 0.5
+    done
+    if port_is_healthy; then
+      log_error "Chrome did not release port ${DEBUG_PORT} after restart request."
+      log_error "Close Chrome manually and rerun."
+      exit 1
+    fi
+    log_ok "Previous instance stopped."
+  fi
 fi
 
 if port_is_healthy; then
-  if [[ -n "$(list_profile_pids)" ]]; then
-    log_ok "Found existing debug Chrome instance on port ${DEBUG_PORT}; reusing profile ${PROFILE_DIR}."
-    apply_load_unpacked
-    exit 0
-  fi
-
-  log_error "Port ${DEBUG_PORT} is already serving DevTools for a different Chrome instance."
-  log_error "Stop the other debugger Chrome or set CHROME_DEBUG_PORT to a different port."
-  exit 1
+  case "$(resolve_port_status)" in
+    owned_by_cmux)
+      log_ok "Port ${DEBUG_PORT} is cmux-cdp-proxy in front of cmux-devtools Chrome; reusing (attach-only)."
+      exit 0
+      ;;
+    owned_by_profile)
+      log_ok "Found existing debug Chrome instance on port ${DEBUG_PORT}; reusing profile ${PROFILE_DIR}."
+      apply_load_unpacked
+      exit 0
+      ;;
+    *)
+      log_error "Port ${DEBUG_PORT} is already serving DevTools for a different Chrome instance."
+      log_error "Stop the other debugger Chrome or set CHROME_DEBUG_PORT to a different port."
+      exit 1
+      ;;
+  esac
 fi
 
 if profile_is_default_user_mode && chrome_any_process_running && (clone_sync_requested || ! default_clone_exists); then

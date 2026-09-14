@@ -91,10 +91,17 @@ playwright-cli snapshot
 ```bash
 bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" \
   --skip-cli --skip-project-config --apply-if-needed --project "$PWD"
+chrome-debug --json --explain
+# If owned_by_cmux (cmux pvelxc):
+#   playwright-cli attach --cdp=http://localhost:9222
+#   NEVER chrome-debug --restart (kills the proxy; does not own this Chrome)
+#   NEVER recycle cmux-devtools Chrome
+#   If attach times out: curl /json/version and /json/list, print diagnosis, stop
+# If free (macos-dev / normal):
 chrome-debug --check-port
-# If free:
 chrome-debug
-# If stale / attach fails:
+playwright-cli attach
+# If stale / attach fails on owned_by_profile only:
 playwright-cli kill-all
 chrome-debug --restart
 playwright-cli attach
@@ -120,8 +127,9 @@ Project `.playwright/cli.config.json` typically sets:
 
 ### Host matrix
 
-- **macOS:** headed; default-user clone under `~/Library/Application Support/Google/chrome-debug-profile-from-default`
+- **macOS (macos-dev):** headed; default-user clone under `~/Library/Application Support/Google/chrome-debug-profile-from-default`. **Attach-first chrome-debug is the default and must stay on.** `--restart` remains valid when `owned_by_profile`.
 - **Linux / LXC / container:** `--no-sandbox` + shm flags; **headless auto when `DISPLAY` is unset**; override with `CHROME_DEBUG_HEADLESS=0|1`
+- **cmux pvelxc:** 9222 is `cmux-cdp-proxy` → live cmux-devtools Chrome (typically `/root/.config/chrome` on 39382). Status `owned_by_cmux`. Attach only. Never `--restart`.
 - **Remote:** tunnel CDP `ssh -L 9222:127.0.0.1:9222 host`
 
 Details: [../../references/chrome-debug.md](../../references/chrome-debug.md)
@@ -138,6 +146,7 @@ Details: [../../references/chrome-debug.md](../../references/chrome-debug.md)
 - **`--repo-local-profile` by default** — creates empty profile; only on explicit request
 - **Skipping attach** after launch — interaction commands need an attached session
 - **Assuming `make chrome-debug` is invalid** — use it when the consumer Makefile wraps the installed `chrome-debug` command
+- **`chrome-debug --restart` when 9222 is `cmux-cdp-proxy`** — that is `owned_by_cmux`; attach only. Do not take macos-dev chrome-debug attach off to “fix” cmux.
 - **Vendoring `chrome-debug.sh` in a consumer repo** — one SSOT: this skill + the installed `chrome-debug` command
 - **Raw CDP `Extensions.loadUnpacked` or `chrome://extensions` Load unpacked** — use `chrome-debug --load-unpacked PATH` so restart re-applies it
 - **Installing an unpacked extension from a disposable worktree** — Chrome drops it when the path vanishes

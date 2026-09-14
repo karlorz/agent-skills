@@ -53,7 +53,7 @@ state = sys.argv[3]
 assert data["projectRoot"] == project, data
 assert data["profileDir"] == os.path.join(project, ".chrome-debug-profile"), data
 assert data["logFile"] == os.path.join(state, "chrome-debug.log"), data
-assert data["chromeDebugContract"] == "v4", data
+assert data["chromeDebugContract"] == "v5", data
 assert data["launchArgs"].count("--enable-unsafe-extension-debugging") == 1, data
 PY
 
@@ -117,7 +117,7 @@ bash "${SETUP}" \
   --data-dir "${DATA_DIR}" \
   --state-dir "${STATE_DIR}" >/tmp/chrome-debug-apply.out
 grep -Fq '[APPLY]' /tmp/chrome-debug-apply.out || grep -Fq '[UPGRADE]' /tmp/chrome-debug-apply.out || fail "apply-if-needed did not upgrade stale payload"
-grep -E '^# chrome-debug-contract: v4' "${DATA_DIR}/chrome-debug.sh" >/dev/null || fail "apply-if-needed did not restore bundled launcher"
+grep -E '^# chrome-debug-contract: v5' "${DATA_DIR}/chrome-debug.sh" >/dev/null || fail "apply-if-needed did not restore bundled launcher"
 
 bash "${SETUP}" \
   --skip-cli \
@@ -156,5 +156,6 @@ for link in links:
 PY
 
 bash "${SCRIPT_DIR}/test-chrome-debug-load-unpacked.sh"
+bash "${SCRIPT_DIR}/test-chrome-debug-cmux-host.sh"
 
 printf 'test-setup-playwright-cli: PASS\n'

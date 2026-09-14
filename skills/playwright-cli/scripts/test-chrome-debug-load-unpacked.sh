@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TDD coverage for chrome-debug --load-unpacked (contract v4).
+# TDD coverage for chrome-debug --load-unpacked (contract v5).
 # Does not talk to the live collect Chrome on :9222.
 set -euo pipefail
 
@@ -40,10 +40,10 @@ dry_json() {
 
 # --- dry-run contract + flag parsing ---
 base_json="$(dry_json)"
-python3 - "${base_json}" <<'PY' || fail "v4 contract / unsafe-extension flag missing from dry-run json"
+python3 - "${base_json}" <<'PY' || fail "v5 contract / unsafe-extension flag missing from dry-run json"
 import json, sys
 data = json.loads(sys.argv[1])
-assert data["chromeDebugContract"] == "v4", data.get("chromeDebugContract")
+assert data["chromeDebugContract"] == "v5", data.get("chromeDebugContract")
 assert data["launchArgs"].count("--enable-unsafe-extension-debugging") == 1, data["launchArgs"]
 assert data.get("loadUnpackedPaths") == [], data.get("loadUnpackedPaths")
 PY
@@ -52,7 +52,7 @@ load_json="$(dry_json --load-unpacked "${EXT_DIR}")"
 python3 - "${load_json}" "${EXT_DIR}" <<'PY' || fail "dry-run json did not echo --load-unpacked path"
 import json, os, sys
 data = json.loads(sys.argv[1])
-assert data["chromeDebugContract"] == "v4", data
+assert data["chromeDebugContract"] == "v5", data
 paths = data["loadUnpackedPaths"]
 assert len(paths) == 1, paths
 assert os.path.samefile(paths[0], sys.argv[2]), (paths[0], sys.argv[2])

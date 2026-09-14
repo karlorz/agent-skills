@@ -25,9 +25,10 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 ## Responsibilities
 
 - Phase 0: Detect/upgrade `~/.local/bin/chrome-debug` against this skill (`setup-playwright-cli.sh --skip-cli --skip-project-config --apply-if-needed`). Apply managed upgrades; if unmanaged, report `--force-launcher` and stop.
-- Phase 0: Launch Chrome via the installed `chrome-debug` command (default-user profile; optional `--check-port`, `--restart`)
+- Phase 0: Launch Chrome via the installed `chrome-debug` command (default-user profile; optional `--check-port`, `--restart`) **unless** `chrome-debug --json --explain` reports `owned_by_cmux`
+- Phase 0 cmux: when `owned_by_cmux`, attach only. Never `--restart`. Never recycle cmux-devtools Chrome. macos-dev chrome-debug attach stays the default when status is free or `owned_by_profile`.
 - Phase 0 fallback: use `make chrome-debug` only when the global command is unavailable. Do not vendor a second launcher.
-- Phase 0: Kill stale sessions with `playwright-cli kill-all` when attach is stale
+- Phase 0: Kill stale sessions with `playwright-cli kill-all` when attach is stale **and** status is not `owned_by_cmux`
 - Phase 1: Attach via `playwright-cli attach` (or `attach --cdp=http://localhost:9222`)
 - Navigate: `playwright-cli goto <url>`
 - Interact: `playwright-cli snapshot`, `click`, `fill`, `type`, `press`
@@ -55,7 +56,7 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 The orchestrator spawns this agent for mechanical browser tasks:
 
 ```
-Agent(description: "Launch Chrome", model: "haiku", prompt: "First run setup-playwright-cli.sh --skip-cli --skip-project-config --apply-if-needed from PLAYWRIGHT_CLI_PLUGIN_ROOT so ~/.local/bin/chrome-debug matches this skill. Then chrome-debug --check-port; if free run chrome-debug (no profile flags); then playwright-cli attach. Fall back to make chrome-debug only if the global command is unavailable. Do not use --repo-local-profile.")
+Agent(description: "Launch Chrome", model: "haiku", prompt: "First run setup-playwright-cli.sh --skip-cli --skip-project-config --apply-if-needed from PLAYWRIGHT_CLI_PLUGIN_ROOT so ~/.local/bin/chrome-debug matches this skill. Then chrome-debug --json --explain. If portStatus is owned_by_cmux: playwright-cli attach only; never chrome-debug --restart. If free or owned_by_profile (macos-dev): chrome-debug --check-port; if free run chrome-debug (no profile flags); then playwright-cli attach. Fall back to make chrome-debug only if the global command is unavailable. Do not use --repo-local-profile.")
 Agent(description: "Navigate and snapshot", model: "sonnet", prompt: "Go to <url>, wait for load, take a snapshot. Report element refs.")
 Agent(description: "Screenshot page", model: "sonnet", prompt: "Take a full-page screenshot. Save as <filename>.")
 ```
@@ -63,12 +64,12 @@ Agent(description: "Screenshot page", model: "sonnet", prompt: "Take a full-page
 Stale session recovery prompt:
 
 ```
-Agent(description: "Restart Chrome CDP", model: "haiku", prompt: "playwright-cli kill-all; chrome-debug --restart; playwright-cli attach. Keep default-user profile. If an unpacked extension is required, pass chrome-debug --load-unpacked PATH (saved paths are re-applied on restart). Do not start a second pipe-debug Chrome against the collect :9222 profile.")
+Agent(description: "Restart Chrome CDP", model: "haiku", prompt: "Read chrome-debug --json --explain first. If owned_by_cmux: do not --restart; re-attach or diagnose /json/version and /json/list and stop. If owned_by_profile (macos-dev): playwright-cli kill-all; chrome-debug --restart; playwright-cli attach. Keep default-user profile. If an unpacked extension is required, pass chrome-debug --load-unpacked PATH (saved paths are re-applied on restart). Do not start a second pipe-debug Chrome against the collect :9222 profile.")
 ```
 
 ## Error Handling
 
 - Chrome launch failure: report port status (`--check-port` / `--explain`); suggest close personal Chrome if default-user clone is blocked; suggest `--restart` if port owned by debug profile
-- Attach timeout: `playwright-cli kill-all` + `chrome-debug --restart` + attach
+- Attach timeout: if `owned_by_cmux`, diagnose and stop; if `owned_by_profile`, `playwright-cli kill-all` + `chrome-debug --restart` + attach
 - Navigation timeout: report current URL, try reload
 - Stale element refs: re-snapshot before retry

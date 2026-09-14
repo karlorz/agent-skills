@@ -2,7 +2,9 @@
 
 Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
-Contract stamp: **`chrome-debug-contract: v4`** (see `scripts/chrome-debug.sh` header).
+Contract stamp: **`chrome-debug-contract: v5`** (see `scripts/chrome-debug.sh` header).
+
+v5 adds `owned_by_cmux` when the debug-port listener is `cmux-cdp-proxy`. That path is attach-only and **refuses `--restart`**. macos-dev default-user chrome-debug attach (`owned_by_profile` / free → launch) is unchanged.
 
 The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, detached launch, and CDP `Extensions.loadUnpacked`. The one-time setup script installs it as a stable user-level `chrome-debug` command. **Do not vendor a second copy in consumer repos.**
 
@@ -157,13 +159,14 @@ playwright-cli detach
 
 ## Stale attach sessions
 
-If `playwright-cli attach` times out while port 9222 is healthy:
+If `playwright-cli attach` times out while port 9222 is healthy, first read host class:
 
 ```bash
-playwright-cli kill-all
-chrome-debug --restart
-playwright-cli attach
+chrome-debug --json --explain
 ```
+
+- **`owned_by_profile` (macos-dev / normal chrome-debug):** `playwright-cli kill-all` then `chrome-debug --restart` then `playwright-cli attach`. This path stays on.
+- **`owned_by_cmux`:** do **not** `--restart` and do **not** recycle cmux-devtools Chrome. Re-attach once. If it still times out, `curl` `/json/version` and `/json/list`, print the diagnosis, and stop.
 
 ## Unpacked extension debugging (Chrome 137+)
 
