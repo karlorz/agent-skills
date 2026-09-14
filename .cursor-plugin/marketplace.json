@@ -51,6 +51,18 @@
         "re-pin",
         "plugins"
       ]
+    },
+    {
+      "name": "playwright-cli",
+      "source": "skills/playwright-cli",
+      "description": "Playwright CLI setup and browser automation with a user-level chrome-debug command, project config initialization, attach-first global Chrome profile, browser-worker, and Linux/LXC support.",
+      "category": "automation",
+      "tags": [
+        "playwright",
+        "browser",
+        "cdp",
+        "chrome-debug"
+      ]
     }
   ]
 }

@@ -15,6 +15,7 @@ SPECS=(
   deep-research@karlorz-agent-skills
   cursor-box-channel@karlorz-agent-skills
   cursor-github-marketplace-repin@karlorz-agent-skills
+  playwright-cli@karlorz-agent-skills
 )
 
 token_from_keychain() {

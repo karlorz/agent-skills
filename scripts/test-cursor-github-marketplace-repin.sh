@@ -119,6 +119,10 @@ assert_contains "SKILL.md KEEP rempin plugin" "$SKILL_BODY" \
   "cursor-github-marketplace-repin@karlorz-agent-skills"
 assert_contains "helper KEEP rempin plugin" "$INSTALL_BODY" \
   "cursor-github-marketplace-repin@karlorz-agent-skills"
+assert_contains "SKILL.md KEEP playwright-cli" "$SKILL_BODY" \
+  "playwright-cli@karlorz-agent-skills"
+assert_contains "helper KEEP playwright-cli" "$INSTALL_BODY" \
+  "playwright-cli@karlorz-agent-skills"
 [ -f "$CURSOR_MANIFEST" ] || fail "Missing $CURSOR_MANIFEST"
 assert_contains "Cursor manifest name" "$(cat "$CURSOR_MANIFEST")" \
   '"name": "cursor-github-marketplace-repin"'
@@ -127,6 +131,14 @@ assert_contains "Cursor catalog lists rempin" "$MARKET_BODY" \
   '"name": "cursor-github-marketplace-repin"'
 assert_contains "Cursor catalog source" "$MARKET_BODY" \
   '"source": "skills/cursor-github-marketplace-repin"'
+assert_contains "Cursor catalog lists playwright-cli" "$MARKET_BODY" \
+  '"name": "playwright-cli"'
+assert_contains "Cursor catalog playwright-cli source" "$MARKET_BODY" \
+  '"source": "skills/playwright-cli"'
+PLAYWRIGHT_CURSOR_MANIFEST="$ROOT/skills/playwright-cli/.cursor-plugin/plugin.json"
+[ -f "$PLAYWRIGHT_CURSOR_MANIFEST" ] || fail "Missing $PLAYWRIGHT_CURSOR_MANIFEST"
+assert_contains "playwright-cli Cursor manifest name" "$(cat "$PLAYWRIGHT_CURSOR_MANIFEST")" \
+  '"name": "playwright-cli"'
 
 # Case A — both pins match latest tag object / HEAD
 write_list <<JSON
