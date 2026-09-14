@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.3] - 2026-09-14
+
+- Ship `scripts/keep.local.example.json` (extra pin: `playwright-cli`).
+- Document cursor-box local cache lag: rempin + KEEP install on that host.
+
 ## [0.1.2] - 2026-09-14
 
 - KEEP list loads `scripts/keep.default.json`, then overlays

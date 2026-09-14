@@ -115,12 +115,18 @@ locally without a repo PR:
 }
 ```
 
-Write that to `~/.cursor/skills/cursor-github-marketplace-repin/keep.local.json`.
-Merge is `default ∪ extra − drop`. A `drop` name that is not in
-`default ∪ extra` fails closed. Extra specs still fail at install if they
-are missing from the pinned catalog — local config cannot invent a Cursor
-plugin. Tests may set `CURSOR_REPIN_KEEP_FILE` (missing file fails) or
-`CURSOR_REPIN_KEEP_DEFAULT`.
+Write that to `~/.cursor/skills/cursor-github-marketplace-repin/keep.local.json`
+(copy `scripts/keep.local.example.json`). Merge is `default ∪ extra − drop`.
+A `drop` name that is not in `default ∪ extra` fails closed. Extra specs
+still fail at install if they are missing from the pinned catalog — local
+config cannot invent a Cursor plugin. Tests may set `CURSOR_REPIN_KEEP_FILE`
+(missing file fails) or `CURSOR_REPIN_KEEP_DEFAULT`.
+
+On a remote host (cursor-box) the account pin can be current while the
+local marketplace clone is still an old SHA and `playwright-cli` is missing
+from `~/.cursor/plugins/cache/`. After remove+add on that host, run
+`install-keep-plugins.sh` there so the extra pin and KEEP set land in the
+local cache. Do not copy cache dirs while `gitRef` is stale.
 
 | Marketplace | Default KEEP (`keep.default.json`) |
 | --- | --- |
