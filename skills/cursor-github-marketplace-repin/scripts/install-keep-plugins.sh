@@ -8,15 +8,19 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-cursor-agent.sh"
 
 DASHBOARD_BASE="${CURSOR_DASHBOARD_BASE:-https://api2.cursor.sh}"
-SPECS=(
-  skillwiki@llm-wiki
-  vault-sync@llm-wiki
-  grok-search@karlorz-agent-skills
-  deep-research@karlorz-agent-skills
-  cursor-box-channel@karlorz-agent-skills
-  cursor-github-marketplace-repin@karlorz-agent-skills
-  playwright-cli@karlorz-agent-skills
-)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "FAIL: python3 not on PATH" >&2
+  exit 1
+fi
+SPECS=()
+while IFS= read -r spec; do
+  [[ -n "$spec" ]] && SPECS+=("$spec")
+done < <(python3 "$SCRIPT_DIR/resolve-keep.py")
+if [[ ${#SPECS[@]} -eq 0 ]]; then
+  echo "FAIL: resolve-keep.py produced no KEEP specs" >&2
+  exit 1
+fi
 
 token_from_keychain() {
   if [[ -n "${CURSOR_AUTH_TOKEN:-}" ]]; then

@@ -52,8 +52,9 @@ This skill is a **Cursor catalog plugin** on `karlorz-agent-skills`
 `install-keep-plugins.sh` from this repo or from
 `~/.cursor/skills/cursor-github-marketplace-repin/scripts/` so KEEP can
 reinstall it. That home scripts copy is not removed by marketplace
-`remove`. `install-keep-plugins.sh` (`SPECS`) is the KEEP list that
-actually runs.
+`remove`. `install-keep-plugins.sh` loads `scripts/keep.default.json`,
+then overlays `~/.cursor/skills/cursor-github-marketplace-repin/keep.local.json`
+(`extra` ∪, `drop` −). Tests may set `CURSOR_REPIN_KEEP_FILE`.
 
 Read the printed `status:` lines. Do not re-pin from memory or from example
 SHAs in this file.
@@ -103,7 +104,25 @@ After each successful remove+add (or add-only when status is `MISSING`),
 reinstall that marketplace's KEEP plugins. Idempotent. Do not `plugin
 uninstall` KEEP plugins as their own step.
 
-| Marketplace | KEEP plugins |
+Default KEEP is `scripts/keep.default.json` (not a bash `SPECS` array).
+A plugin already in the pinned Cursor catalog can be added or removed
+locally without a repo PR:
+
+```json
+{
+  "extra": ["playwright-cli@karlorz-agent-skills"],
+  "drop": []
+}
+```
+
+Write that to `~/.cursor/skills/cursor-github-marketplace-repin/keep.local.json`.
+Merge is `default ∪ extra − drop`. A `drop` name that is not in
+`default ∪ extra` fails closed. Extra specs still fail at install if they
+are missing from the pinned catalog — local config cannot invent a Cursor
+plugin. Tests may set `CURSOR_REPIN_KEEP_FILE` (missing file fails) or
+`CURSOR_REPIN_KEEP_DEFAULT`.
+
+| Marketplace | Default KEEP (`keep.default.json`) |
 | --- | --- |
 | `llm-wiki` | `skillwiki`, `vault-sync` |
 | `karlorz-agent-skills` | `grok-search`, `deep-research`, `cursor-box-channel`, `cursor-github-marketplace-repin`, `playwright-cli` |

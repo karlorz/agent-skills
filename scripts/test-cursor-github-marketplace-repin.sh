@@ -95,6 +95,8 @@ write_list() {
 # SKILL.md documents the repo-relative script first (sibling exam pattern).
 SKILL_BODY="$(cat "$SKILL_MD")"
 INSTALL_SCRIPT="$ROOT/skills/cursor-github-marketplace-repin/scripts/install-keep-plugins.sh"
+KEEP_DEFAULT="$ROOT/skills/cursor-github-marketplace-repin/scripts/keep.default.json"
+RESOLVE_KEEP="$ROOT/skills/cursor-github-marketplace-repin/scripts/resolve-keep.py"
 assert_contains "SKILL.md repo path" "$SKILL_BODY" \
   "bash skills/cursor-github-marketplace-repin/scripts/status.sh"
 assert_contains "SKILL.md home path" "$SKILL_BODY" \
@@ -111,18 +113,87 @@ assert_contains "helper Dashboard RPC" "$INSTALL_BODY" \
   "InstallUserPlugin"
 assert_contains "helper never prints token env" "$INSTALL_BODY" \
   "Never prints tokens"
+assert_contains "helper loads resolve-keep" "$INSTALL_BODY" \
+  "resolve-keep.py"
+assert_contains "SKILL.md keep.default.json" "$SKILL_BODY" \
+  "scripts/keep.default.json"
+assert_contains "SKILL.md keep.local.json" "$SKILL_BODY" \
+  "keep.local.json"
+assert_contains "SKILL.md extra drop merge" "$SKILL_BODY" \
+  "default ∪ extra − drop"
 assert_contains "SKILL.md KEEP cursor-box-channel" "$SKILL_BODY" \
-  "cursor-box-channel@karlorz-agent-skills"
-assert_contains "helper KEEP cursor-box-channel" "$INSTALL_BODY" \
   "cursor-box-channel@karlorz-agent-skills"
 assert_contains "SKILL.md KEEP rempin plugin" "$SKILL_BODY" \
   "cursor-github-marketplace-repin@karlorz-agent-skills"
-assert_contains "helper KEEP rempin plugin" "$INSTALL_BODY" \
-  "cursor-github-marketplace-repin@karlorz-agent-skills"
 assert_contains "SKILL.md KEEP playwright-cli" "$SKILL_BODY" \
   "playwright-cli@karlorz-agent-skills"
-assert_contains "helper KEEP playwright-cli" "$INSTALL_BODY" \
+[ -f "$KEEP_DEFAULT" ] || fail "Missing $KEEP_DEFAULT"
+[ -f "$RESOLVE_KEEP" ] || fail "Missing $RESOLVE_KEEP"
+KEEP_DEFAULT_BODY="$(cat "$KEEP_DEFAULT")"
+assert_contains "default KEEP cursor-box-channel" "$KEEP_DEFAULT_BODY" \
+  "cursor-box-channel@karlorz-agent-skills"
+assert_contains "default KEEP rempin plugin" "$KEEP_DEFAULT_BODY" \
+  "cursor-github-marketplace-repin@karlorz-agent-skills"
+assert_contains "default KEEP playwright-cli" "$KEEP_DEFAULT_BODY" \
   "playwright-cli@karlorz-agent-skills"
+
+EMPTY_HOME="$FAKE_BIN/empty-home"
+mkdir -p "$EMPTY_HOME"
+OUT_DEFAULT="$(
+  HOME="$EMPTY_HOME" \
+  env -u CURSOR_REPIN_KEEP_FILE -u CURSOR_REPIN_KEEP_DEFAULT \
+  python3 "$RESOLVE_KEEP"
+)" || fail "resolve-keep default exited nonzero"
+assert_contains "resolve default skillwiki" "$OUT_DEFAULT" "skillwiki@llm-wiki"
+assert_contains "resolve default playwright-cli" "$OUT_DEFAULT" "playwright-cli@karlorz-agent-skills"
+assert_not_contains "resolve default no extra" "$OUT_DEFAULT" "not-a-plugin@"
+
+LOCAL_KEEP="$FAKE_BIN/keep.local.json"
+printf '%s\n' '{"extra":["example-extra@karlorz-agent-skills"],"drop":["playwright-cli@karlorz-agent-skills"]}' > "$LOCAL_KEEP"
+OUT_OVERLAY="$(
+  HOME="$EMPTY_HOME" \
+  CURSOR_REPIN_KEEP_FILE="$LOCAL_KEEP" \
+  python3 "$RESOLVE_KEEP"
+)" || fail "resolve-keep overlay exited nonzero"
+assert_contains "overlay extra" "$OUT_OVERLAY" "example-extra@karlorz-agent-skills"
+assert_not_contains "overlay drop" "$OUT_OVERLAY" "playwright-cli@karlorz-agent-skills"
+assert_contains "overlay keeps rempin" "$OUT_OVERLAY" "cursor-github-marketplace-repin@karlorz-agent-skills"
+
+printf '%s\n' '{"extra":[],"drop":["missing-plugin@karlorz-agent-skills"]}' > "$LOCAL_KEEP"
+set +e
+OUT_BAD_DROP="$(
+  HOME="$EMPTY_HOME" \
+  CURSOR_REPIN_KEEP_FILE="$LOCAL_KEEP" \
+  python3 "$RESOLVE_KEEP" 2>&1
+)"
+STATUS_BAD_DROP=$?
+set -e
+[[ "$STATUS_BAD_DROP" -ne 0 ]] || fail "expected fail on unknown drop"
+assert_contains "unknown drop message" "$OUT_BAD_DROP" "not in default ∪ extra"
+
+printf '%s\n' '{"extra":["bad-spec"],"drop":[]}' > "$LOCAL_KEEP"
+set +e
+OUT_BAD_SPEC="$(
+  HOME="$EMPTY_HOME" \
+  CURSOR_REPIN_KEEP_FILE="$LOCAL_KEEP" \
+  python3 "$RESOLVE_KEEP" 2>&1
+)"
+STATUS_BAD_SPEC=$?
+set -e
+[[ "$STATUS_BAD_SPEC" -ne 0 ]] || fail "expected fail on bad spec"
+assert_contains "bad spec message" "$OUT_BAD_SPEC" "bad KEEP spec"
+
+set +e
+OUT_MISSING_FILE="$(
+  HOME="$EMPTY_HOME" \
+  CURSOR_REPIN_KEEP_FILE="$FAKE_BIN/no-such-keep.json" \
+  python3 "$RESOLVE_KEEP" 2>&1
+)"
+STATUS_MISSING_FILE=$?
+set -e
+[[ "$STATUS_MISSING_FILE" -ne 0 ]] || fail "expected fail on missing CURSOR_REPIN_KEEP_FILE"
+assert_contains "missing keep file" "$OUT_MISSING_FILE" "CURSOR_REPIN_KEEP_FILE missing"
+echo "resolve-keep cases passed"
 [ -f "$CURSOR_MANIFEST" ] || fail "Missing $CURSOR_MANIFEST"
 assert_contains "Cursor manifest name" "$(cat "$CURSOR_MANIFEST")" \
   '"name": "cursor-github-marketplace-repin"'
