@@ -47,6 +47,12 @@ For each source, follow the raw-capture pattern below:
 3. **DeepWiki results**: Write Q&A to `raw/articles/<repo>-deepwiki.md`
    - Frontmatter: source_url: <repo-url>, ingested, sha256
 
+4. **Local screenshots / binary assets**: Write files under
+   `raw/assets/<dated-slug>/` and a sibling Markdown note (`listings.md`,
+   `note.md`, or a dated `.md`) that embeds each image with
+   `![[filename.png]]` or `![[raw/assets/<dir>/<file>]]`. Never use
+   `README.txt` as the only index; Obsidian opens Markdown notes, not `.txt`.
+
 **Stop conditions**: If raw capture fails (hash mismatch, write error), STOP and surface error.
 
 ## Typed Knowledge Page
