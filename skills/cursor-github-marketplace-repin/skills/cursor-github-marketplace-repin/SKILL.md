@@ -106,7 +106,7 @@ uninstall` KEEP plugins as their own step.
 | Marketplace | KEEP plugins |
 | --- | --- |
 | `llm-wiki` | `skillwiki`, `vault-sync` |
-| `karlorz-agent-skills` | `grok-search`, `deep-research`, `cursor-box-channel`, `cursor-github-marketplace-repin` |
+| `karlorz-agent-skills` | `grok-search`, `deep-research`, `cursor-box-channel`, `cursor-github-marketplace-repin`, `playwright-cli` |
 
 ```bash
 # try CLI install first (may exist on a future CLI)
@@ -116,6 +116,7 @@ uninstall` KEEP plugins as their own step.
 "$AGENT" plugin install deep-research@karlorz-agent-skills
 "$AGENT" plugin install cursor-box-channel@karlorz-agent-skills
 "$AGENT" plugin install cursor-github-marketplace-repin@karlorz-agent-skills
+"$AGENT" plugin install playwright-cli@karlorz-agent-skills
 
 # if that fails (no install subcommand), use the Dashboard fallback:
 bash skills/cursor-github-marketplace-repin/scripts/install-keep-plugins.sh
@@ -128,10 +129,10 @@ bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/install-keep-plugi
 `cursor-access-token` / `cursor-user`. It never prints the token. Override
 base URL with `CURSOR_DASHBOARD_BASE` only in tests.
 
-`deep-research`, `cursor-box-channel`, and
-`cursor-github-marketplace-repin` must be in the Cursor catalog
-(`.cursor-plugin/marketplace.json` on karlorz/agent-skills), not only the
-Claude catalog. If the helper cannot find those names in
+`deep-research`, `cursor-box-channel`,
+`cursor-github-marketplace-repin`, and `playwright-cli` must be in the
+Cursor catalog (`.cursor-plugin/marketplace.json` on karlorz/agent-skills),
+not only the Claude catalog. If the helper cannot find those names in
 `ListMarketplacePlugins` for `karlorz-agent-skills`, finish the
 karlorz-agent-skills re-pin first, then install.
 
@@ -151,7 +152,7 @@ the karlorz-agent-skills pin includes it in the Cursor catalog.
 Re-run `status.sh` until both groups print `PIN MATCHES`. Then confirm the
 KEEP plugins above are installed again (`skillwiki`, `vault-sync`,
 `grok-search`, `deep-research`, `cursor-box-channel`,
-`cursor-github-marketplace-repin`).
+`cursor-github-marketplace-repin`, `playwright-cli`).
 
 `gitRef` is a 40-character SHA, not the tag string. For llm-wiki annotated
 tags it must equal status.sh `tag=` (tag object). The peeled `commit=` may

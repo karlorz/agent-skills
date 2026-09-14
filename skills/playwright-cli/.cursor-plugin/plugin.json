@@ -1,0 +1,21 @@
+{
+  "name": "playwright-cli",
+  "version": "1.3.5",
+  "description": "Set up and automate playwright-cli (MS command surface ≥0.1.17) with a user-level chrome-debug command, project config initialization, attach-first global Chrome profile, browser-worker, and Linux/LXC support.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "playwright",
+    "browser",
+    "cdp",
+    "automation",
+    "scraping",
+    "chrome-debug",
+    "agent",
+    "browser-worker"
+  ],
+  "skills": "./skills/"
+}
