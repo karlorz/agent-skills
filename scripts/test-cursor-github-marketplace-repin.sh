@@ -121,6 +121,14 @@ assert_contains "SKILL.md keep.local.json" "$SKILL_BODY" \
   "keep.local.json"
 assert_contains "SKILL.md extra drop merge" "$SKILL_BODY" \
   "default ∪ extra − drop"
+KEEP_LOCAL_EXAMPLE="$ROOT/skills/cursor-github-marketplace-repin/scripts/keep.local.example.json"
+[ -f "$KEEP_LOCAL_EXAMPLE" ] || fail "Missing $KEEP_LOCAL_EXAMPLE"
+assert_contains "example extra playwright-cli" "$(cat "$KEEP_LOCAL_EXAMPLE")" \
+  "playwright-cli@karlorz-agent-skills"
+assert_contains "SKILL.md example file" "$SKILL_BODY" \
+  "keep.local.example.json"
+assert_contains "SKILL.md cursor-box cache lag" "$SKILL_BODY" \
+  "cursor-box"
 assert_contains "SKILL.md KEEP cursor-box-channel" "$SKILL_BODY" \
   "cursor-box-channel@karlorz-agent-skills"
 assert_contains "SKILL.md KEEP rempin plugin" "$SKILL_BODY" \
