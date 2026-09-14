@@ -15,10 +15,32 @@ from typing import Mapping
 PRODUCTION_MCP_URL = "https://search.karldigi.dev/mcp"
 TOKEN_ENV = "GROK_SEARCH_MCP_TOKEN"
 URL_ENV = "GROK_SEARCH_MCP_URL"
+# Dead preview listeners. Warn only — never live-probe, never fail the session.
+STALE_PREVIEW_HOSTS = frozenset({"100.76.134.104"})
+STALE_PREVIEW_HOST_PORTS = frozenset({("100.118.12.90", 8800)})
 
 
 def _strip(value: str | None) -> str:
     return (value or "").strip()
+
+
+def _stale_preview_warning(url: str) -> str | None:
+    """Return a warning if URL points at a retired Tailscale/sg01 :8800 preview."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return None
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme == "https" else 80
+    if host in STALE_PREVIEW_HOSTS or (host, port) in STALE_PREVIEW_HOST_PORTS:
+        return (
+            f"{URL_ENV} points at stale grok-search preview {host}:{port}; "
+            f"kr01 production is {PRODUCTION_MCP_URL}. Do not start sg01 :8800."
+        )
+    return None
 
 
 def probe(environ: Mapping[str, str] | None = None) -> dict:
@@ -42,6 +64,10 @@ def probe(environ: Mapping[str, str] | None = None) -> dict:
         url = PRODUCTION_MCP_URL
         migrated = True
         reasons.append(f"{URL_ENV} empty; using {PRODUCTION_MCP_URL}")
+
+    stale = _stale_preview_warning(url)
+    if stale:
+        warnings.append(stale)
 
     return {
         "status": "in_sync",

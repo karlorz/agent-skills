@@ -16,16 +16,14 @@ Operators may store a token at `~/.config/grok-search/http-mcp.token` for conven
 
 ### Operator Endpoints
 
-1. **Production (recommended):** `https://search.karldigi.dev/mcp`
+1. **Production (recommended, kr01 proven):** `https://search.karldigi.dev/mcp`
    - Bearer is a **gateway-keys** token generated from `https://search.karldigi.dev/admin/gateway-keys` (create-once / show-raw-once).
    - Set as `GROK_SEARCH_MCP_TOKEN` in the Claude/Grok process environment, or enter it in Cursor under **Plugins → Configure**.
-2. **Tailscale (preview / fallback):** `http://100.76.134.104:8800/mcp`
-   - Bearer-only: `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`.
-   - Preview / fallback endpoint until kr01 is proven.
-   - Never bind the backend service to `0.0.0.0`.
+2. **Stale Tailscale preview — do not use, do not start on sg01:**
+   - Retired URLs: `http://100.76.134.104:8800/mcp` (old Tailscale IP) and `http://100.118.12.90:8800/mcp` (current sg01 Tailscale, no `:8800` listener).
+   - `scripts/check_readiness.py` emits a `warnings` entry if `GROK_SEARCH_MCP_URL` still points at those hosts. Status stays `in_sync`; the probe never live-checks `:8800` and never starts a service.
 3. **Cloudflare Access (preview / fallback):** `https://search.termolo.com/mcp`
    - Token plus operator-local Access headers (`CF-Access-Client-Id`, `CF-Access-Client-Secret`).
-   - Preview / fallback endpoint until kr01 is proven.
    - Access headers stay operator-local and never belong in plugin JSON.
 
 ### Grok startup boundary
@@ -40,7 +38,7 @@ Upstream x.ai web → grok2api can make the gateway `POST /grok/v1/chat/completi
 
 Inbound /mcp is not the outbound httpx client GrokSearch uses toward Grok/Tavily/Firecrawl.
 
-A SessionStart hook / `scripts/check_readiness.py` checks the token and can write the production URL to Claude's `CLAUDE_ENV_FILE` when available. It does not auto-source `mcp.env`, change Grok's parent MCP environment, or auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`. If the token is unset, the companion skill stops and asks.
+A SessionStart hook / `scripts/check_readiness.py` checks the token and can write the production URL to Claude's `CLAUDE_ENV_FILE` when available. It warns when `GROK_SEARCH_MCP_URL` still names the retired Tailscale/sg01 `:8800` preview. It does not auto-source `mcp.env`, change Grok's parent MCP environment, live-probe sg01, start `:8800`, or auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`. If the token is unset, the companion skill stops and asks.
 
 ## Installation
 

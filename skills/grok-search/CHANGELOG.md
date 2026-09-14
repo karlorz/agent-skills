@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Document kr01 `https://search.karldigi.dev/mcp` as proven production. Mark Tailscale `100.76.134.104:8800` and sg01 `100.118.12.90:8800` as stale previews; do not start a grok-search listener on sg01.
+- `check_readiness.py` warns when `GROK_SEARCH_MCP_URL` still points at those stale preview URLs. Status stays `in_sync`; no live `:8800` probe.
+
 ## [0.1.12] - 2026-09-10
 
 ### Changed

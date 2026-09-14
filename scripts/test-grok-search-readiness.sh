@@ -82,6 +82,43 @@ if out.get("migrated") is True:
     raise SystemExit("explicit URL must not migrate")
 if out.get("url") != "http://127.0.0.1:8800/mcp":
     raise SystemExit(f"explicit url lost: {out!r}")
+if out.get("warnings"):
+    raise SystemExit(f"loopback 8800 is not a stale preview URL: {out!r}")
+
+
+# Stale Tailscale preview IP — warn, stay in_sync, do not live-probe
+env = base_env()
+env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
+env["GROK_SEARCH_MCP_URL"] = "http://100.76.134.104:8800/mcp"
+out = run(env)
+if out.get("status") != "in_sync":
+    raise SystemExit(f"stale tailscale must stay in_sync: {out!r}")
+if out.get("migrated") is True:
+    raise SystemExit("stale explicit URL must not migrate")
+warns = " ".join(out.get("warnings") or [])
+if "stale" not in warns.lower() or "100.76.134.104" not in warns:
+    raise SystemExit(f"stale tailscale must warn: {out!r}")
+
+
+# Current sg01 Tailscale + :8800 — same warning (no listener there)
+env = base_env()
+env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
+env["GROK_SEARCH_MCP_URL"] = "http://100.118.12.90:8800/mcp"
+out = run(env)
+if out.get("status") != "in_sync":
+    raise SystemExit(f"sg01 :8800 must stay in_sync: {out!r}")
+warns = " ".join(out.get("warnings") or [])
+if "stale" not in warns.lower():
+    raise SystemExit(f"sg01 :8800 must warn stale: {out!r}")
+
+
+# Production explicit URL — no stale warning
+env = base_env()
+env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
+env["GROK_SEARCH_MCP_URL"] = "https://search.karldigi.dev/mcp"
+out = run(env)
+if out.get("warnings"):
+    raise SystemExit(f"production URL must not warn stale: {out!r}")
 
 
 # A token stored only in operator mcp.env is not process environment and must not be sourced.
