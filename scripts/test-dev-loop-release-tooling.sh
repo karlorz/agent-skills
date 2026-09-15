@@ -486,6 +486,9 @@ run_playwright_cli_skill_contract_checks() {
   assert_contains "playwright-cli WebMCP call" "$skill" 'webmcp-call'
   assert_contains "playwright-cli PR attachment link" "$skill" '../../references/pr-attachments.md'
   assert_contains "playwright-cli optional WebMCP flag" "$skill" '--enable-features=WebMCP'
+  assert_contains "playwright-cli WebMCP attach warning" "$skill" 'launchOptions` do'
+  assert_contains "playwright-cli WebMCP separate config" "$skill" 'webmcp.config.json'
+  assert_contains "playwright-cli WebMCP status diagnostic" "$skill" 'page status reports how many WebMCP tools'
   assert_contains "playwright-cli setup minimum" "$setup_script" 'MIN_CLI_VERSION="0.1.20"'
   assert_contains "playwright-cli chrome-debug minimum" "$chrome_debug" '≥ 0.1.20'
   assert_contains "playwright-cli idle timeout" "$(cat "$references/session-management.md")" 'open --idle-timeout=<ms>'
@@ -496,6 +499,8 @@ run_playwright_cli_skill_contract_checks() {
   [ -f "$package_root/THIRD-PARTY-NOTICES.md" ] || fail "playwright-cli third-party notice missing"
   assert_contains "playwright-cli notice pinned commit" "$(cat "$package_root/THIRD-PARTY-NOTICES.md")" '12228454ed024c9ac89abd59df3b706ed9135fd9'
   assert_contains "playwright-cli notice Apache" "$(cat "$package_root/THIRD-PARTY-NOTICES.md")" 'Apache License, Version 2.0'
+  assert_contains "playwright-cli notice full upstream references" "$(cat "$package_root/THIRD-PARTY-NOTICES.md")" 'element-attributes.md'
+  assert_contains "playwright-cli notice final upstream reference" "$(cat "$package_root/THIRD-PARTY-NOTICES.md")" 'video-recording.md'
   for manifest in "$package_root/.claude-plugin/plugin.json" "$package_root/.codex-plugin/plugin.json" "$package_root/.cursor-plugin/plugin.json"; do
     assert_eq "$(basename "$(dirname "$manifest")") license" "$(jq -r '.license' "$manifest")" 'MIT AND Apache-2.0'
   done
