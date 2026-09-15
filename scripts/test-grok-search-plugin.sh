@@ -154,6 +154,20 @@ if cursor_manifest.get("hooks") is not None:
     raise SystemExit(f"{cursor_manifest_path}: Cursor package must not expose Claude hooks")
 if claude_manifest.get("hooks") != "./claude-hooks/hooks.json":
     raise SystemExit(f"{manifest_path}: Claude hooks must use isolated claude-hooks path")
+user_config = claude_manifest.get("userConfig")
+if not isinstance(user_config, dict) or "GROK_SEARCH_MCP_TOKEN" not in user_config:
+    raise SystemExit(f"{manifest_path}: userConfig.GROK_SEARCH_MCP_TOKEN missing")
+token_opt = user_config["GROK_SEARCH_MCP_TOKEN"]
+if not isinstance(token_opt, dict):
+    raise SystemExit(f"{manifest_path}: userConfig.GROK_SEARCH_MCP_TOKEN must be an object")
+if token_opt.get("type") != "string":
+    raise SystemExit(f"{manifest_path}: userConfig token type must be string")
+if token_opt.get("required") is not True:
+    raise SystemExit(f"{manifest_path}: userConfig token must be required")
+if token_opt.get("sensitive") is not True:
+    raise SystemExit(f"{manifest_path}: userConfig token must be sensitive")
+if "userConfig" in cursor_manifest:
+    raise SystemExit(f"{cursor_manifest_path}: Cursor package uses variables, not Claude userConfig")
 variables = cursor_manifest.get("variables")
 if not isinstance(variables, dict) or variables.get("type") != "object":
     raise SystemExit(f"{cursor_manifest_path}: variables must be an object schema")
@@ -287,6 +301,10 @@ if "GROK_PLUGIN_ROOT" not in body or "CLAUDE_PLUGIN_ROOT" not in body:
     raise SystemExit(f"{skill_path}: readiness path must support Grok and Claude plugin roots")
 if "Cursor-native" not in body or "does not run the probe" not in body:
     raise SystemExit(f"{skill_path}: must define Cursor-native readiness without a Claude/Grok probe path")
+if "Agent TUI" not in body or "does not auto-interrupt" not in body:
+    raise SystemExit(f"{skill_path}: must state Cursor Agent TUI Configure is pull-not-push")
+if "userConfig" not in body or "in-app" not in body.lower():
+    raise SystemExit(f"{skill_path}: must state Claude userConfig prompts on in-app /plugin install")
 if "HTTP" not in body and "http" not in body:
     raise SystemExit(f"{skill_path}: must mention HTTP MCP")
 if "first-run" not in body.lower() and "first run" not in body.lower():
@@ -326,6 +344,12 @@ if "https://search.termolo.com/mcp" not in readme_text:
 
 if "Plugins" not in readme_text or "Configure" not in readme_text:
     raise SystemExit(f"{readme_path}: Cursor instructions must use Plugins -> Configure for the token variable")
+if "pull-not-push" not in readme_text or "Agent TUI" not in readme_text:
+    raise SystemExit(f"{readme_path}: must document Cursor Agent TUI Configure as pull-not-push")
+if "userConfig" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention Claude userConfig")
+if "does **not** prompt" not in readme_text and "does not prompt" not in readme_text.lower():
+    raise SystemExit(f"{readme_path}: must contrast Claude in-app userConfig prompt vs CLI install")
 if "Cursor process environment" in readme_text:
     raise SystemExit(f"{readme_path}: must not claim Cursor plugin variables come from process env")
 if re.search(r"before starting[^\n.]*\bCursor\b", readme_text, re.IGNORECASE):
