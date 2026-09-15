@@ -25,7 +25,7 @@ example_path = root / "cursor-cli-mcp.example.json"
 changelog_path = root / "CHANGELOG.md"
 cursor_marketplace_path = repo_root / ".cursor-plugin" / "marketplace.json"
 keep_skill_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "skills" / "cursor-github-marketplace-repin" / "SKILL.md"
-keep_install_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "scripts" / "install-keep-plugins.sh"
+keep_default_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "scripts" / "keep.default.json"
 
 texts = {}
 for path in (
@@ -40,7 +40,7 @@ for path in (
     changelog_path,
     cursor_marketplace_path,
     keep_skill_path,
-    keep_install_path,
+    keep_default_path,
 ):
     try:
         texts[path] = path.read_text(encoding="utf-8")
@@ -246,9 +246,9 @@ if "`grok-search`, `deep-research`, `cursor-box-channel`" not in keep_skill:
     raise SystemExit(f"{keep_skill_path}: KEEP table must list grok-search, deep-research, cursor-box-channel")
 if "cursor-box-channel@karlorz-agent-skills" not in keep_skill:
     raise SystemExit(f"{keep_skill_path}: KEEP install commands must include cursor-box-channel@karlorz-agent-skills")
-keep_install = texts[keep_install_path]
-if "cursor-box-channel@karlorz-agent-skills" not in keep_install:
-    raise SystemExit(f"{keep_install_path}: KEEP list must include cursor-box-channel@karlorz-agent-skills")
+keep_default = texts[keep_default_path]
+if "cursor-box-channel@karlorz-agent-skills" not in keep_default:
+    raise SystemExit(f"{keep_default_path}: KEEP list must include cursor-box-channel@karlorz-agent-skills")
 
 # 9. Secret scan — placeholders only, no live tokens
 blob = "".join(

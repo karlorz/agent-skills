@@ -180,12 +180,13 @@ def operator_drift(content: str, parsed: object, grok_home: Path) -> tuple[list[
             )
 
     grok46 = models.get("grok-4.6")
-    pct = grok46.get("auto_compact_threshold_percent") if isinstance(grok46, dict) else None
-    if pct != 48:
-        warnings.append(
-            "[model.\"grok-4.6\"] auto_compact_threshold_percent is not 48 "
-            f"(got {pct!r}) — wiki 2026-09-09 SSOT"
-        )
+    if isinstance(grok46, dict):
+        pct = grok46.get("auto_compact_threshold_percent")
+        if pct != 48:
+            warnings.append(
+                "[model.\"grok-4.6\"] auto_compact_threshold_percent is not 48 "
+                f"(got {pct!r}) — wiki 2026-09-09 SSOT"
+            )
 
     models_tbl = parsed.get("models") if isinstance(parsed, dict) else None
     if isinstance(models_tbl, dict):

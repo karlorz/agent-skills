@@ -314,9 +314,6 @@ disabled = ["frontend-design"]
 server_skill_dirs = []
 bundled_skill_dirs = []
 
-[plan_mode]
-implement_via_subagents = true
-
 [workflows.builtins]
 deep-research = false
 

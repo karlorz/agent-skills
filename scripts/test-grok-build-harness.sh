@@ -67,8 +67,8 @@ python3 -m py_compile "$CHECK_CONFIG" 2>/dev/null \
 run_generate "$TEST_ROOT/with-keys.toml" \
   --hub-key test-hub --new-key test-new --context7-key test-ctx \
   --enabled "superpowers,dev-loop,skillwiki"
-assert_eq "with-keys: 5 hub + 2 new api_key lines" \
-  "$(grep -c 'api_key = "test' "$TEST_ROOT/with-keys.toml")" "7"
+assert_eq "with-keys: 1 hub + 7 new api_key lines" \
+  "$(grep -c 'api_key = "test' "$TEST_ROOT/with-keys.toml")" "8"
 assert_contains "with-keys: context7 key injected" \
   "$(cat "$TEST_ROOT/with-keys.toml")" '"test-ctx"'
 assert_contains "with-keys: enabled list substituted" \
@@ -202,7 +202,7 @@ assert_eq "re-run: all five files identical" \
 assert_eq "re-run: no new backup dir" \
   "$(find "$IDEM_HOME/backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')" "0"
 assert_eq "re-run: config keeps injected keys" \
-  "$(grep -c 'api_key = "idem' "$IDEM_HOME/config.toml")" "7"
+  "$(grep -c 'api_key = "idem' "$IDEM_HOME/config.toml")" "8"
 
 # --- installer: keyed config survives a keyless re-run (ADR-4) ----------------
 GUARD_HOME="$TEST_ROOT/guard-home"
@@ -213,7 +213,7 @@ GUARD_OUT="$(env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
 assert_contains "keyless re-run warns about skipping config render" "$GUARD_OUT" "skipping config render"
 assert_contains "keyless re-run names --force-render" "$GUARD_OUT" "--force-render"
 assert_eq "keyless re-run keeps keyed config untouched" \
-  "$(grep -c 'api_key = "g' "$GUARD_HOME/config.toml")" "7"
+  "$(grep -c 'api_key = "g' "$GUARD_HOME/config.toml")" "8"
 env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
   "$INSTALL" --grok-home "$GUARD_HOME" --skip-plugins --force -y --force-render >/dev/null 2>&1
 assert_eq "--force-render rewrites env-only" \
