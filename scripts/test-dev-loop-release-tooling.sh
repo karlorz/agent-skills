@@ -463,6 +463,46 @@ $package_root/skills/grilling/SKILL.md	grilling
 EOF
 }
 
+run_playwright_cli_skill_contract_checks() {
+  local package_root marketplace skill setup_script chrome_debug references
+  package_root="$ROOT/skills/playwright-cli"
+  marketplace="$ROOT/.claude-plugin/marketplace.json"
+  skill="$(cat "$package_root/skills/playwright-cli/SKILL.md")"
+  setup_script="$(cat "$package_root/scripts/setup-playwright-cli.sh")"
+  chrome_debug="$(cat "$package_root/references/chrome-debug.md")"
+  references="$package_root/references"
+
+  assert_eq "playwright-cli Claude manifest version" \
+    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "1.4.0"
+  assert_eq "playwright-cli Codex manifest version" \
+    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "1.4.0"
+  assert_eq "playwright-cli Cursor manifest version" \
+    "$(read_json_version "$package_root/.cursor-plugin/plugin.json")" "1.4.0"
+  assert_eq "playwright-cli marketplace version" \
+    "$(read_market_version "$marketplace" playwright-cli)" "1.4.0"
+  assert_contains "playwright-cli skill minimum" "$skill" '≥ 0.1.20'
+  assert_contains "playwright-cli recording commands" "$skill" 'recording-start'
+  assert_contains "playwright-cli WebMCP list" "$skill" 'webmcp-list'
+  assert_contains "playwright-cli WebMCP call" "$skill" 'webmcp-call'
+  assert_contains "playwright-cli PR attachment link" "$skill" '../../references/pr-attachments.md'
+  assert_contains "playwright-cli optional WebMCP flag" "$skill" '--enable-features=WebMCP'
+  assert_contains "playwright-cli setup minimum" "$setup_script" 'MIN_CLI_VERSION="0.1.20"'
+  assert_contains "playwright-cli chrome-debug minimum" "$chrome_debug" '≥ 0.1.20'
+  assert_contains "playwright-cli idle timeout" "$(cat "$references/session-management.md")" 'open --idle-timeout=<ms>'
+  assert_contains "playwright-cli tracing output" "$(cat "$references/tracing.md")" '.playwright-cli/traces/'
+  assert_contains "playwright-cli video attachment" "$(cat "$references/video-recording.md")" 'gh pr create'
+  [ -f "$references/pr-attachments.md" ] || fail "playwright-cli PR attachment reference missing"
+  [ -f "$package_root/LICENSE" ] || fail "playwright-cli Apache LICENSE missing"
+  [ -f "$package_root/THIRD-PARTY-NOTICES.md" ] || fail "playwright-cli third-party notice missing"
+  assert_contains "playwright-cli notice pinned commit" "$(cat "$package_root/THIRD-PARTY-NOTICES.md")" '12228454ed024c9ac89abd59df3b706ed9135fd9'
+  assert_contains "playwright-cli notice Apache" "$(cat "$package_root/THIRD-PARTY-NOTICES.md")" 'Apache License, Version 2.0'
+  for manifest in "$package_root/.claude-plugin/plugin.json" "$package_root/.codex-plugin/plugin.json" "$package_root/.cursor-plugin/plugin.json"; do
+    assert_eq "$(basename "$(dirname "$manifest")") license" "$(jq -r '.license' "$manifest")" 'MIT AND Apache-2.0'
+  done
+  assert_not_contains "playwright-cli no stale minimum in skill" "$skill" '0.1.17'
+  assert_not_contains "playwright-cli no stale minimum in setup" "$setup_script" '0.1.17'
+}
+
 run_sdd_execute_worker_adapter_contract_checks() {
   local worker
   worker="$(cat "$ROOT/skills/dev-loop/agents/sdd-execute-worker.md")"
@@ -1211,6 +1251,7 @@ run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_simplify_skill_contract_checks
 run_grill_me_skill_contract_checks
+run_playwright_cli_skill_contract_checks
 run_simplify_worker_adapter_contract_checks
 run_sdd_execute_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks

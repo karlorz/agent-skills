@@ -161,6 +161,11 @@ playwright-cli -s=msedge detach
 
 `detach` only works on sessions created via `attach`. For sessions created via `open`, use `close`.
 
+Headless sessions shut down on their own after an hour without commands; the
+next command reports that the browser is not open, so run `open` again. Headed
+browsers stay open. Use `open --idle-timeout=<ms>` to change the timeout, or `0`
+to disable it.
+
 ## Default Browser Session
 
 When `-s` is omitted, commands use the default browser session:

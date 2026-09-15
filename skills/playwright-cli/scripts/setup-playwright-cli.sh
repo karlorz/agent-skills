@@ -2,7 +2,7 @@
 # Install the user-level chrome-debug launcher and initialize playwright-cli.
 set -euo pipefail
 
-MIN_CLI_VERSION="0.1.17"
+MIN_CLI_VERSION="0.1.20"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_LAUNCHER="${SCRIPT_DIR}/chrome-debug.sh"
 SOURCE_HELPER="${SCRIPT_DIR}/cdp-load-unpacked.py"

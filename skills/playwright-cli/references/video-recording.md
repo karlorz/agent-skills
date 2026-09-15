@@ -128,6 +128,23 @@ Embrace creativity, overlays are powerful.
 | `disposable.dispose()` | Remove a sticky overlay added without duration |
 | `page.screencast.hideOverlays()` / `page.screencast.showOverlays()` | Temporarily hide/show all overlays |
 
+### 3. Attach the recording to the pull request
+
+With `gh` 2.99 or newer, attach a short recording directly when creating a pull
+request or commenting on an existing pull request or issue:
+
+```bash
+gh pr create --title "fix(settings): keep name after save" --body-file body.md \
+  --attach './settings-after.png#Settings page after saving' \
+  --attach ./settings-flow.webm
+
+gh pr comment 123 --body "Recorded the new flow end to end." --attach ./settings-flow.webm
+gh issue comment 456 --body "Failure state after submitting the form." --attach ./failure.png
+```
+
+See [pr-attachments.md](pr-attachments.md) for supported formats, alt text,
+size limits, and CI artifact guidance.
+
 ## Tracing vs Video
 
 | Feature | Video | Tracing |

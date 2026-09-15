@@ -25,7 +25,7 @@ Resolve the installed plugin root from the active skill path, then run:
 bash "$PLAYWRIGHT_CLI_PLUGIN_ROOT/scripts/setup-playwright-cli.sh" --project "$PWD"
 ```
 
-This verifies or installs `@playwright/cli` ≥ 0.1.17, installs the `chrome-debug`
+This verifies or installs `@playwright/cli` ≥ 0.1.20, installs the `chrome-debug`
 command in `${XDG_BIN_HOME:-$HOME/.local/bin}`, copies the launcher into stable
 user data storage, and initializes the current project's `.playwright/cli.config.json`.
 It preserves richer existing configs that already target `http://localhost:9222`.
