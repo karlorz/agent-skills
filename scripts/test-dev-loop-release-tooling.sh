@@ -401,6 +401,8 @@ run_simplify_skill_contract_checks() {
   assert_contains "simplify skill semantic adaptation" "$skill" 'semantic adaptation'
   assert_contains "simplify skill no exact parity claim" "$skill" 'does not claim exact parity'
   assert_contains "simplify skill no Anthropic prompt redistribution" "$skill" 'does not reproduce Anthropic prompt text'
+  assert_contains "simplify skill proprietary compiled boundary" "$skill" 'compiled contents are'
+  assert_contains "simplify skill metadata-only artifact use" "$skill" 'used only for version and package metadata'
   assert_contains "simplify skill provenance review date" "$skill" '2026-09-16'
   assert_contains "simplify skill official artifact" "$skill" '@anthropic-ai/claude-code@2.1.272'
   assert_contains "simplify skill Piebald immutable commit" "$skill" '61212b66ef98bc3b0c6e01a1d6a976a8598536ef'

@@ -3,7 +3,7 @@ name: simplify
 description: Review recent diffs for simplification before commit. Use when asked to simplify, polish, or when dev-loop requires simplify.
 metadata:
   provenance: independently-authored-semantic-adaptation
-  provenance_reviewed: 2026-09-16
+  provenance_reviewed: "2026-09-16"
   official_artifact: "@anthropic-ai/claude-code@2.1.272"
   official_artifact_license: SEE LICENSE IN README.md
   secondary_reference: https://github.com/Piebald-AI/claude-code-system-prompts/tree/61212b66ef98bc3b0c6e01a1d6a976a8598536ef
@@ -20,9 +20,11 @@ four-angle `/simplify` workflow:
 `/simplify -> 4 cleanup agents in parallel -> apply the fixes`
 
 This adaptation does not claim exact parity with a particular Claude Code
-package version and does not reproduce Anthropic prompt text. Provenance was
-reviewed on 2026-09-16 using official versioned Anthropic npm metadata and the
-readable secondary Piebald reference at commit
+package version and does not reproduce Anthropic prompt text. The official npm
+package is used only for version and package metadata; its compiled contents are
+proprietary and are not treated or redistributed as readable prompt source.
+Provenance was reviewed on 2026-09-16 using that metadata and the readable
+secondary Piebald reference at commit
 `61212b66ef98bc3b0c6e01a1d6a976a8598536ef`. That reference identifies the
 four-angle shape as introduced in Claude Code `2.1.154`; its workflow remained
 behaviorally unchanged through the `v2.1.272` snapshot.
