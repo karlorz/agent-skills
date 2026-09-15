@@ -421,6 +421,48 @@ run_simplify_skill_contract_checks() {
   assert_not_contains "simplify skill old quality pass removed" "$skill" 'Pass B: Quality'
 }
 
+run_grill_me_skill_contract_checks() {
+  local package_root marketplace expected_version skill_path expected_name skill
+
+  package_root="$ROOT/skills/grill-me"
+  marketplace="$ROOT/.claude-plugin/marketplace.json"
+  expected_version="1.1.0"
+
+  assert_eq "grill-me Claude manifest version" \
+    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "$expected_version"
+  assert_eq "grill-me Codex manifest version" \
+    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "$expected_version"
+  assert_eq "grill-me marketplace version" \
+    "$(read_market_version "$marketplace" grill-me)" "$expected_version"
+
+  while IFS=$'\t' read -r skill_path expected_name; do
+    [ -f "$skill_path" ] || fail "grill-me canonical skill missing: $skill_path"
+    skill="$(cat "$skill_path")"
+
+    assert_eq "$expected_name frontmatter name" "$(read_frontmatter_name "$skill_path")" "$expected_name"
+    assert_contains "$expected_name design tree" "$skill" 'design tree'
+    assert_contains "$expected_name frontier" "$skill" 'frontier'
+    assert_contains "$expected_name sequential questions" "$skill" 'one question at a time'
+    assert_contains "$expected_name recomputes frontier" "$skill" 'Recompute the frontier'
+    assert_contains "$expected_name facts are agent work" "$skill" "Finding facts is the agent's job"
+    assert_contains "$expected_name fact-only subagents" "$skill" 'subagents may research only factual'
+    assert_contains "$expected_name main-session decisions" "$skill" 'interview and all design decisions remain'
+    assert_contains "$expected_name Claude question tool" "$skill" '`AskUserQuestion`'
+    assert_contains "$expected_name Codex question tool" "$skill" '`ask_user_question`'
+    assert_contains "$expected_name Antigravity question tool" "$skill" '`ask_question`'
+    assert_contains "$expected_name goal unattended guard" "$skill" '`/goal`'
+    assert_contains "$expected_name codex exec unattended guard" "$skill" '`codex exec`'
+    assert_contains "$expected_name scheduled unattended guard" "$skill" 'scheduled runs'
+    assert_contains "$expected_name sequential frontier guard" "$skill" 'Do not ask the whole frontier in one round.'
+    assert_contains "$expected_name confirmation guard" "$skill" 'Do not act on the plan until the user'
+    assert_contains "$expected_name shared understanding" "$skill" 'confirms shared understanding.'
+    assert_not_contains "$expected_name upstream wrapper excluded" "$skill" 'Call the Skill tool with "grilling"'
+  done <<EOF
+$package_root/skills/grill-me/SKILL.md	grill-me
+$package_root/skills/grilling/SKILL.md	grilling
+EOF
+}
+
 run_sdd_execute_worker_adapter_contract_checks() {
   local worker
   worker="$(cat "$ROOT/skills/dev-loop/agents/sdd-execute-worker.md")"
@@ -1168,6 +1210,7 @@ run_bump_version_changelog_checks
 run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_simplify_skill_contract_checks
+run_grill_me_skill_contract_checks
 run_simplify_worker_adapter_contract_checks
 run_sdd_execute_worker_adapter_contract_checks
 run_dev_loop_dependency_contract_checks

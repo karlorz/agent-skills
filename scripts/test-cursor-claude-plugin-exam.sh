@@ -274,8 +274,8 @@ trap 'rm -rf "$FAKE_HOME_A" "$FAKE_HOME_B" "$FAKE_HOME_B2" "$FAKE_HOME_C" "$FAKE
 
 mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skillwiki"
 mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/.claude-plugin"
-mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/.claude-plugin"
-mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/skills/grill-me"
+mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.1.0/.claude-plugin"
+mkdir -p "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.1.0/skills/grill-me"
 cat > "$FAKE_HOME_E/.claude/settings.json" <<'JSON'
 {
   "enabledPlugins": {
@@ -296,14 +296,14 @@ cat > "$FAKE_HOME_E/.claude/plugins/cache/llm-wiki/skillwiki/0.10.56/using-skill
 name: using-skillwiki
 ---
 MD
-cat > "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/.claude-plugin/plugin.json" <<'JSON'
+cat > "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.1.0/.claude-plugin/plugin.json" <<'JSON'
 {
   "name": "grill-me",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "skills": "./skills/"
 }
 JSON
-cat > "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.0.1/skills/grill-me/SKILL.md" <<'MD'
+cat > "$FAKE_HOME_E/.claude/plugins/cache/karlorz-agent-skills/grill-me/1.1.0/skills/grill-me/SKILL.md" <<'MD'
 ---
 name: grill-me
 ---
@@ -371,7 +371,7 @@ cat > "$FAKE_HOME_F/.claude/plugins/marketplaces/karlorz-agent-skills/.claude-pl
     {
       "name": "grill-me",
       "source": "./skills/grill-me",
-      "version": "1.0.0"
+      "version": "1.1.0"
     }
   ]
 }
@@ -379,7 +379,7 @@ JSON
 cat > "$FAKE_HOME_F/.claude/plugins/marketplaces/karlorz-agent-skills/skills/grill-me/.claude-plugin/plugin.json" <<'JSON'
 {
   "name": "grill-me",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "skills": "./skills/"
 }
 JSON
