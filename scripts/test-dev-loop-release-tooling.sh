@@ -479,7 +479,7 @@ run_brainstorming_skill_contract_checks() {
 
   package_root="$ROOT/skills/brainstorming"
   marketplace="$ROOT/.claude-plugin/marketplace.json"
-  expected_version="0.1.0"
+  expected_version="0.1.1"
   skill_path="$package_root/skills/brainstorming/SKILL.md"
 
   assert_eq "brainstorming Claude manifest version" \
@@ -497,6 +497,28 @@ run_brainstorming_skill_contract_checks() {
   assert_contains "brainstorming spike path" "$skill" '**Spike**'
   assert_contains "brainstorming bounded path" "$skill" '**Bounded**'
   assert_contains "brainstorming architectural path" "$skill" '**Architectural**'
+  assert_contains "brainstorming question sequence versus total budget" "$skill" \
+    'One question per message is a presentation rule, not a total discovery budget.'
+  assert_contains "brainstorming spike question budget" "$skill" \
+    '**Spike:** ask zero discovery questions when safe, reversible defaults are sufficient; ask at most one blocking discovery question'
+  assert_contains "brainstorming bounded question budget" "$skill" \
+    '**Bounded:** ask at most two high-impact discovery questions.'
+  assert_contains "brainstorming bounded third question requires upgrade" "$skill" \
+    'A Bounded path never asks a third; if a third answer is genuinely blocking, announce the hidden complexity and upgrade to Architectural before asking it.'
+  assert_contains "brainstorming architectural budget exception" "$skill" \
+    '**Architectural:** continue beyond two discovery questions only while the next unresolved answer materially affects scope, safety, architecture, data ownership, or acceptance criteria.'
+  assert_contains "brainstorming budget exhaustion synthesis" "$skill" \
+    'When the budget is exhausted, stop discovery, choose conservative and reversible defaults, label each remaining choice as an assumption, synthesize the path-appropriate design or probe, and move to its approval gate.'
+  assert_contains "brainstorming interview fatigue stop" "$skill" \
+    'If the user says the interview is too long, says there are too many questions, or otherwise asks to stop questioning, stop immediately.'
+  assert_contains "brainstorming fatigue recovery approval" "$skill" \
+    'Present the synthesized design with one final approval gate.'
+  assert_contains "brainstorming fatigue recovery architectural reviews" "$skill" \
+    'this replaces per-section review prompts for the current design pass; the later written-spec review still applies as artifact verification, not discovery.'
+  assert_contains "brainstorming budget excludes review prompts" "$skill" \
+    'The budget counts discovery and clarifying questions only.'
+  assert_contains "brainstorming design clarification obeys budget" "$skill" \
+    'Any return to discovery still follows the question budget:'
   assert_contains "brainstorming approval hard gate" "$skill" 'Do NOT invoke any implementation skill'
   assert_contains "brainstorming attended contract" "$skill" 'attended main session'
   assert_contains "brainstorming unattended contract" "$skill" '`/goal`, `codex exec`, CI, scheduled, headless'

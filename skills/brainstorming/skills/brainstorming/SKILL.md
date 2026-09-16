@@ -178,6 +178,20 @@ is the whole process.
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
 
+**Question budget:**
+
+Questions are a cost, not the objective. One question per message is a presentation rule, not a total discovery budget.
+
+- **Spike:** ask zero discovery questions when safe, reversible defaults are sufficient; ask at most one blocking discovery question before presenting the probe and approval request.
+- **Bounded:** ask at most two high-impact discovery questions. A Bounded path never asks a third; if a third answer is genuinely blocking, announce the hidden complexity and upgrade to Architectural before asking it.
+- **Architectural:** continue beyond two discovery questions only while the next unresolved answer materially affects scope, safety, architecture, data ownership, or acceptance criteria. Before exceeding two, explain why the next answer is blocking. Stop when the remaining uncertainty can be handled by reversible assumptions.
+
+The budget counts discovery and clarifying questions only. It does not count a visual-companion offer, browser feedback, design-section review, or a required approval prompt.
+
+When the budget is exhausted, stop discovery, choose conservative and reversible defaults, label each remaining choice as an assumption, synthesize the path-appropriate design or probe, and move to its approval gate. Do not exceed a default budget merely to make the design more complete.
+
+If the user says the interview is too long, says there are too many questions, or otherwise asks to stop questioning, stop immediately. Summarize confirmed answers, fill remaining gaps with labeled conservative assumptions, and do not ask another discovery question. Present the synthesized design with one final approval gate. On the Architectural path, this replaces per-section review prompts for the current design pass; the later written-spec review still applies as artifact verification, not discovery.
+
 **Exploring approaches:**
 
 - Propose 2-3 different approaches with trade-offs
@@ -191,7 +205,7 @@ is the whole process.
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
 - Ask after each section whether it looks right so far
 - Cover: architecture, components, data flow, error handling, testing
-- Be ready to go back and clarify if something doesn't make sense
+- Be ready to revise if something does not make sense. Any return to discovery still follows the question budget: upgrade a Bounded path before a third question, and exceed two on an Architectural path only for a material blocker.
 
 **Design for isolation and clarity:**
 

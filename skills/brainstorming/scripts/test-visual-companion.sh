@@ -5,10 +5,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKILL_ROOT="$ROOT/skills/brainstorming"
 START="$SKILL_ROOT/scripts/start-server.sh"
 STOP="$SKILL_ROOT/scripts/stop-server.sh"
+PLUGIN_MANIFEST="$ROOT/.codex-plugin/plugin.json"
 
 command -v node >/dev/null 2>&1 || { echo "node is required" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 1; }
+
+expected_version="$(jq -r '.version' "$PLUGIN_MANIFEST")"
+[[ -n "$expected_version" && "$expected_version" != "null" ]]
 
 tmp="$(mktemp -d)"
 project="$tmp/project"
@@ -72,7 +76,7 @@ for _ in {1..30}; do
   sleep 0.1
 done
 grep -Fq 'Visual companion smoke test' "$tmp/screen.html"
-grep -Fq 'Brainstorming Companion v0.1.0' "$tmp/screen.html"
+grep -Fq "Brainstorming Companion v$expected_version" "$tmp/screen.html"
 grep -Fq 'toggleSelect' "$tmp/screen.html"
 if grep -Fq 'primeradiant.com' "$tmp/screen.html"; then
   echo "external branding must be disabled by default" >&2

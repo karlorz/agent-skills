@@ -64,7 +64,7 @@
       "name": "brainstorming",
       "source": "./skills/brainstorming",
       "description": "Explore intent, requirements, alternatives, and design before creative implementation, with approval gates and an optional browser visual companion.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "productivity",
       "keywords": [
         "brainstorming",

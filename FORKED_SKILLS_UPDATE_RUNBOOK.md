@@ -588,6 +588,11 @@ tree, not only `SKILL.md`. The maintained runtime surface includes
 - attended main-session interviewing and deterministic unattended refusal;
 - caller-provided or SkillWiki-managed specification paths;
 - no automatic specification commit;
+- bounded discovery-question budgets: Spike asks zero or one blocking question,
+  Bounded asks at most two high-impact questions by default, and Architectural
+  work exceeds two only for materially design-changing unresolved answers;
+- immediate interview-fatigue recovery: stop questioning, label conservative
+  assumptions, synthesize, and present one final approval gate;
 - complete optional browser companion with per-question visual selection;
 - keyed HTTP and WebSocket access plus containment checks;
 - repository-approved `.superpowers/sdd/<work-id>/brainstorm/` persistence;
@@ -598,6 +603,8 @@ Treat server, helper, frame, lifecycle scripts, and companion documentation as
 one versioned unit. For every upstream change, record a per-file Accept, Adapt,
 Reject, or Defer decision. A new upstream default path, branding URL, telemetry
 policy, planning handoff, or browser-launch behavior is a semantic change.
+A change to the discovery-question budget, one-question-per-message rule,
+blocking exception, or fatigue stop condition is also a semantic change.
 
 ### Version and validation checklist
 

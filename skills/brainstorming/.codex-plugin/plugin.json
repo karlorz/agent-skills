@@ -1,6 +1,6 @@
 {
   "name": "brainstorming",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Explore intent, requirements, alternatives, and design before creative implementation, with approval gates and an optional browser visual companion.",
   "author": {
     "name": "karlorz"
