@@ -15,12 +15,23 @@ project="$tmp/project"
 mkdir -p "$project"
 session_dir=""
 
+on_error() {
+  local line="$1"
+  echo "test-visual-companion: failed at line $line" >&2
+  sed -n "${line}p" "${BASH_SOURCE[0]}" >&2 || true
+  if [[ -n "$session_dir" && -f "$session_dir/state/server.log" ]]; then
+    echo "--- server.log ---" >&2
+    sed -n '1,240p' "$session_dir/state/server.log" >&2 || true
+  fi
+}
+
 cleanup() {
   if [[ -n "$session_dir" && -d "$session_dir" ]]; then
     bash "$STOP" "$session_dir" >/dev/null 2>&1 || true
   fi
   rm -rf "$tmp"
 }
+trap 'on_error "$LINENO"' ERR
 trap cleanup EXIT
 
 unset BRAINSTORM_ENABLE_TELEMETRY
