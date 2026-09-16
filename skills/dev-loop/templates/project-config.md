@@ -818,8 +818,8 @@ interview:
 | Backend | Type | Provides | Install |
 |---------|------|----------|---------|
 | `native` | Built-in | `work_item_interview` | None (always available) |
-| `grill-with-docs` | External | `setup_interview` (glossary), `work_item_interview` | `npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y` |
-| `grill-me` | External | `work_item_interview` | `npx skills@latest add mattpocock/skills --skill grill-me -a claude-code -g -y` |
+| `grill-with-docs` | Marketplace adapter | `setup_interview` (glossary), `work_item_interview` | Install `grill-me`, `domain-modeling`, and `grill-with-docs` from `karlorz-agent-skills` |
+| `grill-me` | Marketplace plugin | `work_item_interview` | Install `grill-me` from `karlorz-agent-skills` |
 | `setup-dev-loop` | Bundled | `setup_interview` | None (bundled with dev-loop) |
 
 **Trigger modes:**

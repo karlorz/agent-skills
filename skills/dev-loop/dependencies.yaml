@@ -136,15 +136,21 @@ optional:
 
   # --- Interview layer ---
   - kind: skill
-    ref: grill-with-docs
+    ref: grill-with-docs:grill-with-docs
     capability: setup_glossary + work_item_interview_upgrade
     used_by: ["setup-dev-loop Section D", "GRILL step 2b"]
     fallback: "native 3-question interview (built-in)"
 
   - kind: skill
-    ref: grill-me
+    ref: domain-modeling:domain-modeling
+    capability: glossary_and_adr_companion
+    used_by: ["grill-with-docs dependency"]
+    fallback: "grill-with-docs unavailable; use native interview without persistent domain docs"
+
+  - kind: skill
+    ref: grill-me:grilling
     capability: work_item_interview_upgrade
-    used_by: ["GRILL step 2b"]
+    used_by: ["GRILL step 2b", "grill-with-docs dependency"]
     fallback: "native 3-question interview (built-in)"
 
   # --- Quality / hygiene ---

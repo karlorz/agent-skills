@@ -4,10 +4,10 @@ description: Review recent diffs for simplification before commit. Use when aske
 metadata:
   provenance: independently-authored-semantic-adaptation
   provenance_reviewed: "2026-09-16"
-  official_artifact: "@anthropic-ai/claude-code@2.1.272"
+  official_artifact: "@anthropic-ai/claude-code@2.1.273"
   official_artifact_license: SEE LICENSE IN README.md
-  secondary_reference: https://github.com/Piebald-AI/claude-code-system-prompts/tree/61212b66ef98bc3b0c6e01a1d6a976a8598536ef
-  secondary_reference_commit: 61212b66ef98bc3b0c6e01a1d6a976a8598536ef
+  secondary_reference: https://github.com/Piebald-AI/claude-code-system-prompts/tree/c10ea52363b3fce1ebfc355565412711e9e82bc1
+  secondary_reference_commit: c10ea52363b3fce1ebfc355565412711e9e82bc1
   secondary_reference_cc_version: 2.1.154
 ---
 
@@ -25,9 +25,9 @@ package is used only for version and package metadata; its compiled contents are
 proprietary and are not treated or redistributed as readable prompt source.
 Provenance was reviewed on 2026-09-16 using that metadata and the readable
 secondary Piebald reference at commit
-`61212b66ef98bc3b0c6e01a1d6a976a8598536ef`. That reference identifies the
+`c10ea52363b3fce1ebfc355565412711e9e82bc1`. That reference identifies the
 four-angle shape as introduced in Claude Code `2.1.154`; its workflow remained
-behaviorally unchanged through the `v2.1.272` snapshot.
+behaviorally unchanged through the `v2.1.273` snapshot.
 
 This is not a correctness-bug hunt. Review for reuse, simplification,
 efficiency, and altitude issues; leave bug-finding to code review or debugging

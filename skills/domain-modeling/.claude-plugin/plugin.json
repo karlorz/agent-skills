@@ -1,0 +1,19 @@
+{
+  "name": "domain-modeling",
+  "version": "0.1.0",
+  "description": "Build and sharpen a project's domain model while maintaining precise glossary terms and recording only qualifying architectural decisions.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "domain-modeling",
+    "glossary",
+    "context",
+    "adr",
+    "architecture",
+    "skillwiki",
+    "codex"
+  ],
+  "skills": "./skills/"
+}

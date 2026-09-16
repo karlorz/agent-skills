@@ -83,13 +83,14 @@ An attended office-hours mode that consumes one ranked audit report, asks unreso
 Delivered scope whose remaining observation is opt-in post-release verification. It is not ordinary active implementation work and resurfaces only after an approved verification trigger.
 
 **Native interview**:
-The built-in minimal interview — three fixed `AskUserQuestion` calls (scope, constraints, acceptance criteria). Always available, zero dependencies. The fallback when no external interview backend is installed.
+The built-in minimal interview — three fixed `AskUserQuestion` calls (scope, constraints, acceptance criteria). Always available, zero dependencies. The fallback when no marketplace interview backend is installed.
 
 **Ambiguity detection**:
 The heuristic dev-loop uses to decide whether a work item needs grilling. Hybrid approach: user can force with `grill: true | false` in the work item; if unset, a pre-spec scan checks for conflicting prior decisions, zero prior art, or vague language.
 
 **Interview backend**:
-A pluggable implementation that satisfies the interview capability contract. Two types: `native` (bundled, zero-dependency) and `external` (installed from a source like `mattpocock/skills`). Declared in the `interview` top-level config section.
+A pluggable implementation that satisfies the interview capability contract. Two types: `native` (bundled, zero-dependency) and `marketplace` (installed as a maintained plugin package with explicit dependencies). Declared in the `interview` top-level config section.
+_Avoid_: External interview backend, upstream skill copy
 
 **Config-based registry**:
 The `interview` config block that maps capability names to skill names, sources, and install hints. Enables dev-loop to invoke external skills by name and tell the user how to install them if missing.

@@ -404,8 +404,8 @@ run_simplify_skill_contract_checks() {
   assert_contains "simplify skill proprietary compiled boundary" "$skill" 'compiled contents are'
   assert_contains "simplify skill metadata-only artifact use" "$skill" 'used only for version and package metadata'
   assert_contains "simplify skill provenance review date" "$skill" '2026-09-16'
-  assert_contains "simplify skill official artifact" "$skill" '@anthropic-ai/claude-code@2.1.272'
-  assert_contains "simplify skill Piebald immutable commit" "$skill" '61212b66ef98bc3b0c6e01a1d6a976a8598536ef'
+  assert_contains "simplify skill official artifact" "$skill" '@anthropic-ai/claude-code@2.1.273'
+  assert_contains "simplify skill Piebald immutable commit" "$skill" 'c10ea52363b3fce1ebfc355565412711e9e82bc1'
   assert_contains "simplify skill introduced shape" "$skill" '2.1.154'
   assert_not_contains "simplify skill stale exact parity removed" "$skill" 'matches the Claude Code `/simplify` v2.1.199 shape'
   assert_contains "simplify skill phase 0" "$skill" '## Phase 0 - Gather the diff'
@@ -472,6 +472,151 @@ run_grill_me_skill_contract_checks() {
 $package_root/skills/grill-me/SKILL.md	grill-me
 $package_root/skills/grilling/SKILL.md	grilling
 EOF
+}
+
+run_brainstorming_skill_contract_checks() {
+  local package_root marketplace expected_version skill_path skill visual_guide server start_script reviewer
+
+  package_root="$ROOT/skills/brainstorming"
+  marketplace="$ROOT/.claude-plugin/marketplace.json"
+  expected_version="0.1.0"
+  skill_path="$package_root/skills/brainstorming/SKILL.md"
+
+  assert_eq "brainstorming Claude manifest version" \
+    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "$expected_version"
+  assert_eq "brainstorming Codex manifest version" \
+    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "$expected_version"
+  assert_eq "brainstorming marketplace version" \
+    "$(read_market_version "$marketplace" brainstorming)" "$expected_version"
+
+  [ -f "$skill_path" ] || fail "brainstorming canonical skill missing"
+  skill="$(cat "$skill_path")"
+  assert_eq "brainstorming frontmatter name" "$(read_frontmatter_name "$skill_path")" "brainstorming"
+  assert_contains "brainstorming pinned upstream" "$skill" 'b36e0829c6d0140e93cfef2ca599b1b07d4a7797'
+  assert_contains "brainstorming semantic adaptation" "$skill" 'provenance: semantic-adaptation'
+  assert_contains "brainstorming spike path" "$skill" '**Spike**'
+  assert_contains "brainstorming bounded path" "$skill" '**Bounded**'
+  assert_contains "brainstorming architectural path" "$skill" '**Architectural**'
+  assert_contains "brainstorming approval hard gate" "$skill" 'Do NOT invoke any implementation skill'
+  assert_contains "brainstorming attended contract" "$skill" 'attended main session'
+  assert_contains "brainstorming unattended contract" "$skill" '`/goal`, `codex exec`, CI, scheduled, headless'
+  assert_contains "brainstorming SkillWiki routing" "$skill" '`skillwiki:proj-work`'
+  assert_contains "brainstorming caller path routing" "$skill" 'caller-provided specification path'
+  assert_not_contains "brainstorming no Superpowers spec path" "$skill" 'docs/superpowers/'
+  assert_contains "brainstorming visual companion offer" "$skill" 'This offer MUST be its own message.'
+  assert_contains "brainstorming package-relative visual guide" "$skill" \
+    '[`visual-companion.md`](./visual-companion.md)'
+
+  visual_guide="$(cat "$package_root/skills/brainstorming/visual-companion.md")"
+  server="$(cat "$package_root/skills/brainstorming/scripts/server.cjs")"
+  start_script="$(cat "$package_root/skills/brainstorming/scripts/start-server.sh")"
+  reviewer="$(cat "$package_root/skills/brainstorming/spec-document-reviewer-prompt.md")"
+  for asset in \
+    visual-companion.md \
+    spec-document-reviewer-prompt.md \
+    scripts/frame-template.html \
+    scripts/helper.js \
+    scripts/server.cjs \
+    scripts/start-server.sh \
+    scripts/stop-server.sh; do
+    [ -f "$package_root/skills/brainstorming/$asset" ] ||
+      fail "brainstorming visual companion asset missing: $asset"
+  done
+  [ -f "$package_root/scripts/test-visual-companion.sh" ] ||
+    fail "brainstorming visual companion smoke test missing"
+  assert_contains "brainstorming approved scratch root" "$visual_guide" '.superpowers/sdd/<work-id>/brainstorm'
+  assert_contains "brainstorming visual guide complete URL" "$visual_guide" 'complete URL'
+  assert_contains "brainstorming visual guide events" "$visual_guide" '$STATE_DIR/events'
+  assert_contains "brainstorming server telemetry opt-in" "$server" 'BRAINSTORM_ENABLE_TELEMETRY'
+  assert_contains "brainstorming server local branding" "$server" 'Brainstorming Companion v'
+  assert_contains "brainstorming remote image remains opt-in" "$server" 'BRAINSTORM_TELEMETRY_ENABLED'
+  assert_contains "brainstorming launcher approved scratch root" "$start_script" '.superpowers/sdd'
+  assert_contains "brainstorming reviewer uses supplied spec" "$reviewer" '[SPEC_FILE_PATH]'
+  assert_not_contains "brainstorming reviewer no hardcoded spec path" "$reviewer" 'docs/superpowers/'
+  [ -f "$package_root/LICENSE" ] || fail "brainstorming MIT LICENSE missing"
+  [ -f "$package_root/THIRD-PARTY-NOTICES.md" ] || fail "brainstorming third-party notice missing"
+}
+
+run_domain_modeling_skill_contract_checks() {
+  local package_root marketplace expected_version skill_path skill context_format adr_format openai
+
+  package_root="$ROOT/skills/domain-modeling"
+  marketplace="$ROOT/.claude-plugin/marketplace.json"
+  expected_version="0.1.0"
+  skill_path="$package_root/skills/domain-modeling/SKILL.md"
+
+  assert_eq "domain-modeling Claude manifest version" \
+    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "$expected_version"
+  assert_eq "domain-modeling Codex manifest version" \
+    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "$expected_version"
+  assert_eq "domain-modeling marketplace version" \
+    "$(read_market_version "$marketplace" domain-modeling)" "$expected_version"
+
+  [ -f "$skill_path" ] || fail "domain-modeling canonical skill missing"
+  skill="$(cat "$skill_path")"
+  context_format="$(cat "$package_root/skills/domain-modeling/CONTEXT-FORMAT.md")"
+  adr_format="$(cat "$package_root/skills/domain-modeling/ADR-FORMAT.md")"
+  openai="$(cat "$package_root/skills/domain-modeling/agents/openai.yaml")"
+  assert_eq "domain-modeling frontmatter name" "$(read_frontmatter_name "$skill_path")" "domain-modeling"
+  assert_contains "domain-modeling pinned upstream" "$skill" '959a8e9f1edc3adbe2f7e3054bb6fbefa6696260'
+  assert_contains "domain-modeling semantic adaptation" "$skill" 'provenance: semantic-adaptation'
+  assert_contains "domain-modeling active discipline" "$skill" 'This is the *active* discipline'
+  assert_contains "domain-modeling lazy files" "$skill" 'Create files lazily'
+  assert_contains "domain-modeling local mode" "$skill" 'Local-domain mode'
+  assert_contains "domain-modeling SkillWiki mode" "$skill" 'SkillWiki mode'
+  assert_contains "domain-modeling managed publisher" "$skill" '`skillwiki:proj-decide`'
+  assert_contains "domain-modeling glossary boundary" "$skill" 'glossary and nothing else'
+  assert_contains "domain-modeling hard-to-reverse gate" "$skill" '**Hard to reverse**'
+  assert_contains "domain-modeling surprising gate" "$skill" '**Surprising without context**'
+  assert_contains "domain-modeling trade-off gate" "$skill" '**The result of a real trade-off**'
+  assert_contains "domain-modeling context avoid list" "$context_format" '_Avoid_:'
+  assert_contains "domain-modeling context map" "$context_format" 'CONTEXT-MAP.md'
+  assert_contains "domain-modeling ADR three gates" "$adr_format" 'All three of these must be true'
+  assert_contains "domain-modeling OpenAI display name" "$openai" 'display_name: "Domain Modeling"'
+  [ -f "$package_root/LICENSE" ] || fail "domain-modeling MIT LICENSE missing"
+  [ -f "$package_root/THIRD-PARTY-NOTICES.md" ] || fail "domain-modeling third-party notice missing"
+}
+
+run_grill_with_docs_skill_contract_checks() {
+  local package_root marketplace expected_version skill_path skill openai
+
+  package_root="$ROOT/skills/grill-with-docs"
+  marketplace="$ROOT/.claude-plugin/marketplace.json"
+  expected_version="0.1.0"
+  skill_path="$package_root/skills/grill-with-docs/SKILL.md"
+
+  assert_eq "grill-with-docs Claude manifest version" \
+    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "$expected_version"
+  assert_eq "grill-with-docs Codex manifest version" \
+    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "$expected_version"
+  assert_eq "grill-with-docs marketplace version" \
+    "$(read_market_version "$marketplace" grill-with-docs)" "$expected_version"
+
+  [ -f "$skill_path" ] || fail "grill-with-docs canonical skill missing"
+  skill="$(cat "$skill_path")"
+  openai="$(cat "$package_root/skills/grill-with-docs/agents/openai.yaml")"
+  assert_eq "grill-with-docs frontmatter name" "$(read_frontmatter_name "$skill_path")" "grill-with-docs"
+  assert_eq "grill-with-docs permits model invocation" \
+    "$(read_frontmatter_field "$skill_path" disable-model-invocation)" ""
+  assert_contains "grill-with-docs pinned upstream" "$skill" '959a8e9f1edc3adbe2f7e3054bb6fbefa6696260'
+  assert_contains "grill-with-docs semantic adaptation" "$skill" 'provenance: semantic-adaptation'
+  assert_contains "grill-with-docs grilling dependency" "$skill" '`grill-me:grilling`'
+  assert_contains "grill-with-docs domain dependency" "$skill" '`domain-modeling:domain-modeling`'
+  assert_contains "grill-with-docs missing dependency behavior" "$skill" 'If either dependency is unavailable'
+  assert_contains "grill-with-docs attended main session" "$skill" 'attended main session'
+  assert_contains "grill-with-docs result contract" "$skill" 'Requirements and decisions summary'
+  assert_contains "grill-with-docs SkillWiki routing" "$skill" 'SkillWiki'
+  assert_not_contains "grill-with-docs no generic Skill tool" "$skill" 'Call the Skill tool twice'
+  assert_contains "grill-with-docs OpenAI display name" "$openai" 'display_name: "Grill with Docs"'
+  assert_contains "grill-with-docs OpenAI implicit invocation" "$openai" 'allow_implicit_invocation: true'
+  [ ! -e "$package_root/skills/grilling/SKILL.md" ] ||
+    fail "grill-with-docs must not package a duplicate grilling skill"
+  assert_contains "grill-with-docs README grill dependency" "$(cat "$package_root/README.md")" \
+    'codex plugin add grill-me@karlorz-agent-skills'
+  assert_contains "grill-with-docs README domain dependency" "$(cat "$package_root/README.md")" \
+    'codex plugin add domain-modeling@karlorz-agent-skills'
+  [ -f "$package_root/LICENSE" ] || fail "grill-with-docs MIT LICENSE missing"
+  [ -f "$package_root/THIRD-PARTY-NOTICES.md" ] || fail "grill-with-docs third-party notice missing"
 }
 
 run_playwright_cli_skill_contract_checks() {
@@ -614,6 +759,36 @@ expect_entry(
     },
     ["EXECUTE step 5 preferred subagent adapter for superpowers:subagent-driven-development"],
 )
+
+expect_entry(
+    "grill-with-docs:grill-with-docs",
+    {
+        "kind": "skill",
+        "capability": "setup_glossary + work_item_interview_upgrade",
+        "fallback": "native 3-question interview (built-in)",
+    },
+    ["setup-dev-loop Section D", "GRILL step 2b"],
+)
+
+expect_entry(
+    "domain-modeling:domain-modeling",
+    {
+        "kind": "skill",
+        "capability": "glossary_and_adr_companion",
+        "fallback": "grill-with-docs unavailable; use native interview without persistent domain docs",
+    },
+    ["grill-with-docs dependency"],
+)
+
+expect_entry(
+    "grill-me:grilling",
+    {
+        "kind": "skill",
+        "capability": "work_item_interview_upgrade",
+        "fallback": "native 3-question interview (built-in)",
+    },
+    ["GRILL step 2b", "grill-with-docs dependency"],
+)
 PY
 }
 
@@ -626,6 +801,14 @@ run_dev_loop_prep_prompt_contract_checks() {
   config_example="$(cat "$ROOT/.claude/dev-loop.config.example.md")"
 
   assert_contains "dev-loop parses prep mode" "$prompt" 'MODE = prep'
+  assert_contains "dev-loop qualified grill-with-docs drift fallback" "$prompt" \
+    '`grill-with-docs:grill-with-docs`, `grill-me:grilling`, or'
+  assert_contains "dev-loop qualified domain-modeling drift fallback" "$prompt" \
+    '`domain-modeling:domain-modeling` is in `DEP_DRIFT`'
+  assert_contains "dev-loop qualified grilling drift fallback" "$prompt" \
+    'If `grill-me:grilling` is in `DEP_DRIFT`'
+  assert_contains "dev-loop invokes maintained grilling backend" "$prompt" \
+    'load `grill-me:grilling`'
   assert_contains "dev-loop dispatches prep mode" "$prompt" '**`prep`**'
   assert_contains "dev-loop references preflight inventory helper" "$prompt" 'preflight-inventory.js'
   assert_contains "dev-loop status mode documented" "$prompt" 'MODE = status'
@@ -1267,6 +1450,9 @@ run_doctor_prompt_contract_checks
 run_sync_script_contract_checks
 run_simplify_skill_contract_checks
 run_grill_me_skill_contract_checks
+run_brainstorming_skill_contract_checks
+run_domain_modeling_skill_contract_checks
+run_grill_with_docs_skill_contract_checks
 run_playwright_cli_skill_contract_checks
 run_simplify_worker_adapter_contract_checks
 run_sdd_execute_worker_adapter_contract_checks
@@ -1298,6 +1484,8 @@ run_ci_workflow_contract_checks() {
 
   assert_contains "CI runs grok-search plugin test" "$(cat "$ci_workflow")" "bash scripts/test-grok-search-plugin.sh"
   assert_contains "CI runs cursor-box-channel plugin test" "$(cat "$ci_workflow")" "bash scripts/test-cursor-box-channel-plugin.sh"
+  assert_contains "CI runs brainstorming visual companion smoke test" "$(cat "$ci_workflow")" \
+    "bash skills/brainstorming/scripts/test-visual-companion.sh"
 }
 run_ci_workflow_contract_checks
 

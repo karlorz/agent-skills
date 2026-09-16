@@ -2,6 +2,11 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.26.37] - 2026-09-16
+
+- Resolve the maintained `grill-with-docs`, `grill-me:grilling`, and `domain-modeling:domain-modeling` marketplace packages through cross-harness skill discovery instead of stale direct-install paths.
+- Document the composed interview backend dependencies and preserve the native interview fallback when any dependency is unavailable.
+
 ## [1.26.36] - 2026-09-04
 
 - Preflight inventory now parses YAML folded/literal block scalars (`>`, `|`) so `status: completed` after `description: >` is not dropped as `missing_status` hygiene.

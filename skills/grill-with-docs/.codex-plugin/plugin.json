@@ -1,0 +1,11 @@
+{
+  "name": "grill-with-docs",
+  "version": "0.1.0",
+  "description": "Relentlessly sharpen a plan one question at a time while maintaining its canonical glossary and recording only qualifying ADRs.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": ["grill-with-docs", "grilling", "interview", "domain-modeling", "glossary", "adr", "skillwiki", "codex", "codex-app"],
+  "skills": "./skills/"
+}

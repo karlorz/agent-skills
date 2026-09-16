@@ -53,6 +53,9 @@ jobs:
       - name: Run plugin metadata regression fixtures
         run: bash scripts/test-plugin-metadata.sh
 
+      - name: Run brainstorming visual companion smoke test
+        run: bash skills/brainstorming/scripts/test-visual-companion.sh
+
       - name: Run Claude→Cursor plugin exam checks
         run: bash scripts/test-cursor-claude-plugin-exam.sh
 

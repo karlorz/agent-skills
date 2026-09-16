@@ -30,9 +30,12 @@ Look at the current repo to understand its starting state:
 - `CONTEXT.md` and `CONTEXT-MAP.md` at repo root
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `./.claude/dev-loop.config.md` — does it already exist?
-- Installed skills — `ls ~/.claude/skills/` for available PRD backends.
+- Installed skills — use the current harness's skill/plugin discovery and the
+  dependency doctor below; do not assume Claude's standalone skill directory.
   Installation proves availability, never activation.
-- Installed interview backends — check for `grill-with-docs`, `grill-me` under `~/.claude/skills/`
+- Installed interview backends — resolve `grill-with-docs:grill-with-docs`,
+  `domain-modeling:domain-modeling`, and `grill-me:grilling` through current
+  harness discovery.
 - `skillwiki path` — is a vault configured?
 - **Dependency doctor** — spawn `dev-loop:doctor-worker` (sonnet) to enumerate
   missing optional plugins:
@@ -109,9 +112,9 @@ Ask:
 
 > Explainer: A shared language document (CONTEXT.md) helps agents use precise terminology instead of 20 words where 1 will do. Invest 5 minutes now — it pays off every session.
 
-If `grill-with-docs` is installed, tell the user: "I'll now invoke grill-with-docs to build the project glossary." Load it via `Skill("grill-with-docs")` and follow its interview process. When it finishes, resume here.
+If `grill-with-docs:grill-with-docs`, `grill-me:grilling`, and `domain-modeling:domain-modeling` are installed, tell the user: "I'll now invoke grill-with-docs to build the project glossary." Load the adapter through the current harness's skill mechanism and follow its attended interview process. When it finishes, resume here.
 
-If `grill-with-docs` is NOT installed, tell the user: "For a richer glossary-building experience, install grill-with-docs: `npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y`. For now, I'll capture key terms in CONTEXT.md manually." Then ask 2-3 domain questions and write a basic CONTEXT.md.
+If the adapter or either dependency is missing, tell the user: "For a richer glossary-building experience, install `grill-me`, `domain-modeling`, and `grill-with-docs` from `karlorz-agent-skills`. For now, I'll use the native interview without persistent domain docs." Then ask 2-3 domain questions and follow the active knowledge-layer policy.
 
 **Section E — Interview config.**
 
@@ -122,8 +125,8 @@ Present the available backends:
 | Backend | Install | When to pick |
 |---------|---------|--------------|
 | `native` | None (always available) | Quick alignment, CI contexts, minimal interaction |
-| `grill-with-docs` | `npx skills@latest add mattpocock/skills --skill grill-with-docs -a claude-code -g -y` | Codebases you'll revisit, building shared language |
-| `grill-me` | `npx skills@latest add mattpocock/skills --skill grill-me -a claude-code -g -y` | Adaptive questioning without persistent docs |
+| `grill-with-docs` | Claude: install `grill-me`, `domain-modeling`, and `grill-with-docs` with `claude plugin install <name>@karlorz-agent-skills`; Codex: use `codex plugin add <name>@karlorz-agent-skills` | Codebases you'll revisit, building shared language |
+| `grill-me` | Claude: `claude plugin install grill-me@karlorz-agent-skills`; Codex: `codex plugin add grill-me@karlorz-agent-skills` | Adaptive questioning without persistent docs |
 
 Default posture:
 - Propose `native` — always works, no install required

@@ -1,0 +1,21 @@
+{
+  "name": "brainstorming",
+  "version": "0.1.0",
+  "description": "Explore intent, requirements, alternatives, and design before creative implementation, with approval gates and an optional browser visual companion.",
+  "author": {
+    "name": "karlorz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "brainstorming",
+    "design",
+    "specification",
+    "approval-gate",
+    "visual-companion",
+    "mockups",
+    "architecture",
+    "skillwiki",
+    "codex"
+  ],
+  "skills": "./skills/"
+}

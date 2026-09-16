@@ -1,8 +1,9 @@
 # Forked Skill Update Runbook
 
-Use this runbook to review and update the locally packaged `grill-me`,
-`playwright-cli`, and `simplify` skills without losing their Claude, Codex, or
-Cursor marketplace adaptations.
+Use this runbook to review and update the locally packaged `brainstorming`,
+`domain-modeling`, `grill-me`, `grill-with-docs`, `playwright-cli`, and
+`simplify` skills without losing their Claude, Codex, or Cursor marketplace
+adaptations.
 
 The central rule is: **an upstream update is a semantic rebase, not a directory
 copy**. Resolve and record an immutable upstream artifact, compare it with the
@@ -37,7 +38,7 @@ Keep these invariants throughout every update:
    `SKILL.md` mirrors; Grok and other loaders may register both copies and
    produce duplicate commands.
 4. Keep package versions independent from upstream versions. For example,
-   local `playwright-cli` plugin `1.3.6` and upstream `@playwright/cli` `0.1.20`
+   local `playwright-cli` plugin `1.4.0` and upstream `@playwright/cli` `0.1.20`
    are separate version streams.
 5. Treat root `.claude-plugin/marketplace.json` as required Codex discovery
    metadata. A `.codex-plugin/plugin.json` alone does not make a package
@@ -59,14 +60,30 @@ latest immutable source during a future update.
 
 | Local package | Primary authority | Verified baseline | License evidence | Local lineage and boundary |
 |---|---|---|---|---|
+| `brainstorming` | [`obra/superpowers`](https://github.com/obra/superpowers), path `skills/brainstorming/` | `b36e0829c6d0140e93cfef2ca599b1b07d4a7797` (`v6.3.0`) | Repository root `LICENSE`, MIT | Local package preserves the three-path approval workflow and complete visual companion. It adapts specification routing, attended/unattended behavior, scratch storage, package branding, and external telemetry defaults. |
+| `domain-modeling` | [`mattpocock/skills`](https://github.com/mattpocock/skills), path `skills/engineering/domain-modeling/` | `959a8e9f1edc3adbe2f7e3054bb6fbefa6696260` on `main` | Repository root `LICENSE`, MIT | Local package preserves glossary and ADR discipline while adding explicit repository-local and SkillWiki-managed storage modes. |
 | `grill-me` | [`mattpocock/skills`](https://github.com/mattpocock/skills), paths `skills/productivity/grill-me/` and `skills/productivity/grilling/` | `959a8e9f1edc3adbe2f7e3054bb6fbefa6696260` on `main` | Repository root `LICENSE`, MIT | Local package preserves an older sequential, one-question-at-a-time interview and adds Claude/Codex/Antigravity tool selection plus unattended-session behavior. Current upstream uses a thin `grill-me` wrapper and a round/frontier-based `grilling` implementation, so it is not a drop-in replacement. |
+| `grill-with-docs` | [`mattpocock/skills`](https://github.com/mattpocock/skills), path `skills/engineering/grill-with-docs/` | `959a8e9f1edc3adbe2f7e3054bb6fbefa6696260` on `main` | Repository root `LICENSE`, MIT | Upstream is a generic Skill-tool wrapper. Local package composes the separately maintained `grill-me:grilling` and `domain-modeling:domain-modeling` packages and adds availability, attended-session, SkillWiki, and caller-result contracts. |
 | `playwright-cli` | [`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli), especially `skills/playwright-cli/`; npm package [`@playwright/cli`](https://registry.npmjs.org/@playwright%2fcli) | tag `v0.1.20`, commit `12228454ed024c9ac89abd59df3b706ed9135fd9`, npm `0.1.20` | Repository `LICENSE` and `package.json`, Apache-2.0 | The Microsoft skill and reference docs are the upstream surface. Attach-first Chrome, global-profile behavior, `chrome-debug`, cmux ownership handling, setup scripts, config, tests, and `browser-worker` are local overlays. |
-| `simplify` | Anthropic's versioned [`@anthropic-ai/claude-code`](https://registry.npmjs.org/@anthropic-ai%2fclaude-code) wrapper/native npm artifacts are the strongest behavioral artifacts. [`Piebald-AI/claude-code-system-prompts`](https://github.com/Piebald-AI/claude-code-system-prompts) is a readable secondary extraction/reference. | Local behavior names Claude Code `2.1.199`. That npm version remains fetchable. Piebald tag `v2.1.199` points to commit `1c1bf5957a0e38697c78157da1de02adf9daaa18`, but its simplify file says the prompt was introduced at `ccVersion: 2.1.154`. | Anthropic package: `SEE LICENSE IN README.md` / Anthropic legal agreements and all-rights-reserved notice. Piebald repository: MIT. | The local skill is an independently packaged, expanded adaptation of the four-angle workflow. Neither Piebald's MIT license nor npm availability should be treated as permission to redistribute newly extracted Anthropic text verbatim. |
+| `simplify` | Anthropic's versioned [`@anthropic-ai/claude-code`](https://registry.npmjs.org/@anthropic-ai%2fclaude-code) wrapper/native npm artifacts are the strongest behavioral artifacts. [`Piebald-AI/claude-code-system-prompts`](https://github.com/Piebald-AI/claude-code-system-prompts) is a readable secondary extraction/reference. | Official package `2.1.273`; Piebald tag `v2.1.273` resolves to `c10ea52363b3fce1ebfc355565412711e9e82bc1`. The readable file records the four-angle shape as introduced at `ccVersion: 2.1.154`. | Anthropic package: `SEE LICENSE IN README.md` / Anthropic legal agreements and all-rights-reserved notice. Piebald repository: MIT. | The local skill is an independently packaged, expanded adaptation of the four-angle workflow. Neither Piebald's MIT license nor npm availability should be treated as permission to redistribute newly extracted Anthropic text verbatim. |
 
 ### Verified baseline references
 
 These immutable or versioned references support the baseline above:
 
+- `brainstorming`:
+  [`obra/superpowers@b36e082`](https://github.com/obra/superpowers/commit/b36e0829c6d0140e93cfef2ca599b1b07d4a7797),
+  pinned
+  [`SKILL.md`](https://raw.githubusercontent.com/obra/superpowers/b36e0829c6d0140e93cfef2ca599b1b07d4a7797/skills/brainstorming/SKILL.md),
+  pinned
+  [`visual-companion.md`](https://raw.githubusercontent.com/obra/superpowers/b36e0829c6d0140e93cfef2ca599b1b07d4a7797/skills/brainstorming/visual-companion.md),
+  pinned `skills/brainstorming/scripts/` tree, and pinned
+  [`LICENSE`](https://raw.githubusercontent.com/obra/superpowers/b36e0829c6d0140e93cfef2ca599b1b07d4a7797/LICENSE).
+- `domain-modeling` and `grill-with-docs`:
+  [`mattpocock/skills@959a8e9`](https://github.com/mattpocock/skills/commit/959a8e9f1edc3adbe2f7e3054bb6fbefa6696260),
+  pinned `skills/engineering/domain-modeling/` and
+  `skills/engineering/grill-with-docs/` trees, and pinned
+  [`LICENSE`](https://raw.githubusercontent.com/mattpocock/skills/959a8e9f1edc3adbe2f7e3054bb6fbefa6696260/LICENSE).
 - `grill-me`:
   [`mattpocock/skills@959a8e9`](https://github.com/mattpocock/skills/commit/959a8e9f1edc3adbe2f7e3054bb6fbefa6696260),
   pinned
@@ -87,15 +104,15 @@ These immutable or versioned references support the baseline above:
   `sha512-kEL+73IwNVFmUjGn0rmpBStZ8jju8MmmWBMXmVMesBzoZ8YW2b/Nv7aCOYLBrCbYzc7RvWZCbVj88+wOCg8yyw==`.
 - `simplify`:
   versioned
-  [`@anthropic-ai/claude-code@2.1.199` registry metadata](https://registry.npmjs.org/@anthropic-ai%2fclaude-code/2.1.199),
+  [`@anthropic-ai/claude-code@2.1.273` registry metadata](https://registry.npmjs.org/@anthropic-ai%2fclaude-code/2.1.273),
   the platform artifact used by the prior local extraction,
-  [`@anthropic-ai/claude-code-darwin-arm64@2.1.199`](https://registry.npmjs.org/@anthropic-ai%2fclaude-code-darwin-arm64/2.1.199),
+  [`@anthropic-ai/claude-code-darwin-arm64@2.1.273`](https://registry.npmjs.org/@anthropic-ai%2fclaude-code-darwin-arm64/2.1.273),
   and Piebald's tagged
-  [`v2.1.199` simplify reference](https://raw.githubusercontent.com/Piebald-AI/claude-code-system-prompts/v2.1.199/system-prompts/agent-prompt-simplify-slash-command.md).
+  [`v2.1.273` simplify reference](https://raw.githubusercontent.com/Piebald-AI/claude-code-system-prompts/v2.1.273/system-prompts/agent-prompt-simplify-slash-command.md).
   The official wrapper integrity was
-  `sha512-iQzR49drod55y9NiJHTWt7vSSO85LDvMymEzpO+RTDar+TCsNbE2d2+dj1O57D2rWVA5z0Qhqv0j3K0LvY1exA==`;
+  `sha512-ym42/WNRf6H43FQdIPigvzzTW0DeQ1CPqrTdYnAlkWVGj8x8NaysCE0TU148mb3lpny5yo1/94+7dQK5USmBEQ==`;
   the Darwin ARM64 artifact integrity was
-  `sha512-i3xy/5XCgV+fQmgMQHDkqLp5JuP0/WGpAXxXirQOprcnkXlY/UreKq51AZHxxFDL3VMBYoDVQXIdtTsfPGiUoA==`.
+  `sha512-t4P6JivTVJXsxfPATL4L9IZUR0Aar7O436MWkgWWvhvXDvLjd/oCdTTPkgK+Xj80gB+Nq/hyXD/9svLACa5ZSg==`.
 
 Always query the registry or Git remote again during an update. These links
 prove the recorded baseline; they do not mean it remains the newest release.
@@ -278,6 +295,12 @@ notice obligations.
 
 Known gates:
 
+- `brainstorming`: upstream is MIT. Preserve the applicable notice for the
+  copied runtime bundle. Keep external Prime Radiant branding traffic opt-in;
+  do not silently restore the upstream telemetry default during a rebase.
+- `domain-modeling` and `grill-with-docs`: upstream is MIT. Preserve the
+  copyright and permission notice, the SkillWiki/local storage adapter, and the
+  package-qualified dependency boundary.
 - `grill-me`: upstream is MIT; preserve the applicable copyright and permission
   notice when copying substantial upstream material.
 - `playwright-cli`: Microsoft upstream is Apache-2.0 while current local plugin
@@ -297,8 +320,11 @@ redistribution questions for legal review.
 Current canonical skill paths are:
 
 ```text
+skills/brainstorming/skills/brainstorming/SKILL.md
+skills/domain-modeling/skills/domain-modeling/SKILL.md
 skills/grill-me/skills/grill-me/SKILL.md
 skills/grill-me/skills/grilling/SKILL.md
+skills/grill-with-docs/skills/grill-with-docs/SKILL.md
 skills/playwright-cli/skills/playwright-cli/SKILL.md
 skills/simplify/skills/simplify/SKILL.md
 ```
@@ -306,8 +332,11 @@ skills/simplify/skills/simplify/SKILL.md
 Do not create these historical duplicate layouts:
 
 ```text
+skills/brainstorming/SKILL.md
+skills/domain-modeling/SKILL.md
 skills/grill-me/SKILL.md
 skills/grill-me/grilling/SKILL.md
+skills/grill-with-docs/SKILL.md
 skills/playwright-cli/SKILL.md
 skills/simplify/SKILL.md
 ```
@@ -334,7 +363,10 @@ Update every applicable version-bearing file in the same commit.
 
 | Package | Package manifests | Root marketplace | Other release metadata |
 |---|---|---|---|
+| `brainstorming` | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | `.claude-plugin/marketplace.json` | `CHANGELOG.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md`, visual companion smoke test |
+| `domain-modeling` | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | `.claude-plugin/marketplace.json` | `CHANGELOG.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md`, `agents/openai.yaml` |
 | `grill-me` | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | `.claude-plugin/marketplace.json` | `skills/grill-me/CHANGELOG.md` |
+| `grill-with-docs` | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | `.claude-plugin/marketplace.json` | `CHANGELOG.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md`, `agents/openai.yaml`; review both dependency package versions |
 | `playwright-cli` | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `.cursor-plugin/plugin.json` | `.claude-plugin/marketplace.json`; verify `.cursor-plugin/marketplace.json` remains correct even though its current entry has no version field | package tests and any user-facing minimum `@playwright/cli` version |
 | `simplify` | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | `.claude-plugin/marketplace.json` | `agents/openai.yaml` only if its interface text changed |
 
@@ -346,7 +378,8 @@ Validate JSON immediately after editing:
 ```bash
 jq empty .claude-plugin/marketplace.json
 jq empty .cursor-plugin/marketplace.json
-find skills/grill-me skills/playwright-cli skills/simplify \
+find skills/brainstorming skills/domain-modeling skills/grill-me \
+  skills/grill-with-docs skills/playwright-cli skills/simplify \
   -path '*/plugin.json' -type f -print0 \
   | xargs -0 -n1 jq empty
 ```
@@ -354,10 +387,11 @@ find skills/grill-me skills/playwright-cli skills/simplify \
 Check the synchronized version values explicitly:
 
 ```bash
-jq -r '.plugins[] | select(.name == "grill-me" or .name == "playwright-cli" or .name == "simplify") | [.name, .version] | @tsv' \
+jq -r '.plugins[] | select(.name == "brainstorming" or .name == "domain-modeling" or .name == "grill-me" or .name == "grill-with-docs" or .name == "playwright-cli" or .name == "simplify") | [.name, .version] | @tsv' \
   .claude-plugin/marketplace.json
 
-find skills/grill-me skills/playwright-cli skills/simplify \
+find skills/brainstorming skills/domain-modeling skills/grill-me \
+  skills/grill-with-docs skills/playwright-cli skills/simplify \
   -path '*/plugin.json' -type f -print0 \
   | xargs -0 -n1 jq -r '[.name, .version] | @tsv'
 ```
@@ -394,8 +428,15 @@ For `playwright-cli` changes:
 bash skills/playwright-cli/scripts/test-setup-playwright-cli.sh
 ```
 
-For `grill-me` and `simplify`, the release-tooling suite currently contains the
-important layout, inventory, description, and simplify-contract assertions.
+For `brainstorming`, run its runtime smoke test before the shared suite:
+
+```bash
+bash skills/brainstorming/scripts/test-visual-companion.sh
+```
+
+For `domain-modeling`, `grill-me`, `grill-with-docs`, and `simplify`, the
+release-tooling suite contains the important layout, inventory, description,
+dependency, routing, and behavior-contract assertions.
 Add a focused package test when an update introduces behavior that the shared
 suite cannot verify.
 
@@ -523,6 +564,122 @@ different skill names.
 - add a dated entry to `skills/grill-me/CHANGELOG.md`;
 - preserve `skills: "./skills/"`;
 - run the complete repository-required and CI description-budget checks.
+
+## Package procedure: `brainstorming`
+
+### Authoritative source
+
+```text
+Repository: https://github.com/obra/superpowers.git
+Upstream tree: skills/brainstorming/
+Baseline commit: b36e0829c6d0140e93cfef2ca599b1b07d4a7797
+License: repository root LICENSE, MIT
+```
+
+Resolve the current immutable revision and compare every file in the upstream
+tree, not only `SKILL.md`. The maintained runtime surface includes
+`visual-companion.md`, `spec-document-reviewer-prompt.md`, `scripts/server.cjs`,
+`scripts/helper.js`, `scripts/start-server.sh`, `scripts/stop-server.sh`, and
+`scripts/frame-template.html`.
+
+### Local behavior to preserve deliberately
+
+- spike, bounded, and architectural paths with a mandatory approval gate;
+- attended main-session interviewing and deterministic unattended refusal;
+- caller-provided or SkillWiki-managed specification paths;
+- no automatic specification commit;
+- complete optional browser companion with per-question visual selection;
+- keyed HTTP and WebSocket access plus containment checks;
+- repository-approved `.superpowers/sdd/<work-id>/brainstorm/` persistence;
+- no external branding request unless `BRAINSTORM_ENABLE_TELEMETRY=1` is set;
+- no automatic browser launch before the user accepts the companion.
+
+Treat server, helper, frame, lifecycle scripts, and companion documentation as
+one versioned unit. For every upstream change, record a per-file Accept, Adapt,
+Reject, or Defer decision. A new upstream default path, branding URL, telemetry
+policy, planning handoff, or browser-launch behavior is a semantic change.
+
+### Version and validation checklist
+
+- synchronize Claude and Codex manifests plus the root marketplace entry;
+- update `CHANGELOG.md` and `THIRD-PARTY-NOTICES.md` when provenance changes;
+- run `node --check` on `server.cjs` and `helper.js`;
+- run `bash skills/brainstorming/scripts/test-visual-companion.sh`;
+- run the complete repository-required and description-budget checks.
+
+## Package procedure: `domain-modeling`
+
+### Authoritative source
+
+```text
+Repository: https://github.com/mattpocock/skills.git
+Upstream tree: skills/engineering/domain-modeling/
+Baseline commit: 959a8e9f1edc3adbe2f7e3054bb6fbefa6696260
+License: repository root LICENSE, MIT
+```
+
+Compare `SKILL.md`, `CONTEXT-FORMAT.md`, `ADR-FORMAT.md`, and
+`agents/openai.yaml` as one source surface.
+
+### Local behavior to preserve deliberately
+
+- active terminology challenges, concrete edge-case scenarios, and code checks;
+- glossary-only `CONTEXT.md` content and lazy file creation;
+- the three-part ADR threshold;
+- explicit Local-domain mode versus SkillWiki mode;
+- `skillwiki:proj-decide` for qualifying SkillWiki decisions;
+- refusal to fall back to raw vault mutation when the managed publisher is
+  unavailable.
+
+### Version and validation checklist
+
+- synchronize Claude and Codex manifests plus the root marketplace entry;
+- keep both format references adjacent to the canonical nested skill;
+- update the OpenAI interface file only when its displayed contract changes;
+- run the focused domain-modeling checks in the release-tooling suite;
+- run the complete repository-required and description-budget checks.
+
+## Package procedure: `grill-with-docs`
+
+### Authoritative source and dependency boundary
+
+```text
+Repository: https://github.com/mattpocock/skills.git
+Upstream tree: skills/engineering/grill-with-docs/
+Baseline commit: 959a8e9f1edc3adbe2f7e3054bb6fbefa6696260
+Dependencies: grill-me:grilling and domain-modeling:domain-modeling
+License: repository root LICENSE, MIT
+```
+
+The upstream file is intentionally a generic wrapper. Do not copy the
+`grilling` or `domain-modeling` implementation into this package. Those
+capabilities have separate canonical packages and update histories.
+
+### Local behavior to preserve deliberately
+
+- package-qualified dependency names and explicit installation commands;
+- model invocation permitted for configured dev-loop selection despite the
+  upstream user-only wrapper policy;
+- one attended main-session interview with fact-only scout delegation;
+- inline glossary updates through the active storage mode;
+- qualifying ADRs only;
+- caller-facing requirements and decisions summary;
+- SkillWiki managed-write and work-item routing;
+- deterministic missing-dependency and unattended-session behavior.
+
+Review upstream changes to all three participating skills before changing the
+adapter. A `grilling` or `domain-modeling` behavior change may require a
+compatible `grill-with-docs` release even when its tiny upstream wrapper did not
+change.
+
+### Version and validation checklist
+
+- synchronize Claude and Codex manifests plus the root marketplace entry;
+- verify the adapter does not package a duplicate `grilling` skill;
+- review installed versions of both dependency packages;
+- update `CHANGELOG.md`, README installation instructions, and notices;
+- run the focused dependency and result-contract checks;
+- run the complete repository-required and description-budget checks.
 
 ## Package procedure: `playwright-cli`
 
@@ -653,7 +810,7 @@ Secondary file: system-prompts/agent-prompt-simplify-slash-command.md
 Inspect official versioned metadata without installing or executing it:
 
 ```bash
-CLAUDE_CODE_VERSION=2.1.199
+CLAUDE_CODE_VERSION=2.1.273
 CLAUDE_CODE_SPEC="@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
 npm view --json "$CLAUDE_CODE_SPEC" \
   name version license engines scripts optionalDependencies dist
@@ -671,7 +828,7 @@ Inspect the secondary reference at a matching immutable tag or commit:
 
 ```bash
 PIEBALD_REPO=https://github.com/Piebald-AI/claude-code-system-prompts.git
-PIEBALD_REF=v2.1.199
+PIEBALD_REF=v2.1.273
 PIEBALD_SHA="$(git ls-remote "$PIEBALD_REPO" "refs/tags/$PIEBALD_REF^{}" | awk '{print $1}')"
 
 if test -z "$PIEBALD_SHA"; then

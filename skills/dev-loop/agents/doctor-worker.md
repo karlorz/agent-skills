@@ -214,7 +214,7 @@ Final `status` field combines probe 1's classification with probe 3's escalation
     {"kind": "skill", "ref": "skillwiki:proj-work", "capability": "create_work_item", "used_by": ["WORK step 2"]}
   ],
   "missing_optional": [
-    {"kind": "skill", "ref": "grill-with-docs", "capability": "...", "used_by": ["..."], "fallback": "native 3-question interview"}
+    {"kind": "skill", "ref": "grill-with-docs:grill-with-docs", "capability": "...", "used_by": ["..."], "fallback": "native 3-question interview"}
   ],
   "present_count": 22,
   "missing_count": 3,

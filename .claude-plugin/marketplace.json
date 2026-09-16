@@ -48,7 +48,7 @@
       "name": "simplify",
       "source": "./skills/simplify",
       "description": "Code review for reuse, simplification, efficiency, and altitude",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "category": "code-quality",
       "keywords": [
         "simplify",
@@ -61,10 +61,28 @@
       ]
     },
     {
+      "name": "brainstorming",
+      "source": "./skills/brainstorming",
+      "description": "Explore intent, requirements, alternatives, and design before creative implementation, with approval gates and an optional browser visual companion.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "keywords": [
+        "brainstorming",
+        "design",
+        "specification",
+        "approval-gate",
+        "visual-companion",
+        "mockups",
+        "architecture",
+        "skillwiki",
+        "codex"
+      ]
+    },
+    {
       "name": "dev-loop",
       "source": "./skills/dev-loop",
       "description": "Adaptive dev cycle engine with SkillWiki vault, preflight prep, ranked audit, investigate, office-hours, config-lint, and cross-harness verification. Pass `high` for aggressive mode.",
-      "version": "1.26.36",
+      "version": "1.26.37",
       "category": "automation",
       "keywords": [
         "dev-loop",
@@ -220,6 +238,39 @@
         "antigravity",
         "ask-user-question",
         "cursor"
+      ]
+    },
+    {
+      "name": "domain-modeling",
+      "source": "./skills/domain-modeling",
+      "description": "Build and sharpen a project's domain model while maintaining precise glossary terms and recording only qualifying architectural decisions.",
+      "version": "0.1.0",
+      "category": "architecture",
+      "keywords": [
+        "domain-modeling",
+        "glossary",
+        "context",
+        "adr",
+        "architecture",
+        "skillwiki",
+        "codex"
+      ]
+    },
+    {
+      "name": "grill-with-docs",
+      "source": "./skills/grill-with-docs",
+      "description": "Relentlessly sharpen a plan one question at a time while maintaining its canonical glossary and recording only qualifying ADRs.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "keywords": [
+        "grill-with-docs",
+        "grilling",
+        "interview",
+        "domain-modeling",
+        "glossary",
+        "adr",
+        "skillwiki",
+        "codex"
       ]
     },
     {

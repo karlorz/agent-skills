@@ -484,8 +484,9 @@ section is absent, both capabilities are off and the loop runs fully automated.
 2. `setup_interview`: always available via bundled `setup-dev-loop` skill. If
    `grill-with-docs` is installed, the glossary section delegates to it.
 3. `work_item_interview`: resolves to `native` by default. If `upgrade` is set
-   (e.g., `grill-with-docs`) AND the skill is installed at
-   `~/.claude/skills/<name>/SKILL.md`, the upgrade overrides native.
+   (e.g., `grill-with-docs`) and its package-qualified skill plus required
+   dependencies resolve through the current harness's skill/plugin discovery,
+   the upgrade overrides native.
 4. `trigger` field: `auto` (ambiguity detection), `manual` (only on `grill: true`),
    or `never` (fully automated).
 
@@ -925,13 +926,15 @@ prd_disciplines:
      config. If absent → `setup_interview` and `work_item_interview` both
      absent from BACKEND_CAPS (loop runs fully automated). If present:
      - Parse `interview.setup` — `setup_interview` ∈ BACKEND_CAPS. Backend:
-       `setup-dev-loop` (bundled). If `glossary: grill-with-docs` is set AND
-       `~/.claude/skills/grill-with-docs/SKILL.md` exists, delegates glossary
-       section to it.
+       `setup-dev-loop` (bundled). If `glossary: grill-with-docs` is set and
+       `grill-with-docs:grill-with-docs`, `grill-me:grilling`, and
+       `domain-modeling:domain-modeling` resolve, delegate the glossary section
+       to the adapter.
      - Parse `interview.work_item` — `work_item_interview` ∈ BACKEND_CAPS.
-       Resolve backend: check if `upgrade` is set AND installed at
-       `~/.claude/skills/<upgrade>/SKILL.md` — if yes, backend = upgrade
-       skill name; otherwise backend = `native`. Store as
+       Resolve backend: check if `upgrade` is set and its package-qualified
+       skill plus declared dependencies resolve through current skill/plugin
+       discovery — if yes, backend = upgrade skill name; otherwise backend =
+       `native`. Store as
        `INTERVIEW_BACKEND`.
      - Parse `interview.work_item.trigger` — store as `INTERVIEW_TRIGGER`
        (`auto`, `manual`, or `never`).
@@ -1434,14 +1437,17 @@ The recommended pattern: run `/grill-me` and `/dev-loop prep` BEFORE setting
 
 **Backend resolution (from REFRESH):**
 - `native` → invoke inline AskUserQuestion (see Interview Engine section)
-- `grill-with-docs` → invoke `Skill("grill-with-docs")` in main session.
-  If `grill-with-docs` is in `DEP_DRIFT`, fall back to `native`.
-- `grill-me` → invoke `Skill("grill-me")` in main session.
-  If `grill-me` is in `DEP_DRIFT`, fall back to `native`.
+- `grill-with-docs` → load `grill-with-docs:grill-with-docs` through the
+  current harness's skill mechanism in the main session.
+  If `grill-with-docs:grill-with-docs`, `grill-me:grilling`, or
+  `domain-modeling:domain-modeling` is in `DEP_DRIFT`, fall back to `native`.
+- `grill-me` → load `grill-me:grilling` through the current harness's skill
+  mechanism in the main session.
+  If `grill-me:grilling` is in `DEP_DRIFT`, fall back to `native`.
 
 **IMPORTANT**: GRILL MUST run inline in the main session. Do NOT spawn a subagent
-for this step. AskUserQuestion is broken in subagents. The Skill tool works in the
-main session and can load external interview skills.
+for this step. Interactive question tools are broken or unavailable in many
+subagents; the main session must load the installed interview skill itself.
 
 **Output**: Interview findings (Q&A summary for native, sharpened terminology +
 decisions for grill-with-docs) are prepended to the work-item spec preamble.
