@@ -109,8 +109,10 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE" "$SERVER_ID_FILE" "${STATE_DIR}/server.log"
   mark_stopped "stop-server.sh"
 
-  # Only delete ephemeral /tmp directories
-  if [[ "$SESSION_DIR" == /tmp/* ]]; then
+  # Only delete the exact ephemeral layout created when start-server.sh runs
+  # without --project-dir. A project-owned scratch tree may itself live under
+  # /tmp (for example in Linux CI) and must remain available for review.
+  if [[ "$SESSION_DIR" == /tmp/brainstorm-* ]]; then
     rm -rf "$SESSION_DIR"
   fi
 
