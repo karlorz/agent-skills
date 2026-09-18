@@ -108,8 +108,8 @@ claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
 codex_manifest = json.loads(texts[codex_manifest_path])
 expected_version = claude_manifest.get("version")
-if expected_version != "0.3.2":
-    raise SystemExit(f"{manifest_path}: version must be 0.3.2")
+if expected_version != "0.3.3":
+    raise SystemExit(f"{manifest_path}: version must be 0.3.3")
 if cursor_manifest.get("version") != expected_version:
     raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if codex_manifest.get("version") != expected_version:
@@ -159,6 +159,8 @@ for forbidden in ("headers", "http_headers", "env_http_headers", "command", "arg
 
 # 5. CHANGELOG
 changelog_text = texts[changelog_path]
+if "## [0.3.3] - 2026-09-19" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must contain ## [0.3.3] - 2026-09-19")
 if "## [0.3.2] - 2026-09-04" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain ## [0.3.2] - 2026-09-04")
 if "## [0.3.1] - 2026-08-30" not in changelog_text:
@@ -202,6 +204,12 @@ if "https://channel.termolo.com/console" not in body:
     raise SystemExit(f"{skill_path}: must mention https://channel.termolo.com/console")
 if "stdio (default)" in body.lower() or "via stdio mcp" in body.lower():
     raise SystemExit(f"{skill_path}: must not present stdio as default")
+if "claim_lease_expired" not in body:
+    raise SystemExit(f"{skill_path}: must mention claim_lease_expired")
+if "final:false" not in body:
+    raise SystemExit(f"{skill_path}: must mention final:false")
+if "not the answer" not in body.lower():
+    raise SystemExit(f"{skill_path}: must mention hold / final:false is not the answer")
 if len(skill_text.split()) > 1500:
     raise SystemExit(f"{skill_path}: too long ({len(skill_text.split())} words > 1500)")
 
@@ -279,6 +287,7 @@ scanned = (
     .replace("required origin Bearer", "")
     .replace("Bearer is", "")
     .replace("Bearer required", "")
+    .replace("Bearer <key>", "")
 )
 for needle in ("100.76.134.104", "18742", "18743", "search.karldigi.dev", "code.guda.studio", "gsk_", "tvly-", "Bearer "):
     if needle in scanned:

@@ -2,6 +2,13 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.3] - 2026-09-19
+
+### Added
+- Document `claim_lease_expired` on pending/held receipts as 1s pulse lease handoff (not failure or dropped ask); note storage hides it from pending caller receipts unless status is terminal.
+- Document cycle closer contract: hold and `final:false` is not the answer and not gone; end turn with `messageId` and poll `message_status` (`return_on=final_reply`, `wait_seconds=0`) until `final:true`. Treat gone only after documented miss.
+- Document official Grok Bot routine webhook contract for Peer B wake: POST + `Authorization: Bearer <key>`, HTTP 200 means run started (not finished). Keep channel off Cursor Cloud Agents API, `@cursor/sdk`, grok.com automations HMAC, or unofficial grokbot-sdk.
+
 ## [0.3.2] - 2026-09-04
 
 ### Added
