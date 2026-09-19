@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.5] - 2026-09-19
+
+### Changed
+- Make the official Grok Bot routine webhook the Bearer-primary Peer B wake (HTTP 200 means started, not finished), and document grok.com Automations Standard Webhooks HMAC as a separate default-off outbound extra (HTTP 202 means accepted, not finished) that cannot start the Bot.
+
 ## [0.3.4] - 2026-09-19
 
 ### Changed

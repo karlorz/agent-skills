@@ -38,7 +38,10 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 - `cursor-box-close` waits until `final:true` and prints one `DONE` or `FAILED` line. Hold and other non-final replies never count as completion.
 - Treat an ask as gone only after a documented miss (handshake/token failure, or target offline AND a later close still has no final).
 - `ask.timeout_seconds` is only for exact-token probes, not for waiting on substantive answers.
-- Attended-only: substantive answers arrive when the attended Grok Bot routine fires. Peer B wake is the official Grok Bot **routine webhook**: POST + `Authorization: Bearer <key>`; HTTP **200 means the run started, not finished** (docs: https://cursor.com/help/grok-bot/routines). A `*/10` backup cron also runs. Do not use Cursor Cloud Agents API, `@cursor/sdk`, grok.com automations HMAC, or unofficial grokbot-sdk for this channel.
+- Attended-only: substantive answers arrive when the attended Grok Bot routine fires. A `*/10` backup cron also runs.
+  - **Primary Peer B wake:** the official Grok Bot **routine webhook** using POST + `Authorization: Bearer <key>`; HTTP **200 means the run started, not finished** (docs: https://cursor.com/help/grok-bot/routines).
+  - **Optional extra, default off in peerd/gate-loop:** grok.com Automations **Standard Webhooks HMAC**; HTTP **202 means accepted, not finished** (docs: https://docs.x.ai/grok/automations/webhooks). This is a second outbound event from the same box senders. It does not own the cursor-box computer and cannot start the Bot. Never tell operators to put the Bot Bearer key inside a grok.com automation, and do not invent what the automation does after 202.
+  - Do not use Cursor Cloud Agents API, `@cursor/sdk`, or unofficial grokbot-sdk for this channel.
 
 ## Receipts and lease handoff
 
