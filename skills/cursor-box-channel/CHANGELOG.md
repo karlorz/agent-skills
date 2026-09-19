@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.7] - 2026-09-20
+
+### Changed
+- grok.com Chat/Bot CDP: attach-first, then recover a missing tab with `PUT /json/new`, or launch `chrome-debug` on darwin / `LAUNCH_CMD` when DevTools is down. `newbie` falls back to the known `/bot` URL when TARGETS is unset. Still never closes Chrome. Still default-off. Bearer-primary wake and HMAC extra-off are unchanged.
+
 ## [0.3.6] - 2026-09-19
 
 ### Added
