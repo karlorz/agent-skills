@@ -1,0 +1,19 @@
+{
+  "name": "harness-doctor",
+  "version": "0.1.0",
+  "description": "Read-only audit of Claude, Grok, Codex, and Cursor harnesses: unused skills, cold plugins, duplicate memory, hook cost, and context budget. Never mutates host config.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "doctor",
+    "harness",
+    "skills",
+    "plugins",
+    "unused",
+    "audit"
+  ],
+  "skills": "./skills/"
+}

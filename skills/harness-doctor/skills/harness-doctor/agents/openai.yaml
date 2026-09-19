@@ -1,0 +1,4 @@
+interface:
+  display_name: "Harness Doctor"
+  short_description: "Read-only unused-skill and cold-plugin audit"
+  default_prompt: "Run skills/harness-doctor/scripts/harness-doctor.py for the requested harness and report findings without changing any host configuration."

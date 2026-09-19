@@ -63,6 +63,19 @@
         "cdp",
         "chrome-debug"
       ]
+    },
+    {
+      "name": "harness-doctor",
+      "source": "skills/harness-doctor",
+      "description": "Read-only audit of Claude, Grok, Codex, and Cursor harnesses: unused skills, cold plugins, duplicate memory, hook cost, and context budget. Never mutates host config.",
+      "category": "developer-tools",
+      "tags": [
+        "doctor",
+        "harness",
+        "skills",
+        "plugins",
+        "audit"
+      ]
     }
   ]
 }
