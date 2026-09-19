@@ -7,7 +7,7 @@ instructions or deeper project AGENTS.md files.
 ## Planning, implementation, and review workflow
 
 - **Planning stays on the main agent (frontier).** Whether using the built-in
-  `plan` subagent, `/design`, `/using-skillwiki`, superpowers brainstorming, or
+  `plan` subagent, `/design`, `/using-skillwiki`, brainstorming, or
   any other planning skill - the planning step must run on the main session
   agent or a `model: inherit` subagent. Never delegate planning to a `sonnet`
   subagent. The built-in `plan` agent has `model: inherit` (correct); skills

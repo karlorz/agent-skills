@@ -179,11 +179,11 @@ assert_eq "status: drift when harness block edited" \
 DRY_OUT="$("$INSTALL" --grok-home "$TEST_ROOT/never-created" --dry-run --skip-plugins 2>&1 || true)"
 assert_contains "dry-run: agent install plan listed" "$DRY_OUT" "agent grok-build-byok: would install"
 assert_contains "dry-run: config plan listed" "$DRY_OUT" "config.toml: would"
-assert_contains "dry-run: plugin table listed" "$DRY_OUT" "superpowers simplify deep-research"
+assert_contains "dry-run: plugin table listed" "$DRY_OUT" "simplify deep-research"
 assert_eq "dry-run: writes nothing" \
   "$([ -d "$TEST_ROOT/never-created" ] && echo exists || echo absent)" "absent"
 assert_contains "dry-run: harness plugin listed first" \
-  "$DRY_OUT" "plugins: grok-build-harness superpowers"
+  "$DRY_OUT" "plugins: grok-build-harness simplify"
 
 # --- installer: missing-key warnings + --require-keys ------------------------
 WARN_OUT="$("$INSTALL" --grok-home "$TEST_ROOT/warn-home" --dry-run --skip-plugins 2>&1 || true)"
@@ -506,7 +506,7 @@ if [ "\$1" = "plugin" ] && [ "\$2" = "marketplace" ]; then exit 0; fi
 if [ "\$1" = "plugin" ] && [ "\$2" = "install" ]; then exit 0; fi
 if [ "\$1" = "plugin" ] && [ "\$2" = "list" ]; then
   if [ "\${3:-}" = "--json" ]; then
-    echo '[{"name":"grok-build-harness","status":"enabled","version":"'"${PLUGIN_VERSION}"'"},{"name":"superpowers","status":"enabled","version":"1.0.0"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
+    echo '[{"name":"grok-build-harness","status":"enabled","version":"'"${PLUGIN_VERSION}"'"},{"name":"simplify","status":"enabled","version":"1.0.0"},{"name":"deep-research","status":"enabled","version":"1.0.0"},{"name":"dev-loop","status":"enabled","version":"1.0.0"},{"name":"claude-md-management","status":"enabled","version":"1.0.0"},{"name":"grill-me","status":"enabled","version":"1.0.0"},{"name":"codebase-architecture","status":"enabled","version":"1.0.0"},{"name":"hermes-cli","status":"enabled","version":"1.0.0"},{"name":"skillwiki","status":"enabled","version":"1.0.0"},{"name":"context7","status":"enabled","version":"1.0.0"},{"name":"vault-sync","status":"enabled","version":"1.0.0"},{"name":"codex","status":"enabled","version":"1.0.0"},{"name":"playwright-cli","status":"enabled","version":"1.0.0"}]'
   else
     echo "plugins list"
   fi

@@ -1,6 +1,5 @@
 [
   {"name": "grok-build-harness", "source": "grok-build-harness", "skip_flag": "SKIP_NONE"},
-  {"name": "superpowers", "source": "superpowers@anthropics/claude-plugins-official", "skip_flag": "SKIP_NONE"},
   {"name": "simplify", "source": "simplify", "skip_flag": "SKIP_NONE"},
   {"name": "deep-research", "source": "deep-research", "skip_flag": "SKIP_NONE"},
   {"name": "dev-loop", "source": "dev-loop", "skip_flag": "SKIP_NONE"},

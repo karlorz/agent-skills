@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.5] - 2026-09-19
+
+- Remove `superpowers` from the harness companion set (`plugin-specs.json` and `[plugins].enabled`). Not a disable — it is gone so full init cannot put it back.
+
 ## [0.5.4] - 2026-09-19
 
 - Status only quotes `install.sh --status` / `scripts/status.py` (no-secrets harness inventory). `--docs-status` stays one word.
