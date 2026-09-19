@@ -41,6 +41,7 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 - Attended-only: substantive answers arrive when the attended Grok Bot routine fires. A `*/10` backup cron also runs.
   - **Primary Peer B wake:** the official Grok Bot **routine webhook** using POST + `Authorization: Bearer <key>`; HTTP **200 means the run started, not finished** (docs: https://cursor.com/help/grok-bot/routines).
   - **Optional extra, default off in peerd/gate-loop:** grok.com Automations **Standard Webhooks HMAC**; HTTP **202 means accepted, not finished** (docs: https://docs.x.ai/grok/automations/webhooks). This is a second outbound event from the same box senders. It does not own the cursor-box computer and cannot start the Bot. Never tell operators to put the Bot Bearer key inside a grok.com automation, and do not invent what the automation does after 202.
+  - **Optional grok.com Chat/Bot CDP attach, default off in peerd/gate-loop:** Attach-only over CDP (`http://127.0.0.1:9222`) to already-open grok.com Chat and Bot tabs routed strictly by `ask.to` / consumer id (`newbie` vs `wiki-research`). Never broadcast; dual endpoints; attach-only (never launches or closes Chrome, never navigates existing tabs); wake text is message ID only (`cursor-box-channel substantive_hold messageId=<id>`). Do not tell operators to enable live without explicit authorization.
   - Do not use Cursor Cloud Agents API, `@cursor/sdk`, or unofficial grokbot-sdk for this channel.
 
 ## Receipts and lease handoff

@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.6] - 2026-09-19
+
+### Added
+- Document optional grok.com Chat/Bot CDP attach: route-by-target (`newbie` vs `wiki-research`), dual endpoints, attach-only (never launches Chrome, navigates tabs, or closes browser), and message-id-only wake text. Kept default-off; Grok Bot routine webhook remains primary Bearer wake; HMAC extra remains default-off.
+
 ## [0.3.5] - 2026-09-19
 
 ### Changed
