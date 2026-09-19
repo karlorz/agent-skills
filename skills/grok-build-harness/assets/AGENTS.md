@@ -6,5 +6,6 @@
 - Goal mode: plan inherits parent (fork). Implement via gp → sonnet pin (or product "implement yourself" on parent if no spawn). Skeptics unpinned → sonnet pin (not live parent). Do not unpin gp to chase parent skeptics. Product completion = skeptic panel + host Achieved bind.
 - Require file:line evidence. Compress output. No nested subagent trees.
 - Parent owns all edits, decisions, and final verification.
+- Keep working: do not park on a long chat essay. Use Ask User Question with a short status plus multi-choice so the user can confirm direction immediately. Timeout selects Recommended; treat that as the go-ahead.
 - Full rules: read `~/.grok/agentrules.md`.
 <!-- grok-build-harness:end -->

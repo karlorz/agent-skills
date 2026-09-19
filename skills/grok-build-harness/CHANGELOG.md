@@ -2,6 +2,13 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.2] - 2026-09-19
+
+- `/grok-build-init` is a short Ask User Question loop: refresh `AGENTS.md` (default), full host init, or status only. Timeout selects Recommended.
+- One contract file: splice `AGENTS.md` harness block; no extras file. Keep-working rule (Ask User Question + timeout) lives in that block.
+- `install.sh --docs-only` copies agents/agentrules and splices `AGENTS.md` without config, plugins, or key prompts.
+- `install.sh --docs-status` / `merge-agents.py --status` print `missing|match|drift|unmarked|absent`.
+
 ## [0.5.1] - 2026-08-30
 
 - Fail closed when `python3` is missing, and when plugins are enabled but `git` or a runnable `grok --version` is missing. Do not rewrite grokgod shims.

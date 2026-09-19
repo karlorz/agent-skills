@@ -14,9 +14,13 @@ Preserves ALL existing content except the harness marker block (ADR-1,
   - insert:      otherwise -> insert the marked contract after the llm-wiki
                  skillwiki marker (or at the top), keeping all existing lines
 
-Usage: merge-agents.py <asset AGENTS.md> <existing AGENTS.md> > merged
+Usage:
+  merge-agents.py <asset AGENTS.md> <existing AGENTS.md> > merged
+  merge-agents.py --status <asset AGENTS.md> <existing AGENTS.md>
+      prints one of: missing | match | drift | unmarked | absent
 """
 
+import os
 import sys
 
 BEGIN = "<!-- grok-build-harness:begin -->"
@@ -55,6 +59,35 @@ def migrate(dst_lines: list[str], contract: list[str]):
     return None
 
 
+def extract_block(lines: list[str]):
+    """Return the inclusive harness marker block, or None."""
+    try:
+        i = lines.index(BEGIN)
+        j = lines.index(END, i)
+    except ValueError:
+        return None
+    return lines[i : j + 1]
+
+
+def is_unmarked(lines: list[str]) -> bool:
+    return any(line == "## Subagent contract" for line in lines) and any(
+        line == FULL_RULES for line in lines
+    )
+
+
+def status(asset: str, dst: str) -> str:
+    if not os.path.isfile(dst):
+        return "missing"
+    contract = contract_lines(asset)
+    dst_lines = open(dst, encoding="utf-8").read().splitlines()
+    live = extract_block(dst_lines)
+    if live is not None:
+        return "match" if live == contract else "drift"
+    if is_unmarked(dst_lines):
+        return "unmarked"
+    return "absent"
+
+
 def insert(dst_lines: list[str], contract: list[str]) -> list[str]:
     """Insert the marked contract after the skillwiki marker (or at top)."""
     if dst_lines and dst_lines[0] == SKILLWIKI_BEGIN:
@@ -73,7 +106,17 @@ def insert(dst_lines: list[str], contract: list[str]) -> list[str]:
 
 
 def main() -> int:
-    asset, dst = sys.argv[1], sys.argv[2]
+    args = sys.argv[1:]
+    if len(args) == 3 and args[0] == "--status":
+        sys.stdout.write(status(args[1], args[2]) + "\n")
+        return 0
+    if len(args) != 2 or args[0].startswith("-"):
+        sys.stderr.write(
+            "Usage: merge-agents.py <asset AGENTS.md> <existing AGENTS.md>\n"
+            "       merge-agents.py --status <asset AGENTS.md> <existing AGENTS.md>\n"
+        )
+        return 2
+    asset, dst = args
     contract = contract_lines(asset)
     dst_lines = open(dst, encoding="utf-8").read().splitlines()
     merged = splice(dst_lines, contract) or migrate(dst_lines, contract) or insert(

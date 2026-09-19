@@ -1,162 +1,67 @@
 ---
 name: grok-build-init
-description: Bootstrap grok-build with the karlorz subagent harness and companion plugins. Use when initializing grok-build on a new host.
+description: Bootstrap or refresh the karlorz grok-build harness (AGENTS.md splice, agents, plugins). On /grok-build-init, Ask User Question first; timeout selects Recommended.
 ---
 
 # grok-build-init
 
-Initialize grok-build (v1.0+) on a host with the karlorz subagent harness:
-custom user-scope agents, global routing rules, the BYOK model/config layer,
-and the companion plugin set. The skill runs `scripts/install.sh` from this
-plugin; it is idempotent and backup-first.
+One file owns the session contract: `$GROK_HOME/AGENTS.md` (default `~/.grok/AGENTS.md`). This skill splices the harness marker block, copies agents + `agentrules.md`, and on a fresh host also renders config and installs companion plugins.
 
-## Prerequisites
+## First action
 
-- `python3` on PATH (installer scripts).
-- `git` on PATH (marketplace clone), unless you pass `--skip-plugins`.
-- `grok` installed, authenticated, and **runnable**: `grok --version` must succeed.
-  On musl/Alpine, a glibc grokgod binary often cannot exec; use a musl grok
-  (often `$GROK_HOME/downloads/grok-linux-*`) and do **not** leave PATH pointing
-  at a broken grokgod shim. The installer will not rewrite that shim.
-- On the fresh host, this plugin itself must be installed first:
+Do **not** write a long chat essay and wait. Call **Ask User Question** immediately:
 
-  ```bash
-  grok plugin marketplace add karlorz/agent-skills
-  grok plugin install grok-build-harness --trust
-  ```
+- **Refresh AGENTS.md** (Recommended) — harness group update or a new scenario on an existing host. Detect drift, splice the contract, leave user sections alone.
+- **Full host init** — new machine. Keys, config, plugins.
+- **Status only** — print whether the contract is `match` / `drift` / `missing` / `unmarked` / `absent`. No writes.
 
-  Then start a new session (or press `r` in the Plugins tab) and run
-  `/grok-build-init`.
+Timeout selects Recommended. Treat that as the go-ahead.
 
-### Remote / SSH hosts
-
-Do **not** allocate a TTY and run unknown `grok` words such as `grok whoami`.
-Grok 1.0.x treats those as a chat turn and opens the TUI. Health checks:
+## Locate installer
 
 ```bash
-grok --version
-grok inspect --json
-grok plugin list
+grok plugin update grok-build-harness
+INSTALL="$(find ~/.grok/installed-plugins -maxdepth 3 -type f -name install.sh -path '*grok-build-harness*' | head -1)"
 ```
 
-Locate `install.sh` (below) and run it directly:
+From a checkout: `skills/grok-build-harness/scripts/install.sh`.
+
+Need `python3`. Full init also needs `git` and a runnable `grok --version`. Remote SSH: run `install.sh` directly; never `ssh -t grok whoami`.
+
+## Refresh (Recommended)
+
+```bash
+bash "$INSTALL" --docs-status
+bash "$INSTALL" --docs-only -y
+bash "$INSTALL" --docs-status
+```
+
+`--docs-status` prints one word: `missing` | `match` | `drift` | `unmarked` | `absent`. After `--docs-only`, status should be `match`. User content outside `<!-- grok-build-harness:begin/end -->` is preserved. Then Ask User Question once more if another scenario remains.
+
+## Full init
 
 ```bash
 bash "$INSTALL" --hub-key "$HUB_KEY" --new-key "$NEW_KEY" --context7-key "$CTX7_KEY" --verify -y
 ```
 
-## Locating install.sh
+Keys may also come from `HARNESS_HUB_KEY` / `HARNESS_NEW_KEY` / `HARNESS_CONTEXT7_KEY`. Missing keys → env-only config (warns). `--require-keys` hard-fails. Extra flags: `install.sh --help`.
 
-The installer ships with this plugin at `scripts/install.sh`. Resolve it from
-the installed plugin root:
+Finish: start a new session so `AGENTS.md` loads. Skillwiki's `~/.grok/skillwiki.md` marker is preserved; do not overwrite it.
 
-```bash
-INSTALL="$(find ~/.grok/installed-plugins -maxdepth 3 -type f -name install.sh -path '*grok-build-harness*' | head -1)"
-```
+## Contract file
 
-or from the agent-skills repo checkout: `skills/grok-build-harness/scripts/install.sh`.
-
-## Procedure
-
-1. **Update the plugin and locate installer**: On an existing install, refresh the plugin and find `install.sh`:
-
-   ```bash
-   grok plugin update grok-build-harness
-   INSTALL="$(find ~/.grok/installed-plugins -maxdepth 3 -type f -name install.sh -path '*grok-build-harness*' | head -1)"
-   ```
-
-2. **Collect API keys from the user** (or read `HARNESS_HUB_KEY`,
-   `HARNESS_NEW_KEY`, `HARNESS_CONTEXT7_KEY`). Two gateway keys
-   (hub.karldigi.dev, new.karldigi.dev) and the context7 MCP key. If the user
-   declines, install continues env-only — the generated config keeps
-   `env_key` lines so `HUB_API_KEY` exports work.
-3. **Run the installer** with the keys and any skip flags the user wants:
-
-   ```bash
-   bash "$INSTALL" --hub-key "$HUB_KEY" --new-key "$NEW_KEY" --context7-key "$CTX7_KEY" --verify
-   ```
-
-   Optional flags: `--skip-codex`, `--skip-vault-sync`, `--skip-playwright-cli`
-   (heavy or host-specific plugins); `--require-keys` (hard-fail when hub/new
-   gateway keys are missing — use for unattended runs); `--restrictive`
-   (render `permission_mode = "plan"` instead of `"always-approve"` for
-   shared hosts); `--with-grokgod` / `--skip-grokgod` (force or skip grokgod
-   `[plan_mode] implement_via_subagents = true` merge; auto-detected by default);
-   `--strict` (fail verify if config has unexpected top-level keys);
-   `--force-render` (rewrite an existing keyed config env-only
-   when no keys are provided — the default is to skip the config render
-   instead, to avoid silently downgrading a working keyed config); `--dry-run`
-   to preview without writing; `--no-config` to skip config.toml. When keys
-   are missing the installer always warns that the config will be env-only
-   (model aliases won't resolve until `HARNESS_HUB_KEY` / `HARNESS_NEW_KEY`
-   are exported).
-4. **Verify** (installer's `--verify` step): `grok plugin list --json` shows
-   the 14 enabled plugins (13 companions + grok-build-harness itself), `grok inspect --json` reports agents discovered
-   (asserts `grok-build-byok` with a path under `$GROK_HOME/agents/`; Grok 1.0.5
-   may label that `source.type=project` and 1.0.12 `user` — type is ignored), stamp file is inspected,
-   config does not pair `[agent] name = grok-build-byok` with `agent_type = "codex"`,
-   schema-checks `config.toml` across template-owned, docs-known, and runtime extras layers
-   (validating consent extra while protecting PII; fails on unexpected tables with `--strict`),
-   and verifies no unresolved key tokens in config.toml.
-5. **Finish**: tell the user to start a new session so `~/.grok/AGENTS.md` and
-   the agents load. The skillwiki activation file (`~/.grok/skillwiki.md` and
-   the `AGENTS.md` marker block) is owned by the llm-wiki plugin's
-   `install:activation` — the harness installer preserves any existing marker;
-   no manual step needed.
-
-## What gets installed
-
-| Path (under `~/.grok/`) | Content |
+| Path | Role |
 |---|---|
-| `agents/grok-build-byok.md`, `agents/scout.md` | Custom parent agent + disposable read-only scout (verbatim) |
-| `agentrules.md` | Global subagent routing/workflow rules (verbatim) |
-| `AGENTS.md` | Subagent contract in a `<!-- grok-build-harness:begin/end -->` block — spliced in: all other content (user sections, skillwiki marker) is preserved |
-| `config.toml` | Rendered from the sanitized template (cursor-box 2026-09-12 SSOT): grok-4.6 default + auto-compact 48%, gpt-5.6-sol, flash-max / flash-non-reasoning, no GLM, `[subagents.models]` pins, `[agent] name`, plugin enable list, context7 MCP |
-| `.grok-build-harness-stamp.json` | Harness install stamp (`grok-build-harness-stamp/v1`): plugin version, root, install timestamp, and grokgod detection |
+| `AGENTS.md` | **The** session contract. Harness block is spliced; everything else is yours. Re-run this skill when the group updates or the scenario changes. |
+| `agentrules.md` | Full routing rules (pointed at from the contract). |
+| `agents/grok-build-byok.md`, `agents/scout.md` | Parent agent + scout. |
 
-Existing files are backed up to
-`~/.grok/backups/grok-build-harness-<timestamp>/` before overwrite; identical
-files are skipped. Re-runs preserve host-set config keys the template does
-not emit (`[plugins].disabled`, extra marketplace sources, extra tables),
-and a re-run with no keys over a keyed config skips the render (use
-`--force-render` to override).
+Keep-working rule lives in the harness block: Ask User Question + timeout = Recommended. Do not add a second extras file.
+
+Claude.md / Codex AGENTS.md auto-detect is out of scope for this Grok slice.
 
 ## Troubleshooting
 
-- **Harness rules not active** → confirm `~/.grok/AGENTS.md` + `agentrules.md`
-  exist and start a new session.
-- **Plugin skills missing** → `grok plugin list`; add the name to
-  `[plugins].enabled` or press `Space` in the Plugins tab; reload with `r`.
-- **Hooks/MCP servers inactive** → plugins were installed without trust;
-  reinstall with `--trust` (`grok plugin uninstall <name> --confirm &&
-  grok plugin install <name> --trust`).
-- **Models don't resolve ("sonnet" unknown)** → the `[model.*]` aliases are
-  missing or keys were not injected; re-run install.sh with keys, or export
-  `HUB_API_KEY` / `NEW_API_KEY` (env_key fallback).
-- **Stale / overwritten Grok config** → `check-config.py --verify` (via
-  `install.sh --verify`) warns when live `config.toml` has GLM tables,
-  `[model."gpt-5.6-auto"]`, `flash-non-reasoning` wired to `mimo-v2.5`,
-  missing `grok-4.6` auto-compact 48%, a sibling `config 2.toml` conflict
-  copy, or a CC Switch `grokbuild` current template that still contains
-  `glm-5.x`. Reference host is cursor-box `2026-09-12`. Do not restore
-  `config 2.toml`. Do not `install.sh --force-render` over a good keyed
-  config. After a warning, compare with cursor-box
-  `/home/box/.grok/config.toml` (structure only; keep this host's keys).
-- **`grok --version` fails on Alpine/musl** → the grokgod/glibc binary cannot
-  exec. Point `grok` at a musl build; do not rewrite the shim via this installer.
-- **SSH session opened a grok TUI** → a TTY plus an unknown subcommand (e.g.
-  `whoami`) is a chat turn. Use `install.sh` and `grok --version` / `inspect`.
-- **Test without touching the host** →
-
-  ```bash
-  GROK_HOME=/tmp/grok-home bash "$INSTALL" --dry-run
-  ```
-
-  `GROK_HOME` relocates the whole grok tree; `grok inspect` against the scratch
-  home validates the generated config safely.
-
-## References
-
-- Design and rationale: `docs/harness-design.md` in this plugin.
-- Config semantics: `~/.grok/docs/user-guide/05-configuration.md`,
-  `09-plugins.md`, `16-subagents.md`.
+- Contract not active → new session after a `match` refresh.
+- Full flag list / musl / keyed-config guard → `README.md` and `install.sh --help`.
+- Scratch test: `GROK_HOME=/tmp/grok-home bash "$INSTALL" --docs-only --dry-run`

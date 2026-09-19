@@ -15,7 +15,8 @@
 # Usage:
 #   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
 #              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
-#              [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
+#              [--skip-plugins] [--docs-only] [--docs-status] [--no-config]
+#              [--dry-run] [--force] [--verify]
 #              [--require-keys] [--restrictive] [--force-render]
 #              [--with-grokgod] [--skip-grokgod] [-y]
 #
@@ -41,6 +42,8 @@ SKIP_CODEX=0
 SKIP_VAULT_SYNC=0
 SKIP_PLAYWRIGHT=0
 SKIP_PLUGINS=0
+DOCS_ONLY=0
+DOCS_STATUS=0
 NO_CONFIG=0
 DRY_RUN=0
 FORCE=0
@@ -62,7 +65,8 @@ then adds companion marketplaces and installs the plugin set with --trust.
 Usage:
   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
-             [--skip-plugins] [--no-config] [--dry-run] [--force] [--verify]
+             [--skip-plugins] [--docs-only] [--docs-status] [--no-config]
+             [--dry-run] [--force] [--verify]
              [--require-keys] [--restrictive] [--force-render]
              [--with-grokgod] [--skip-grokgod] [--strict] [-y]
 
@@ -79,6 +83,10 @@ Options:
   --skip-vault-sync      do not install/enable the vault-sync plugin
   --skip-playwright-cli  do not install/enable the playwright-cli plugin
   --skip-plugins         files + config only; no marketplace/plugin steps
+  --docs-only            splice AGENTS.md + copy agents/agentrules; skip
+                         config, plugins, and key prompts
+  --docs-status          print AGENTS.md contract status (missing|match|drift|
+                         unmarked|absent) and exit; no writes
   --no-config            do not touch config.toml
   --with-grokgod         force grokgod plan_mode implement_via_subagents merge
   --skip-grokgod         skip grokgod plan_mode merge even if detected
@@ -105,6 +113,8 @@ while [ $# -gt 0 ]; do
     --skip-vault-sync) SKIP_VAULT_SYNC=1; shift ;;
     --skip-playwright-cli) SKIP_PLAYWRIGHT=1; shift ;;
     --skip-plugins) SKIP_PLUGINS=1; shift ;;
+    --docs-only) DOCS_ONLY=1; SKIP_PLUGINS=1; NO_CONFIG=1; shift ;;
+    --docs-status) DOCS_STATUS=1; SKIP_PLUGINS=1; NO_CONFIG=1; shift ;;
     --no-config) NO_CONFIG=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
@@ -126,6 +136,12 @@ GROK_HOME="$(cd "$GROK_HOME" 2>/dev/null && pwd || printf '%s' "$GROK_HOME")"
 # target the same home as the files we install — --grok-home must behave
 # exactly like the GROK_HOME env var
 export GROK_HOME
+
+if [ "$DOCS_STATUS" -eq 1 ]; then
+  command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH (required for grok-build-init)"
+  python3 "$MERGE" --status "$ASSETS/AGENTS.md" "$GROK_HOME/AGENTS.md"
+  exit 0
+fi
 BACKUP_DIR="$GROK_HOME/backups/grok-build-harness-$(date +%Y%m%d%H%M%S)"
 PERMISSION_MODE="always-approve"
 [ "$RESTRICTIVE" -eq 1 ] && PERMISSION_MODE="plan"
@@ -476,7 +492,11 @@ except Exception as e:
     log "stamp file: not found"
   fi
 
-  for f in "agents/grok-build-byok.md" "agents/scout.md" "agentrules.md" "AGENTS.md" "config.toml"; do
+  local required=("agents/grok-build-byok.md" "agents/scout.md" "agentrules.md" "AGENTS.md")
+  if [ "$NO_CONFIG" -eq 0 ]; then
+    required+=("config.toml")
+  fi
+  for f in "${required[@]}"; do
     if [ -f "$GROK_HOME/$f" ]; then
       log "  ok  $f"
     else
@@ -484,7 +504,7 @@ except Exception as e:
       missing=1
     fi
   done
-  if [ -f "$GROK_HOME/config.toml" ]; then
+  if [ "$NO_CONFIG" -eq 0 ] && [ -f "$GROK_HOME/config.toml" ]; then
     # the template's comment header documents the token names; only
     # non-comment lines may carry unresolved tokens
     if grep -vE '^[[:space:]]*#' "$GROK_HOME/config.toml" | grep -Eq '__[A-Z][A-Z0-9_]*__'; then
@@ -631,29 +651,31 @@ if [ ! -d "$GROK_HOME" ] && [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$GROK_HOME" || die "cannot create $GROK_HOME"
 fi
 
-# keys: prompt for missing ones when interactive
-if [ -z "$HUB_KEY" ] && [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
-  read -r -s -p "grok-build-harness: hub.karldigi.dev API key (leave empty for env-only): " HUB_KEY; echo
-fi
-if [ -z "$NEW_KEY" ] && [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
-  read -r -s -p "grok-build-harness: new.karldigi.dev API key (leave empty for env-only): " NEW_KEY; echo
-fi
-if [ -z "$CONTEXT7_KEY" ] && [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
-  read -r -s -p "grok-build-harness: context7 MCP API key (leave empty to skip the MCP): " CONTEXT7_KEY; echo
-fi
+# keys: prompt for missing ones when interactive (skipped for --docs-only)
+if [ "$DOCS_ONLY" -eq 0 ]; then
+  if [ -z "$HUB_KEY" ] && [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+    read -r -s -p "grok-build-harness: hub.karldigi.dev API key (leave empty for env-only): " HUB_KEY; echo
+  fi
+  if [ -z "$NEW_KEY" ] && [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+    read -r -s -p "grok-build-harness: new.karldigi.dev API key (leave empty for env-only): " NEW_KEY; echo
+  fi
+  if [ -z "$CONTEXT7_KEY" ] && [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+    read -r -s -p "grok-build-harness: context7 MCP API key (leave empty to skip the MCP): " CONTEXT7_KEY; echo
+  fi
 
-# warn loudly when gateway keys are missing; --require-keys hard-fails.
-# context7 stays optional (it only feeds the MCP server).
-if [ -z "$HUB_KEY" ] || [ -z "$NEW_KEY" ]; then
-  missing_keys=""
-  [ -z "$HUB_KEY" ] && missing_keys="$missing_keys HUB(hub.karldigi.dev)"
-  [ -z "$NEW_KEY" ] && missing_keys="$missing_keys NEW(new.karldigi.dev)"
-  warn "gateway keys missing:$missing_keys — config will be env-only and model aliases won't resolve until keys are provided"
-  warn "pass --hub-key/--new-key or export HARNESS_HUB_KEY/HARNESS_NEW_KEY; use --require-keys to fail instead of continuing"
-  [ "$REQUIRE_KEYS" -eq 1 ] && die "--require-keys: hub/new gateway keys are required"
-fi
-if [ -z "$CONTEXT7_KEY" ]; then
-  warn "context7 key missing — MCP server will launch without --api-key and may fail at runtime"
+  # warn loudly when gateway keys are missing; --require-keys hard-fails.
+  # context7 stays optional (it only feeds the MCP server).
+  if [ -z "$HUB_KEY" ] || [ -z "$NEW_KEY" ]; then
+    missing_keys=""
+    [ -z "$HUB_KEY" ] && missing_keys="$missing_keys HUB(hub.karldigi.dev)"
+    [ -z "$NEW_KEY" ] && missing_keys="$missing_keys NEW(new.karldigi.dev)"
+    warn "gateway keys missing:$missing_keys — config will be env-only and model aliases won't resolve until keys are provided"
+    warn "pass --hub-key/--new-key or export HARNESS_HUB_KEY/HARNESS_NEW_KEY; use --require-keys to fail instead of continuing"
+    [ "$REQUIRE_KEYS" -eq 1 ] && die "--require-keys: hub/new gateway keys are required"
+  fi
+  if [ -z "$CONTEXT7_KEY" ]; then
+    warn "context7 key missing — MCP server will launch without --api-key and may fail at runtime"
+  fi
 fi
 
 # --- files -------------------------------------------------------------------

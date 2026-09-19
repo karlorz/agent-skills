@@ -58,6 +58,8 @@ The skill runs `scripts/install.sh`, which:
                        are provided (overrides the downgrade guard)
 --skip-codex | --skip-vault-sync | --skip-playwright-cli   optional plugins
 --skip-plugins         files + config only
+--docs-only            AGENTS.md splice + agents/agentrules; skip config/plugins/keys
+--docs-status          print AGENTS.md contract status and exit
 --no-config            skip config.toml
 --dry-run              preview without writing
 --force / -y           overwrite without prompting

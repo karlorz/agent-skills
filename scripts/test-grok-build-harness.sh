@@ -159,6 +159,18 @@ assert_contains "insert fallback keeps user file content" \
   "$(cat "$TEST_ROOT/bare-merged.md")" "some content"
 assert_contains "insert fallback adds marked contract" \
   "$(cat "$TEST_ROOT/bare-merged.md")" "<!-- grok-build-harness:begin -->"
+assert_eq "status: unmarked v0.2.0 file" \
+  "$(python3 "$MERGE_PY" --status "$ASSET_MD" "$TEST_ROOT/migrate.md")" "unmarked"
+assert_eq "status: match after merge" \
+  "$(python3 "$MERGE_PY" --status "$ASSET_MD" "$TEST_ROOT/migrated.md")" "match"
+assert_eq "status: absent on bare notes" \
+  "$(python3 "$MERGE_PY" --status "$ASSET_MD" "$TEST_ROOT/bare.md")" "absent"
+assert_eq "status: missing file" \
+  "$(python3 "$MERGE_PY" --status "$ASSET_MD" "$TEST_ROOT/no-such.md")" "missing"
+printf '%s\n' "$(cat "$TEST_ROOT/migrated.md")" | sed 's/Parent owns all edits/Parent owns NONE/' \
+  > "$TEST_ROOT/drifted.md"
+assert_eq "status: drift when harness block edited" \
+  "$(python3 "$MERGE_PY" --status "$ASSET_MD" "$TEST_ROOT/drifted.md")" "drift"
 
 # --- installer: dry-run plan --------------------------------------------------
 DRY_OUT="$("$INSTALL" --grok-home "$TEST_ROOT/never-created" --dry-run --skip-plugins 2>&1 || true)"
@@ -191,6 +203,27 @@ assert_contains "merge installs subagent contract" "$MERGE_OUT" "## Subagent con
 assert_contains "merge wraps contract in harness marker" "$MERGE_OUT" "<!-- grok-build-harness:begin -->"
 assert_contains "merge keeps user content" "$MERGE_OUT" "## User preferences"
 assert_contains "merge keeps user content text" "$MERGE_OUT" "- keep me"
+MERGE_STATUS="$("$INSTALL" --grok-home "$MERGE_HOME" --docs-status)"
+assert_eq "docs-status after splice is match" "$MERGE_STATUS" "match"
+
+# --- installer: --docs-only skips config, plugins, and key warnings ----------
+DOCS_HOME="$TEST_ROOT/docs-only-home"
+mkdir -p "$DOCS_HOME"
+printf 'keep-this-config\n' > "$DOCS_HOME/config.toml"
+printf '# my notes\n' > "$DOCS_HOME/AGENTS.md"
+DOCS_OUT="$(env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+  "$INSTALL" --grok-home "$DOCS_HOME" --docs-only -y 2>&1)"
+assert_not_contains "docs-only: no env-only key warning" "$DOCS_OUT" "config will be env-only"
+assert_eq "docs-only: config.toml untouched" \
+  "$(cat "$DOCS_HOME/config.toml")" "keep-this-config"
+assert_contains "docs-only: splices AGENTS.md contract" \
+  "$(cat "$DOCS_HOME/AGENTS.md")" "<!-- grok-build-harness:begin -->"
+assert_contains "docs-only: keeps user notes" \
+  "$(cat "$DOCS_HOME/AGENTS.md")" "# my notes"
+if [ -f "$DOCS_HOME/agents/grok-build-byok.md" ]; then DOCS_AGENT=yes; else DOCS_AGENT=no; fi
+assert_eq "docs-only: agents file installed" "$DOCS_AGENT" "yes"
+DOCS_STATUS="$("$INSTALL" --grok-home "$DOCS_HOME" --docs-status)"
+assert_eq "docs-status after docs-only is match" "$DOCS_STATUS" "match"
 
 # --- installer: re-run idempotency (files + config) ---------------------------
 IDEM_HOME="$TEST_ROOT/idem-home"
