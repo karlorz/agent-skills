@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Direct targets: `ask.to` / consumer id include `social` alongside `newbie` and `wiki-research`. There is still no `grok` target. Live hosted MCP may lag until Coolify HOLD lifts.
+
 ## [0.3.7] - 2026-09-20
 
 ### Changed

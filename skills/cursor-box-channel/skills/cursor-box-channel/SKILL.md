@@ -26,8 +26,9 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 
 ## Routing
 
-- `ask.to` is `newbie` or `wiki-research` only. There is no `grok` target.
+- `ask.to` is `newbie`, `wiki-research`, or `social`. There is no `grok` target.
 - `post_message.to` may also be `channel`.
+- Live hosted MCP at `https://channel.termolo.com/mcp` may still advertise only `newbie` | `wiki-research` until Coolify HOLD lifts. Do not treat a live `INVALID_TARGET` on `social` as a skill-text bug while HOLD is on.
 
 ## Non-block monitoring
 
@@ -41,7 +42,7 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 - Attended-only: substantive answers arrive when the attended Grok Bot routine fires. A `*/10` backup cron also runs.
   - **Primary Peer B wake:** the official Grok Bot **routine webhook** using POST + `Authorization: Bearer <key>`; HTTP **200 means the run started, not finished** (docs: https://cursor.com/help/grok-bot/routines).
   - **Optional extra, default off in peerd/gate-loop:** grok.com Automations **Standard Webhooks HMAC**; HTTP **202 means accepted, not finished** (docs: https://docs.x.ai/grok/automations/webhooks). This is a second outbound event from the same box senders. It does not own the cursor-box computer and cannot start the Bot. Never tell operators to put the Bot Bearer key inside a grok.com automation, and do not invent what the automation does after 202.
-  - **Optional grok.com Chat/Bot CDP, default off in peerd/gate-loop:** Attach-first over CDP (`http://127.0.0.1:9222`) to the grok.com Chat/Bot tab for `ask.to` / consumer id (`newbie` vs `wiki-research`). Never broadcast; dual endpoints. If DevTools is down, launch `chrome-debug` on darwin or `PEERD_GROK_COM_BOT_CDP_LAUNCH_CMD` (do not let box Chrome steal the macos-dev `:9222` tunnel). If Chrome is up but the mapped tab is missing, open it with `PUT /json/new`. `newbie` falls back to the known `/bot` URL when TARGETS is unset. Never `Browser.close` / `Target.closeTarget`. Wake text is message ID only (`cursor-box-channel substantive_hold messageId=<id>`). Do not enable live without explicit authorization.
+  - **Optional grok.com Chat/Bot CDP, default off in peerd/gate-loop:** Attach-first over CDP (`http://127.0.0.1:9222`) to the grok.com Chat/Bot tab for `ask.to` / consumer id (`newbie` vs `wiki-research` vs `social`). Never broadcast; dual endpoints. If DevTools is down, launch `chrome-debug` on darwin or `PEERD_GROK_COM_BOT_CDP_LAUNCH_CMD` (do not let box Chrome steal the macos-dev `:9222` tunnel). If Chrome is up but the mapped tab is missing, open it with `PUT /json/new`. `newbie` falls back to the known `/bot` URL when TARGETS is unset; `social` and `wiki-research` need an explicit TARGETS row. Never `Browser.close` / `Target.closeTarget`. Wake text is message ID only (`cursor-box-channel substantive_hold messageId=<id>`). Do not enable live without explicit authorization.
   - Do not use Cursor Cloud Agents API, `@cursor/sdk`, or unofficial grokbot-sdk for this channel.
 
 ## Receipts and lease handoff
@@ -52,7 +53,7 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 ## Tools
 
 - `ask`: post a question and wait for a reply (queue waits if Grok Bot is closed).
-- `post_message`: fire-and-forget (`to` `channel` | `newbie` | `wiki-research`).
+- `post_message`: fire-and-forget (`to` `channel` | `newbie` | `wiki-research` | `social`).
 - `list_replies`: list pending or completed replies.
 - `heartbeat`: keep the attended session alive.
 - `claim`: claim a queued item for this session.
