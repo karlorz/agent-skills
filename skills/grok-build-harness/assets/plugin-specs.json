@@ -1,0 +1,16 @@
+[
+  {"name": "grok-build-harness", "source": "grok-build-harness", "skip_flag": "SKIP_NONE"},
+  {"name": "superpowers", "source": "superpowers@anthropics/claude-plugins-official", "skip_flag": "SKIP_NONE"},
+  {"name": "simplify", "source": "simplify", "skip_flag": "SKIP_NONE"},
+  {"name": "deep-research", "source": "deep-research", "skip_flag": "SKIP_NONE"},
+  {"name": "dev-loop", "source": "dev-loop", "skip_flag": "SKIP_NONE"},
+  {"name": "claude-md-management", "source": "claude-md-management@karlorz/agent-skills", "skip_flag": "SKIP_NONE"},
+  {"name": "grill-me", "source": "grill-me", "skip_flag": "SKIP_NONE"},
+  {"name": "codebase-architecture", "source": "codebase-architecture", "skip_flag": "SKIP_NONE"},
+  {"name": "hermes-cli", "source": "hermes-cli", "skip_flag": "SKIP_NONE"},
+  {"name": "skillwiki", "source": "karlorz/llm-wiki#packages/skills", "skip_flag": "SKIP_NONE"},
+  {"name": "context7", "source": "context7", "skip_flag": "SKIP_NONE"},
+  {"name": "vault-sync", "source": "karlorz/llm-wiki#packages/vault-sync", "skip_flag": "SKIP_VAULT_SYNC"},
+  {"name": "codex", "source": "openai/codex-plugin-cc#plugins/codex", "skip_flag": "SKIP_CODEX"},
+  {"name": "playwright-cli", "source": "playwright-cli", "skip_flag": "SKIP_PLAYWRIGHT"}
+]

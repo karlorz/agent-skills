@@ -13,7 +13,7 @@ Do **not** write a long chat essay and wait. Call **Ask User Question** immediat
 
 - **Refresh AGENTS.md** (Recommended) — harness group update or a new scenario on an existing host. Detect drift, splice the contract, leave user sections alone.
 - **Full host init** — new machine. Keys, config, plugins.
-- **Status only** — no writes. Print the records **in this chat** (not only a collapsed tool card): status word, what it means, plugin version, live Keep working line.
+- **Status only** — no writes. Run `--status` and quote the **full inventory** in this chat (not a 4-row summary, not a collapsed tool card).
 
 Timeout selects Recommended. Treat that as the go-ahead.
 
@@ -41,20 +41,12 @@ bash "$INSTALL" --docs-status
 ## Status only
 
 ```bash
-bash "$INSTALL" --docs-status
+bash "$INSTALL" --status
 ```
 
-The CLI word is for scripts. In the session, quote:
+No bash (Windows): `python3 "$PLUGIN/scripts/status.py" --grok-home "$GROK_HOME" --plugin-root "$PLUGIN"`.
 
-| Word | Meaning |
-|---|---|
-| `match` | harness block equals installed assets |
-| `drift` | block present but differs |
-| `missing` | no `AGENTS.md` |
-| `unmarked` | v0.2.0 unmarked contract |
-| `absent` | file exists, no harness block |
-
-Also print the installed `grok-build-harness` version and the live Keep working line from `$GROK_HOME/AGENTS.md` (full marker block if that line is missing). Do not skip the records and jump to "no problem" / the next scenario. Then Ask User Question if another scenario remains.
+`--docs-status` stays one word for scripts. `--status` is the session inventory: contract word + meaning, plugin vs stamp, required files, `[agent]` name, `plan_mode`, Keep working line, and each harness companion (`enabled` / `not-enabled` / `extra`, `present` / `missing`). Quote that block in chat. Do not skip it and jump to "no problem" / the next scenario. Then Ask User Question if another scenario remains.
 
 ## Full init
 

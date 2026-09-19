@@ -60,6 +60,7 @@ The skill runs `scripts/install.sh`, which:
 --skip-plugins         files + config only
 --docs-only            AGENTS.md splice + agents/agentrules; skip config/plugins/keys
 --docs-status          print AGENTS.md contract status and exit
+--status               print a no-secrets harness inventory and exit
 --no-config            skip config.toml
 --dry-run              preview without writing
 --force / -y           overwrite without prompting

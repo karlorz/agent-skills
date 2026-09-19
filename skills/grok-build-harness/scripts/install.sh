@@ -15,7 +15,7 @@
 # Usage:
 #   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
 #              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
-#              [--skip-plugins] [--docs-only] [--docs-status] [--no-config]
+#              [--skip-plugins] [--docs-only] [--docs-status] [--status] [--no-config]
 #              [--dry-run] [--force] [--verify]
 #              [--require-keys] [--restrictive] [--force-render]
 #              [--with-grokgod] [--skip-grokgod] [-y]
@@ -44,6 +44,7 @@ SKIP_PLAYWRIGHT=0
 SKIP_PLUGINS=0
 DOCS_ONLY=0
 DOCS_STATUS=0
+STATUS=0
 NO_CONFIG=0
 DRY_RUN=0
 FORCE=0
@@ -65,7 +66,7 @@ then adds companion marketplaces and installs the plugin set with --trust.
 Usage:
   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
-             [--skip-plugins] [--docs-only] [--docs-status] [--no-config]
+             [--skip-plugins] [--docs-only] [--docs-status] [--status] [--no-config]
              [--dry-run] [--force] [--verify]
              [--require-keys] [--restrictive] [--force-render]
              [--with-grokgod] [--skip-grokgod] [--strict] [-y]
@@ -87,6 +88,7 @@ Options:
                          config, plugins, and key prompts
   --docs-status          print AGENTS.md contract status (missing|match|drift|
                          unmarked|absent) and exit; no writes
+  --status               print a no-secrets harness inventory and exit
   --no-config            do not touch config.toml
   --with-grokgod         force grokgod plan_mode implement_via_subagents merge
   --skip-grokgod         skip grokgod plan_mode merge even if detected
@@ -115,6 +117,7 @@ while [ $# -gt 0 ]; do
     --skip-plugins) SKIP_PLUGINS=1; shift ;;
     --docs-only) DOCS_ONLY=1; SKIP_PLUGINS=1; NO_CONFIG=1; shift ;;
     --docs-status) DOCS_STATUS=1; SKIP_PLUGINS=1; NO_CONFIG=1; shift ;;
+    --status) STATUS=1; SKIP_PLUGINS=1; NO_CONFIG=1; shift ;;
     --no-config) NO_CONFIG=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
@@ -142,29 +145,25 @@ if [ "$DOCS_STATUS" -eq 1 ]; then
   python3 "$MERGE" --status "$ASSETS/AGENTS.md" "$GROK_HOME/AGENTS.md"
   exit 0
 fi
+if [ "$STATUS" -eq 1 ]; then
+  command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH (required for grok-build-init)"
+  python3 "$HERE/status.py" --grok-home "$GROK_HOME" --plugin-root "$PLUGIN_ROOT"
+  exit $?
+fi
 BACKUP_DIR="$GROK_HOME/backups/grok-build-harness-$(date +%Y%m%d%H%M%S)"
 PERMISSION_MODE="always-approve"
 [ "$RESTRICTIVE" -eq 1 ] && PERMISSION_MODE="plan"
 
 # name|source|skip-flag-name — one table drives both the enabled list and the
 # install loop, so the two can never drift apart. SKIP_NONE is always 0.
+# SSOT: assets/plugin-specs.json (status.py --as-bash).
 SKIP_NONE=0
-PLUGIN_SPECS=(
-  "grok-build-harness|grok-build-harness|SKIP_NONE"
-  "superpowers|superpowers@anthropics/claude-plugins-official|SKIP_NONE"
-  "simplify|simplify|SKIP_NONE"
-  "deep-research|deep-research|SKIP_NONE"
-  "dev-loop|dev-loop|SKIP_NONE"
-  "claude-md-management|claude-md-management@karlorz/agent-skills|SKIP_NONE"
-  "grill-me|grill-me|SKIP_NONE"
-  "codebase-architecture|codebase-architecture|SKIP_NONE"
-  "hermes-cli|hermes-cli|SKIP_NONE"
-  "skillwiki|karlorz/llm-wiki#packages/skills|SKIP_NONE"
-  "context7|context7|SKIP_NONE"
-  "vault-sync|karlorz/llm-wiki#packages/vault-sync|SKIP_VAULT_SYNC"
-  "codex|openai/codex-plugin-cc#plugins/codex|SKIP_CODEX"
-  "playwright-cli|playwright-cli|SKIP_PLAYWRIGHT"
-)
+command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH (required for grok-build-init)"
+PLUGIN_SPECS=()
+while IFS= read -r spec; do
+  [ -n "$spec" ] && PLUGIN_SPECS+=("$spec")
+done < <(python3 "$HERE/status.py" --as-bash)
+[ "${#PLUGIN_SPECS[@]}" -gt 0 ] || die "assets/plugin-specs.json produced no plugin specs"
 
 ENABLED=()
 for spec in "${PLUGIN_SPECS[@]}"; do

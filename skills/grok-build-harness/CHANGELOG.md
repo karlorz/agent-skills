@@ -2,6 +2,11 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.4] - 2026-09-19
+
+- Status only quotes `install.sh --status` / `scripts/status.py` (no-secrets harness inventory). `--docs-status` stays one word.
+- Companion plugin table SSOT is `assets/plugin-specs.json`. Portable layer stays Python 3, not Node/mjs.
+
 ## [0.5.3] - 2026-09-19
 
 - Status only must print the records in chat (status word + meaning, plugin version, live Keep working line). `--docs-status` stays one word for scripts.

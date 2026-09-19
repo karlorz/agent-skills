@@ -74,13 +74,16 @@ assert_contains "with-keys: context7 key injected" \
 assert_contains "with-keys: enabled list substituted" \
   "$(cat "$TEST_ROOT/with-keys.toml")" 'enabled = ["superpowers", "dev-loop", "skillwiki"]'
 
-# --- regression: harness plugin must be in PLUGIN_SPECS + [plugins].enabled ---
-# Assert the harness plugin is in install.sh's PLUGIN_SPECS (the source of
-# truth for [plugins].enabled) — this is the guard that catches the original
-# bug. The dry-run assertion below independently verifies it surfaces in the
-# plugins line.
-assert_contains "harness plugin in PLUGIN_SPECS" \
-  "$(cat "$INSTALL")" 'grok-build-harness|grok-build-harness|SKIP_NONE'
+# --- regression: harness plugin must be in plugin-specs.json (SSOT) ----------
+# The original bug was dropping grok-build-harness from [plugins].enabled.
+# Specs live in assets/plugin-specs.json; install.sh loads them via status.py.
+STATUS_PY="$PLUGIN/scripts/status.py"
+python3 -m py_compile "$STATUS_PY" 2>/dev/null \
+  && ok "status.py compiles" || fail "status.py fails to compile"
+assert_contains "harness plugin in plugin-specs.json" \
+  "$(cat "$PLUGIN/assets/plugin-specs.json")" '"name": "grok-build-harness"'
+assert_contains "status.py --as-bash emits harness spec" \
+  "$(python3 "$STATUS_PY" --as-bash)" 'grok-build-harness|grok-build-harness|SKIP_NONE'
 
 # --- config generation: env-only ---------------------------------------------
 run_generate "$TEST_ROOT/env-only.toml" --enabled "superpowers"
@@ -224,6 +227,20 @@ if [ -f "$DOCS_HOME/agents/grok-build-byok.md" ]; then DOCS_AGENT=yes; else DOCS
 assert_eq "docs-only: agents file installed" "$DOCS_AGENT" "yes"
 DOCS_STATUS="$("$INSTALL" --grok-home "$DOCS_HOME" --docs-status)"
 assert_eq "docs-status after docs-only is match" "$DOCS_STATUS" "match"
+DOCS_INV="$("$INSTALL" --grok-home "$DOCS_HOME" --status)"
+assert_contains "status: contract match after docs-only" "$DOCS_INV" "contract: match"
+assert_contains "status: plugin version line" "$DOCS_INV" "plugin: ${PLUGIN_VERSION}"
+assert_contains "status: byok agent file ok" "$DOCS_INV" "file: ok agents/grok-build-byok.md"
+assert_contains "status: keep_working yes" "$DOCS_INV" "keep_working: yes"
+assert_not_contains "status: no api_key leak" "$DOCS_INV" "api_key"
+PY_INV="$(python3 "$STATUS_PY" --grok-home "$DOCS_HOME" --plugin-root "$PLUGIN")"
+assert_eq "status.py matches install.sh --status" "$PY_INV" "$DOCS_INV"
+SKW_HOME="$TEST_ROOT/skillwiki-present-home"
+mkdir -p "$SKW_HOME/installed-plugins/skills-abc/.claude-plugin"
+printf '%s\n' '{"name":"skillwiki"}' > "$SKW_HOME/installed-plugins/skills-abc/.claude-plugin/plugin.json"
+printf '# notes\n' > "$SKW_HOME/AGENTS.md"
+SKW_INV="$(python3 "$STATUS_PY" --grok-home "$SKW_HOME" --plugin-root "$PLUGIN")"
+assert_contains "status: skillwiki present via plugin.json name" "$SKW_INV" "companion: skillwiki no-config present"
 
 # --- installer: re-run idempotency (files + config) ---------------------------
 IDEM_HOME="$TEST_ROOT/idem-home"
@@ -236,6 +253,11 @@ assert_eq "re-run: no new backup dir" \
   "$(find "$IDEM_HOME/backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')" "0"
 assert_eq "re-run: config keeps injected keys" \
   "$(grep -c 'api_key = "idem' "$IDEM_HOME/config.toml")" "8"
+IDEM_INV="$("$INSTALL" --grok-home "$IDEM_HOME" --status)"
+assert_contains "status after skip-plugins: agent grok-build-byok" "$IDEM_INV" "agent: grok-build-byok"
+assert_contains "status after skip-plugins: harness enabled" "$IDEM_INV" "companion: grok-build-harness enabled"
+assert_not_contains "status after skip-plugins: no hub secret" "$IDEM_INV" "idem-hub"
+assert_not_contains "status after skip-plugins: no api_key" "$IDEM_INV" "api_key"
 
 # --- installer: keyed config survives a keyless re-run (ADR-4) ----------------
 GUARD_HOME="$TEST_ROOT/guard-home"
