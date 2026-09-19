@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.3] - 2026-09-19
+
+- Status only must print the records in chat (status word + meaning, plugin version, live Keep working line). `--docs-status` stays one word for scripts.
+
 ## [0.5.2] - 2026-09-19
 
 - `/grok-build-init` is a short Ask User Question loop: refresh `AGENTS.md` (default), full host init, or status only. Timeout selects Recommended.

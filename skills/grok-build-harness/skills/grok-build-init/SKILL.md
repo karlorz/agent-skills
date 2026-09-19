@@ -13,7 +13,7 @@ Do **not** write a long chat essay and wait. Call **Ask User Question** immediat
 
 - **Refresh AGENTS.md** (Recommended) — harness group update or a new scenario on an existing host. Detect drift, splice the contract, leave user sections alone.
 - **Full host init** — new machine. Keys, config, plugins.
-- **Status only** — print whether the contract is `match` / `drift` / `missing` / `unmarked` / `absent`. No writes.
+- **Status only** — no writes. Print the records **in this chat** (not only a collapsed tool card): status word, what it means, plugin version, live Keep working line.
 
 Timeout selects Recommended. Treat that as the go-ahead.
 
@@ -37,6 +37,24 @@ bash "$INSTALL" --docs-status
 ```
 
 `--docs-status` prints one word: `missing` | `match` | `drift` | `unmarked` | `absent`. After `--docs-only`, status should be `match`. User content outside `<!-- grok-build-harness:begin/end -->` is preserved. Then Ask User Question once more if another scenario remains.
+
+## Status only
+
+```bash
+bash "$INSTALL" --docs-status
+```
+
+The CLI word is for scripts. In the session, quote:
+
+| Word | Meaning |
+|---|---|
+| `match` | harness block equals installed assets |
+| `drift` | block present but differs |
+| `missing` | no `AGENTS.md` |
+| `unmarked` | v0.2.0 unmarked contract |
+| `absent` | file exists, no harness block |
+
+Also print the installed `grok-build-harness` version and the live Keep working line from `$GROK_HOME/AGENTS.md` (full marker block if that line is missing). Do not skip the records and jump to "no problem" / the next scenario. Then Ask User Question if another scenario remains.
 
 ## Full init
 
