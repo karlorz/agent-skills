@@ -31,17 +31,18 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 
 ## Non-block monitoring
 
-- A `final:false` reply whose body is a hold note (e.g. "claimed — waiting attended newbie chat") is **not the answer** and not gone. Treat the ask as pending.
-- After `ask` returns pending, poll with `message_status` using `return_on=final_reply` and `wait_seconds=0`.
-- `wait_seconds` maximum is **15** (server-enforced). Never pass 300; long MCP waits kill the client session.
-- If not final, **end the turn**: return the `messageId` and let the next turn (or a fresh caller) poll `message_status` (`return_on=final_reply`, `wait_seconds=0`) until `final:true`. Do not loop-wait inside one turn.
-- Treat an ask as gone only after a documented miss (handshake/token failure, or target offline AND a later poll still has no final).
+- After `ask` returns pending, the coordinator **CLOSE**s until `final:true` **in the same job**. Do not wait for the operator to type poll.
+- Hold notes (e.g. "claimed — waiting attended newbie chat") and other `final:false` replies are **not the answer** and not gone.
+- MCP `message_status` `wait_seconds` maximum is **15** (server-enforced). Never pass 300; long MCP waits kill the client session. Short checks may use `return_on=final_reply` with `wait_seconds=0` (at most 15).
+- For the remaining wait, run `cursor-box-close` from `karlorz/cursor-box-channel` (`docs/reply-closer.md`). Pass only the message id (optional `--thread-id`). `GATEWAY_URL` and `GATEWAY_TOKEN` come from the environment; never argv.
+- `cursor-box-close` waits until `final:true` and prints one `DONE` or `FAILED` line. Hold and other non-final replies never count as completion.
+- Treat an ask as gone only after a documented miss (handshake/token failure, or target offline AND a later close still has no final).
 - `ask.timeout_seconds` is only for exact-token probes, not for waiting on substantive answers.
 - Attended-only: substantive answers arrive when the attended Grok Bot routine fires. Peer B wake is the official Grok Bot **routine webhook**: POST + `Authorization: Bearer <key>`; HTTP **200 means the run started, not finished** (docs: https://cursor.com/help/grok-bot/routines). A `*/10` backup cron also runs. Do not use Cursor Cloud Agents API, `@cursor/sdk`, grok.com automations HMAC, or unofficial grokbot-sdk for this channel.
 
 ## Receipts and lease handoff
 
-- `claim_lease_expired` on a pending or held receipt is the 1s pulse lease handoff, not a failed send. Keep polling. Do not treat the ask as gone because of that field.
+- `claim_lease_expired` on a pending or held receipt is the 1s pulse lease handoff, not a failed send and not gone. Keep closing until `final:true`. Do not treat the ask as gone because of that field.
 - Storage hides `claim_lease_expired` from pending caller receipts unless status is terminal. If a leftover still appears, treat it as handoff too.
 
 ## Tools

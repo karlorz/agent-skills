@@ -24,6 +24,7 @@ codex_manifest_path = root / ".codex-plugin" / "plugin.json"
 example_path = root / "cursor-cli-mcp.example.json"
 changelog_path = root / "CHANGELOG.md"
 cursor_marketplace_path = repo_root / ".cursor-plugin" / "marketplace.json"
+claude_marketplace_path = repo_root / ".claude-plugin" / "marketplace.json"
 keep_skill_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "skills" / "cursor-github-marketplace-repin" / "SKILL.md"
 keep_default_path = repo_root / "skills" / "cursor-github-marketplace-repin" / "scripts" / "keep.default.json"
 
@@ -39,6 +40,7 @@ for path in (
     example_path,
     changelog_path,
     cursor_marketplace_path,
+    claude_marketplace_path,
     keep_skill_path,
     keep_default_path,
 ):
@@ -108,8 +110,8 @@ claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
 codex_manifest = json.loads(texts[codex_manifest_path])
 expected_version = claude_manifest.get("version")
-if expected_version != "0.3.3":
-    raise SystemExit(f"{manifest_path}: version must be 0.3.3")
+if expected_version != "0.3.4":
+    raise SystemExit(f"{manifest_path}: version must be 0.3.4")
 if cursor_manifest.get("version") != expected_version:
     raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if codex_manifest.get("version") != expected_version:
@@ -159,6 +161,8 @@ for forbidden in ("headers", "http_headers", "env_http_headers", "command", "arg
 
 # 5. CHANGELOG
 changelog_text = texts[changelog_path]
+if "## [0.3.4] - 2026-09-19" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must contain ## [0.3.4] - 2026-09-19")
 if "## [0.3.3] - 2026-09-19" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain ## [0.3.3] - 2026-09-19")
 if "## [0.3.2] - 2026-09-04" not in changelog_text:
@@ -210,6 +214,20 @@ if "final:false" not in body:
     raise SystemExit(f"{skill_path}: must mention final:false")
 if "not the answer" not in body.lower():
     raise SystemExit(f"{skill_path}: must mention hold / final:false is not the answer")
+if "cursor-box-close" not in body:
+    raise SystemExit(f"{skill_path}: must mention cursor-box-close")
+if "GATEWAY_URL" not in body or "GATEWAY_TOKEN" not in body:
+    raise SystemExit(f"{skill_path}: must mention GATEWAY_URL and GATEWAY_TOKEN")
+if "never argv" not in body.lower():
+    raise SystemExit(f"{skill_path}: must say GATEWAY_URL/GATEWAY_TOKEN are never argv")
+if "same job" not in body.lower():
+    raise SystemExit(f"{skill_path}: must CLOSE until final:true in the same job")
+if "wait_seconds" not in body or "**15**" not in body:
+    raise SystemExit(f"{skill_path}: must keep wait_seconds maximum 15")
+if "end the turn" in body.lower() or "let the next turn" in body.lower():
+    raise SystemExit(f"{skill_path}: must not tell the coordinator to end the turn for an operator poll")
+if "200 means the run started" not in body.lower():
+    raise SystemExit(f"{skill_path}: must keep official Grok Bot routine webhook 200=started")
 if len(skill_text.split()) > 1500:
     raise SystemExit(f"{skill_path}: too long ({len(skill_text.split())} words > 1500)")
 
@@ -248,6 +266,17 @@ if not cursor_entry:
     raise SystemExit(f"{cursor_marketplace_path}: cursor-box-channel entry missing")
 if cursor_entry.get("source") != "skills/cursor-box-channel":
     raise SystemExit(f"{cursor_marketplace_path}: source must be skills/cursor-box-channel")
+claude_marketplace = json.loads(texts[claude_marketplace_path])
+claude_entries = claude_marketplace.get("plugins")
+if not isinstance(claude_entries, list):
+    raise SystemExit(f"{claude_marketplace_path}: plugins must be an array")
+claude_entry = next((item for item in claude_entries if item.get("name") == "cursor-box-channel"), None)
+if not claude_entry:
+    raise SystemExit(f"{claude_marketplace_path}: cursor-box-channel entry missing")
+if claude_entry.get("source") != "./skills/cursor-box-channel":
+    raise SystemExit(f"{claude_marketplace_path}: source must be ./skills/cursor-box-channel")
+if claude_entry.get("version") != expected_version:
+    raise SystemExit(f"{claude_marketplace_path}: version must match Claude manifest {expected_version}")
 
 keep_skill = texts[keep_skill_path]
 if "`grok-search`, `deep-research`, `cursor-box-channel`" not in keep_skill:
@@ -272,6 +301,7 @@ blob = "".join(
         example_path,
         changelog_path,
         cursor_marketplace_path,
+        claude_marketplace_path,
     )
 )
 allowed_bearer = expected_bearer

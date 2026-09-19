@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.4] - 2026-09-19
+
+### Changed
+- Coordinator CLOSE until `final:true` in the same job via `cursor-box-close` (`GATEWAY_URL` + `GATEWAY_TOKEN` from env, never argv). MCP `wait_seconds` max 15 is unchanged. Hold notes are not the answer. Stop asking the operator to type poll.
+
 ## [0.3.3] - 2026-09-19
 
 ### Added
