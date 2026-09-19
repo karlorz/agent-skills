@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.26.38] - 2026-09-20
+
+- Route optional Codex review through native `codex review --uncommitted` first. Treat `codex:codex-rescue` as a Claude-host fallback only, and stop using a missing companion plugin as a health or DEP_DRIFT gate.
+
 ## [1.26.37] - 2026-09-16
 
 - Resolve the maintained `grill-with-docs`, `grill-me:grilling`, and `domain-modeling:domain-modeling` marketplace packages through cross-harness skill discovery instead of stale direct-install paths.

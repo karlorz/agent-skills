@@ -174,11 +174,13 @@ optional:
     fallback: "skip step 6a; rely on E2E fallback command if configured"
 
   # --- Code review (multi-backend, since v1.15.0) ---
+  # Claude-host companion only. Native `codex review` is the default second
+  # opinion; missing companion must not disable Codex review on other hosts.
   - kind: agent
     ref: codex:codex-rescue
-    capability: codex_code_review_backend
-    used_by: ["REVIEW step 6 when code_review.codex.enabled_in_<intensity>: true"]
-    fallback: "drop codex-review-worker from CODE_REVIEW_BACKENDS; simplify:simplify reviews alone"
+    capability: claude_codex_companion_fallback
+    used_by: ["REVIEW step 6 Claude-host fallback when native `codex review` is unavailable"]
+    fallback: "use native `codex review --uncommitted`; if that is also unavailable, drop Codex review and keep simplify:simplify"
 
   - kind: skill
     ref: simplify:simplify

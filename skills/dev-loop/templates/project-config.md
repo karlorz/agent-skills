@@ -627,10 +627,11 @@ runs with unbounded retries (legacy behavior).
 Configures the REVIEW step's code-review backends. The base `simplify:simplify`
 skill always runs for code changes, preferably through the
 `dev-loop:simplify-worker` subagent adapter when worker dispatch is available.
-An optional second-opinion backend (`dev-loop:codex-review-worker`, which wraps
-`codex:codex-rescue`) can be enabled per-intensity. When enabled, REVIEW step
-6 runs the simplify pass first, then spawns the optional worker via
-`Agent(model: "sonnet")`; findings concatenate under per-backend section
+An optional second-opinion backend (`dev-loop:codex-review-worker`) can be
+enabled per-intensity. The worker prefers native `codex review --uncommitted`
+and uses `codex:codex-rescue` only as a Claude-host fallback. When enabled,
+REVIEW step 6 runs the simplify pass first, then spawns the optional worker
+via `Agent(model: "sonnet")`; findings concatenate under per-backend section
 headers. No auto-reconciliation between reports.
 
 ```yaml
@@ -648,9 +649,9 @@ Engine wiring:
    - Always includes `simplify:simplify` as the required base skill; prefer
      `dev-loop:simplify-worker` for subagent isolation when available.
    - Conditionally appends `dev-loop:codex-review-worker` when the
-     current intensity's `enabled_in_*` toggle is true AND neither
-     `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in
-     `DEP_DRIFT` (doctor-worker reports the latter at REFRESH step 7).
+     current intensity's `enabled_in_*` toggle is true AND
+     `dev-loop:codex-review-worker` is not in `DEP_DRIFT`. Missing
+     `codex:codex-rescue` does not disable the backend.
 2. **REVIEW step 6** runs the simplify pass via `dev-loop:simplify-worker`
    when possible, or inline `Skill("simplify:simplify")` when worker dispatch
    is unavailable. It spawns optional worker backends in

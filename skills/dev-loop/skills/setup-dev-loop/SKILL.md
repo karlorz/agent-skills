@@ -493,44 +493,44 @@ prd_disciplines:
 
 **Section M — Code review backends (since v1.15.0).**
 
-> Explainer: dev-loop's REVIEW step always invokes the `simplify:simplify` skill as the base code reviewer for code changes, preferably through the `dev-loop:simplify-worker` subagent adapter when worker dispatch is available. This is a required skill pass over the current diff, not an informal manual scan. Optionally, a second reviewer can run in parallel — `codex:codex-rescue` via the `dev-loop:codex-review-worker` wrapper — to provide an independent out-of-distribution second opinion. Two reviewers, two independent reads, no auto-reconciliation. Opt-in per intensity (normal / high) to avoid cost surprises.
+> Explainer: dev-loop's REVIEW step always invokes the `simplify:simplify` skill as the base code reviewer for code changes, preferably through the `dev-loop:simplify-worker` subagent adapter when worker dispatch is available. This is a required skill pass over the current diff, not an informal manual scan. Optionally, a second reviewer can run in parallel — `dev-loop:codex-review-worker` — to provide an independent out-of-distribution second opinion. That worker prefers native `codex review --uncommitted`. The Claude `codex:codex-rescue` companion is a host-specific fallback only. Two reviewers, two independent reads, no auto-reconciliation. Opt-in per intensity (normal / high) to avoid cost surprises.
 
-Detect: probe whether the Codex **runtime** is usable via the companion's
-own self-check (not a file-existence guess).
+Detect whether a Codex **review backend** is usable. Probe native CLI first;
+do not treat a Claude plugin-cache glob as the universal signal.
 
-1. Glob `~/.claude/plugins/cache/*/codex/*/scripts/codex-companion.mjs` to
-   locate the companion script. If zero matches, treat as not-installed
-   and skip Section M with the install hint below.
-2. Run `node <companion-path> setup --json`. Parse the JSON. If the
-   command fails (non-zero exit, missing `node`, permissions error,
-   etc.), treat as not-installed per step 5 below — do not crash the
-   setup flow.
-3. Treat as **Codex-available** iff `ready === true` AND
-   `codex.available === true`.
-4. If `ready === false` AND `auth.loggedIn === false`, surface the
-   auth-specific hint instead of the generic install hint: "Codex
-   installed but not authenticated — run `codex login` then re-run
-   `/dev-loop setup`."
-5. Any other failure (JSON parse error, missing fields, non-zero exit) →
-   treat as not-installed and skip Section M.
+1. Run `codex --version`. If it fails, native review is unavailable.
+2. If native Codex exists, run `codex review --help`. Treat native review as
+   available when the command exists (exit 0, or help text that documents
+   `--uncommitted`).
+3. Companion probe is Claude-only extra, never the sole gate. If the current
+   host is Claude Code, glob
+   `~/.claude/plugins/cache/*/codex/*/scripts/codex-companion.mjs`. If one
+   or more matches exist, run `node <companion-path> setup --json` from the
+   highest versioned path, not an arbitrary glob expansion. Parse JSON. If
+   `ready === true` AND `codex.available === true`, companion fallback is
+   available. If `ready === false` AND `auth.loggedIn === false`, mention
+   `codex login` as an optional extra, not as a reason to skip native review.
+   Any other companion failure is non-fatal when native review is available.
+4. Treat **Codex-available** iff native `codex review` is available, or
+   (Claude host only) companion fallback is available.
+5. Do not crash setup on companion probe errors.
 
-Why runtime probe: filesystem checks for `agents/codex-rescue.md` give
-false negatives when the agent file isn't cached locally even though
-`codex-cli` is installed and authenticated. The companion's
-`setup --json` output is the authoritative signal — same classification
-the Codex runtime uses when accepting code-review work.
+Why this order: `codex review --uncommitted` works on Claude, Grok, Cursor,
+and native Codex hosts. The companion script lives under Claude's plugin
+cache and is not a cross-host capability. Filesystem checks for
+`agents/codex-rescue.md` remain insufficient.
 
 The doctor-worker filesystem probe (Section 1 Explore / REFRESH step 7)
-still drives `DEP_DRIFT` for generic dependency health. Section M uses
-the runtime probe because it answers a stricter question ("is the
-runtime usable?") than doctor-worker's generic question ("is the agent
-file present?"). Do not reuse doctor-worker's filesystem result here.
+still drives `DEP_DRIFT` for generic dependency health. Missing
+`codex:codex-rescue` must not disable Codex review. Section M answers
+"can this host run a Codex review?" using native CLI first.
 
-If Codex is NOT installed (no companion script found) → skip this
-section with install hint: "Install the Codex plugin to enable Codex
-code review: `/plugin add openai-codex` (or check the marketplace for
-the current install path). For now, dev-loop will run `simplify:simplify`
-through `dev-loop:simplify-worker` when worker dispatch is available, or inline
+If Codex is NOT available (no native `codex review`, and no Claude
+companion fallback) → skip this section with install hint: "Install the
+Codex CLI (`npm install -g @openai/codex`) so `codex review --uncommitted`
+works. On Claude Code, `/plugin add openai-codex` remains an optional
+fallback. For now, dev-loop will run `simplify:simplify` through
+`dev-loop:simplify-worker` when worker dispatch is available, or inline
 when it is not."
 
 If Codex IS installed → present 2 toggles:
@@ -552,7 +552,7 @@ code_review:
     agent: dev-loop:codex-review-worker
 ```
 
-**Runtime behavior:** Loaded at REFRESH into `CODE_REVIEW_BACKENDS` session list. Always includes `simplify:simplify` as the required base skill invocation for code changes; dev-loop should prefer `dev-loop:simplify-worker` for subagent isolation and fall back to inline `Skill("simplify:simplify")` when worker dispatch is unavailable. Appends `dev-loop:codex-review-worker` when (a) current intensity's `enabled_in_*` flag is true AND (b) neither `dev-loop:codex-review-worker` nor `codex:codex-rescue` is in `DEP_DRIFT`. REVIEW step 6 runs the simplify pass first, then spawns optional worker backends with `model: "sonnet"` when enabled. Findings are concatenated under per-backend section headers. No auto-reconciliation. Schema reference: `templates/project-config.md` § Code review.
+**Runtime behavior:** Loaded at REFRESH into `CODE_REVIEW_BACKENDS` session list. Always includes `simplify:simplify` as the required base skill invocation for code changes; dev-loop should prefer `dev-loop:simplify-worker` for subagent isolation and fall back to inline `Skill("simplify:simplify")` when worker dispatch is unavailable. Appends `dev-loop:codex-review-worker` when (a) current intensity's `enabled_in_*` flag is true AND (b) `dev-loop:codex-review-worker` is not in `DEP_DRIFT`. Missing `codex:codex-rescue` does not disable the backend. REVIEW step 6 runs the simplify pass first, then spawns optional worker backends with `model: "sonnet"` when enabled. Findings are concatenated under per-backend section headers. No auto-reconciliation. Schema reference: `templates/project-config.md` § Code review. Comparison: `comparisons/codex-cli-control-paths.md`.
 
 **Section N — Release policy (since v1.19.0).** Controls whether step
 10 PUSH auto-bumps version on shippable commits. Optional; omit the

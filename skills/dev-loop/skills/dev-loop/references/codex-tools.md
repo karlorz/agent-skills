@@ -38,7 +38,7 @@ Codex each is a `spawn_agent(task_name=..., prompt=...)` + `wait_agent` +
 | `dev-loop:sdd-execute-worker` | EXECUTE step 5 | preferred isolated adapter for `superpowers:subagent-driven-development` |
 | `dev-loop:simplify-worker` | REVIEW step 6 | preferred isolated adapter for `simplify:simplify` |
 | `simplify:simplify` | REVIEW step 6 | required code-quality review skill; inline fallback |
-| `dev-loop:codex-review-worker` | REVIEW step 6 (if enabled) | correctness/security (delegates to Codex) |
+| `dev-loop:codex-review-worker` | REVIEW step 6 (if enabled) | correctness/security (native `codex review`; Claude companion fallback only) |
 | `dev-loop:ci-health-worker` | MERGE 6b / IDLE step 3b | CI health gate |
 | `playwright-cli:browser-worker` | BROWSER-VERIFY 6a | browser smoke check |
 

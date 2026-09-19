@@ -33,6 +33,12 @@ run_blocking_status() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# Isolate HOME so live ~/.claude/dev-loop/last-doctor.json compact_count
+# cannot block fixture previews that expect exit 0.
+ISOLATED_HOME="$TMP/isolated-home"
+mkdir -p "$ISOLATED_HOME"
+export HOME="$ISOLATED_HOME"
+
 mkdir -p "$TMP/.claude"
 cat > "$TMP/.claude/dev-loop.config.md" <<'EOF'
 # test
@@ -541,8 +547,8 @@ cat > "$TMP/skills/dev-loop/dependencies.yaml" <<'EOF'
 optional:
   - kind: agent
     ref: codex:codex-rescue
-    capability: codex_code_review_backend
-    used_by: ["REVIEW step 6 when code_review.codex.enabled_in_<intensity>: true"]
+    capability: claude_codex_companion_fallback
+    used_by: ["REVIEW step 6 Claude-host fallback when native `codex review` is unavailable"]
   - kind: agent
     ref: dev-loop:codex-review-worker
     capability: codex_code_review_wrapper
@@ -623,8 +629,11 @@ OUT_ENABLED_REVIEW="$(HOME="$NESTED_HOME" node "$STATUS_JS" --repo "$TMP" --vaul
 echo "$OUT_ENABLED_REVIEW" | node -e '
 const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 const relevant = j.health.relevant_missing_optional || [];
-for (const ref of ["codex:codex-rescue", "dev-loop:codex-review-worker"]) {
-  if (!relevant.includes(ref)) throw new Error(`enabled Codex backend missing relevance: ${ref}`);
+if (!relevant.includes("dev-loop:codex-review-worker")) {
+  throw new Error(`enabled Codex backend missing relevance: dev-loop:codex-review-worker`);
+}
+if (relevant.includes("codex:codex-rescue")) {
+  throw new Error("Claude companion must not gate Codex review health");
 }
 if (relevant.includes("dev-loop:sdd-execute-worker") || relevant.includes("superpowers:test-driven-development")) {
   throw new Error(`non-Superpowers capabilities must remain irrelevant: ${JSON.stringify(relevant)}`);

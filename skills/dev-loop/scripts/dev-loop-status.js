@@ -798,8 +798,14 @@ function optionalDependencyRelevant(entry, operations, context) {
   if (!entry.used_by || !operations.some((operation) => entry.used_by.toUpperCase().includes(operation))) {
     return false;
   }
-  if (["codex_code_review_backend", "codex_code_review_wrapper"].includes(entry.capability)) {
+  if (entry.capability === "codex_code_review_wrapper") {
     return codeReviewBackendEnabled(context.config, "codex", context.intensity);
+  }
+  if (
+    entry.capability === "claude_codex_companion_fallback" ||
+    entry.capability === "codex_code_review_backend"
+  ) {
+    return false;
   }
   if (entry.capability === "execute_with_subagent_dispatch_adapter" && context.prdLayer !== "superpowers") {
     return false;

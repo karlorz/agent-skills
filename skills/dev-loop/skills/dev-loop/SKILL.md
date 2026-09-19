@@ -989,10 +989,13 @@ prd_disciplines:
        when workers are unavailable. This is a required skill invocation for
        code changes, not a discretionary manual review.
      - If `intensity == normal` AND `code_review.codex.enabled_in_normal: true`
-       AND `dev-loop:codex-review-worker` ∉ `DEP_DRIFT` AND
-       `codex:codex-rescue` ∉ `DEP_DRIFT` → append `dev-loop:codex-review-worker`.
+       AND `dev-loop:codex-review-worker` ∉ `DEP_DRIFT`
+       → append `dev-loop:codex-review-worker`.
      - If `intensity == high` AND `code_review.codex.enabled_in_high: true`
-       AND both refs not in `DEP_DRIFT` → append `dev-loop:codex-review-worker`.
+       AND `dev-loop:codex-review-worker` ∉ `DEP_DRIFT`
+       → append `dev-loop:codex-review-worker`.
+     The worker prefers native `codex review --uncommitted`. `codex:codex-rescue`
+     is a Claude-host fallback only and must not appear in this gate.
      - If `code_review` block absent → defaults to base-only (preserves
        pre-v1.15.0 behavior).
      Schema: `templates/project-config.md` § Code review. Setup flow:
