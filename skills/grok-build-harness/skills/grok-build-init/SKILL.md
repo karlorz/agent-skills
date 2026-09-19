@@ -46,7 +46,7 @@ bash "$INSTALL" --status
 
 No bash (Windows): `python3 "$PLUGIN/scripts/status.py" --grok-home "$GROK_HOME" --plugin-root "$PLUGIN"`.
 
-`--docs-status` stays one word for scripts. `--status` is the session inventory: contract word + meaning, plugin vs stamp, required files, `[agent]` name, `plan_mode`, Keep working line, and each harness companion (`enabled` / `not-enabled` / `extra`, `present` / `missing`). Quote that block in chat. Do not skip it and jump to "no problem" / the next scenario. Then Ask User Question if another scenario remains.
+`--docs-status` stays one word for scripts. `--status` is the session inventory: contract word + meaning, plugin vs stamp, required files, `[agent]` name, `plan_mode`, Keep working line, each harness companion (`enabled` / `not-enabled` / `extra`, `present` / `missing`), and `english_rule:` lines for Grok / Claude / Codex / Cursor (`missing` / `match` / `drift` vs `assets/reply-in-english.md`). Quote that block in chat. Do not skip it and jump to "no problem" / the next scenario. Then Ask User Question if another scenario remains.
 
 ## Full init
 
@@ -68,7 +68,7 @@ Finish: start a new session so `AGENTS.md` loads. Skillwiki's `~/.grok/skillwiki
 
 Keep-working rule lives in the harness block: Ask User Question + timeout = Recommended. Do not add a second extras file.
 
-Claude.md / Codex AGENTS.md auto-detect is out of scope for this Grok slice.
+English-thinking rule SSOT is `assets/reply-in-english.md`. `--docs-only` copies/splices each host-native load path under `--user-home` (default: parent of `--grok-home`): Grok `rules/` + `AGENTS.md` bullet, Claude `rules/` + `CLAUDE.md`, Codex `AGENTS.md` bullet, Cursor `rules/reply-in-english.mdc`. Status reports those six paths. Do not recreate vault `.cursor/rules` / `.claude/rules` / `.grok/rules` copies.
 
 ## Troubleshooting
 

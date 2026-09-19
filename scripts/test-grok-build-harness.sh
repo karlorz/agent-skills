@@ -80,6 +80,10 @@ assert_contains "with-keys: enabled list substituted" \
 STATUS_PY="$PLUGIN/scripts/status.py"
 python3 -m py_compile "$STATUS_PY" 2>/dev/null \
   && ok "status.py compiles" || fail "status.py fails to compile"
+python3 -m py_compile "$PLUGIN/scripts/english_rule.py" 2>/dev/null \
+  && ok "english_rule.py compiles" || fail "english_rule.py fails to compile"
+assert_contains "english-rule SSOT asset exists" \
+  "$(cat "$PLUGIN/assets/reply-in-english.md")" "You are an English-thinking assistant"
 assert_contains "harness plugin in plugin-specs.json" \
   "$(cat "$PLUGIN/assets/plugin-specs.json")" '"name": "grok-build-harness"'
 assert_contains "status.py --as-bash emits harness spec" \
@@ -232,6 +236,18 @@ assert_contains "status: contract match after docs-only" "$DOCS_INV" "contract: 
 assert_contains "status: plugin version line" "$DOCS_INV" "plugin: ${PLUGIN_VERSION}"
 assert_contains "status: byok agent file ok" "$DOCS_INV" "file: ok agents/grok-build-byok.md"
 assert_contains "status: keep_working yes" "$DOCS_INV" "keep_working: yes"
+assert_contains "status: english_rule grok file match after docs-only" \
+  "$DOCS_INV" "english_rule: grok/rules/reply-in-english.md match"
+assert_contains "status: english_rule grok AGENTS match after docs-only" \
+  "$DOCS_INV" "english_rule: grok/AGENTS.md match"
+assert_contains "status: english_rule claude file match after docs-only" \
+  "$DOCS_INV" "english_rule: claude/rules/reply-in-english.md match"
+assert_contains "status: english_rule claude CLAUDE.md match after docs-only" \
+  "$DOCS_INV" "english_rule: claude/CLAUDE.md match"
+assert_contains "status: english_rule codex AGENTS match after docs-only" \
+  "$DOCS_INV" "english_rule: codex/AGENTS.md match"
+assert_contains "status: english_rule cursor mdc match after docs-only" \
+  "$DOCS_INV" "english_rule: cursor/rules/reply-in-english.mdc match"
 assert_not_contains "status: no api_key leak" "$DOCS_INV" "api_key"
 PY_INV="$(python3 "$STATUS_PY" --grok-home "$DOCS_HOME" --plugin-root "$PLUGIN")"
 assert_eq "status.py matches install.sh --status" "$PY_INV" "$DOCS_INV"
@@ -562,6 +578,33 @@ assert_contains "classify-inspect: privacy is docs-lag" "$CLASSIFY_OUT" "unknown
 assert_contains "classify-inspect: ui.notifications is docs-lag" "$CLASSIFY_OUT" "unknown-field ui.notifications: docs-lag"
 assert_contains "classify-inspect: unknown table is unexpected" "$CLASSIFY_OUT" "unknown-field zzz_future: unexpected"
 assert_not_contains "classify-inspect: no PII in output" "$CLASSIFY_OUT" "user@example.com"
+
+# --- english-rule: inventory missing/drift and apply does not touch $HOME -----
+ENG_GROK="$TEST_ROOT/english-rule-grok"
+ENG_USER="$TEST_ROOT/english-rule-user"
+mkdir -p "$ENG_GROK"
+printf '# notes\n' > "$ENG_GROK/AGENTS.md"
+ENG_MISS="$(python3 "$STATUS_PY" --grok-home "$ENG_GROK" --user-home "$ENG_USER" --plugin-root "$PLUGIN")"
+assert_contains "english_rule missing before apply" \
+  "$ENG_MISS" "english_rule: grok/rules/reply-in-english.md missing"
+assert_contains "english_rule AGENTS missing before apply" \
+  "$ENG_MISS" "english_rule: grok/AGENTS.md missing"
+python3 "$PLUGIN/scripts/english_rule.py" --apply \
+  --grok-home "$ENG_GROK" --user-home "$ENG_USER" --plugin-root "$PLUGIN" >/dev/null
+ENG_OK="$(python3 "$STATUS_PY" --grok-home "$ENG_GROK" --user-home "$ENG_USER" --plugin-root "$PLUGIN")"
+assert_contains "english_rule match after apply" \
+  "$ENG_OK" "english_rule: grok/rules/reply-in-english.md match"
+assert_contains "english_rule keeps AGENTS notes" \
+  "$(cat "$ENG_GROK/AGENTS.md")" "# notes"
+printf 'drift\n' > "$ENG_GROK/rules/reply-in-english.md"
+ENG_DRIFT="$(python3 "$STATUS_PY" --grok-home "$ENG_GROK" --user-home "$ENG_USER" --plugin-root "$PLUGIN")"
+assert_contains "english_rule drift after edit" \
+  "$ENG_DRIFT" "english_rule: grok/rules/reply-in-english.md drift"
+if [ -d "$HOME/.claude/rules" ] && grep -Fq 'drift' "$HOME/.claude/rules/reply-in-english.md" 2>/dev/null; then
+  fail "english_rule apply leaked into live HOME"
+else
+  ok "english_rule apply stays under --user-home"
+fi
 
 printf '\n=== Results: %d passed, %d failed ===\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

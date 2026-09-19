@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.6] - 2026-09-19
+
+- Own the English-thinking rule in the harness: SSOT is `assets/reply-in-english.md`. `--docs-only` copies/splices Grok, Claude, Codex, and Cursor native load paths. `--status` prints `english_rule:` `missing`|`match`|`drift` for each path. `--user-home` defaults to the parent of `--grok-home` so scratch `GROK_HOME` does not write live `~/.claude` / `~/.codex` / `~/.cursor`.
+
 ## [0.5.5] - 2026-09-19
 
 - Remove `superpowers` from the harness companion set (`plugin-specs.json` and `[plugins].enabled`). Not a disable — it is gone so full init cannot put it back.

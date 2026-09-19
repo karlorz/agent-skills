@@ -13,7 +13,7 @@
 # identical files are left untouched.
 #
 # Usage:
-#   install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
+#   install.sh [--grok-home DIR] [--user-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
 #              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
 #              [--skip-plugins] [--docs-only] [--docs-status] [--status] [--no-config]
 #              [--dry-run] [--force] [--verify]
@@ -35,6 +35,7 @@ CHECK_CONFIG="$HERE/check-config.py"
 
 # --- options -----------------------------------------------------------------
 GROK_HOME="${GROK_HOME:-$HOME/.grok}"
+USER_HOME=""
 HUB_KEY="${HARNESS_HUB_KEY:-}"
 NEW_KEY="${HARNESS_NEW_KEY:-}"
 CONTEXT7_KEY="${HARNESS_CONTEXT7_KEY:-}"
@@ -64,7 +65,7 @@ Installs agents, rules, and a sanitized config into $GROK_HOME (default ~/.grok)
 then adds companion marketplaces and installs the plugin set with --trust.
 
 Usage:
-  install.sh [--grok-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
+  install.sh [--grok-home DIR] [--user-home DIR] [--hub-key K] [--new-key K] [--context7-key K]
              [--skip-codex] [--skip-vault-sync] [--skip-playwright-cli]
              [--skip-plugins] [--docs-only] [--docs-status] [--status] [--no-config]
              [--dry-run] [--force] [--verify]
@@ -73,6 +74,8 @@ Usage:
 
 Options:
   --grok-home DIR        target grok home (default: $GROK_HOME or ~/.grok)
+  --user-home DIR        parent used for Claude/Codex/Cursor English-rule
+                         paths (default: dirname of --grok-home)
   --hub-key K            hub.karldigi.dev API key (or HARNESS_HUB_KEY)
   --new-key K            new.karldigi.dev API key (or HARNESS_NEW_KEY)
   --context7-key K       context7 MCP API key (or HARNESS_CONTEXT7_KEY)
@@ -108,6 +111,7 @@ die()  { printf 'grok-build-harness: ERROR: %s\n' "$*" >&2; exit 1; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --grok-home) GROK_HOME="$2"; shift 2 ;;
+    --user-home) USER_HOME="$2"; shift 2 ;;
     --hub-key) HUB_KEY="$2"; shift 2 ;;
     --new-key) NEW_KEY="$2"; shift 2 ;;
     --context7-key) CONTEXT7_KEY="$2"; shift 2 ;;
@@ -139,6 +143,11 @@ GROK_HOME="$(cd "$GROK_HOME" 2>/dev/null && pwd || printf '%s' "$GROK_HOME")"
 # target the same home as the files we install — --grok-home must behave
 # exactly like the GROK_HOME env var
 export GROK_HOME
+if [ -z "$USER_HOME" ]; then
+  USER_HOME="$(cd "$(dirname "$GROK_HOME")" 2>/dev/null && pwd || printf '%s' "$(dirname "$GROK_HOME")")"
+else
+  USER_HOME="$(cd "$USER_HOME" 2>/dev/null && pwd || printf '%s' "$USER_HOME")"
+fi
 
 if [ "$DOCS_STATUS" -eq 1 ]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH (required for grok-build-init)"
@@ -147,7 +156,7 @@ if [ "$DOCS_STATUS" -eq 1 ]; then
 fi
 if [ "$STATUS" -eq 1 ]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH (required for grok-build-init)"
-  python3 "$HERE/status.py" --grok-home "$GROK_HOME" --plugin-root "$PLUGIN_ROOT"
+  python3 "$HERE/status.py" --grok-home "$GROK_HOME" --user-home "$USER_HOME" --plugin-root "$PLUGIN_ROOT"
   exit $?
 fi
 BACKUP_DIR="$GROK_HOME/backups/grok-build-harness-$(date +%Y%m%d%H%M%S)"
@@ -219,6 +228,7 @@ merge_agents_md() {
   else
     cp "$ASSETS/AGENTS.md" "$tmp"
   fi
+  python3 "$HERE/english_rule.py" --splice-agents "$tmp" --plugin-root "$PLUGIN_ROOT"
   copy_if_changed "$tmp" "$dst" "AGENTS.md"
 }
 
@@ -683,6 +693,10 @@ copy_if_changed "$ASSETS/agents/grok-build-byok.md" "$GROK_HOME/agents/grok-buil
 copy_if_changed "$ASSETS/agents/scout.md"          "$GROK_HOME/agents/scout.md"          "agent scout"
 copy_if_changed "$ASSETS/agentrules.md"            "$GROK_HOME/agentrules.md"            "agentrules"
 merge_agents_md
+english_rule_args=(--apply --grok-home "$GROK_HOME" --user-home "$USER_HOME" --plugin-root "$PLUGIN_ROOT")
+[ "$DRY_RUN" -eq 1 ] && english_rule_args+=(--dry-run)
+[ -n "$BACKUP_DIR" ] && english_rule_args+=(--backup-dir "$BACKUP_DIR")
+python3 "$HERE/english_rule.py" "${english_rule_args[@]}"
 
 # --- plugins -----------------------------------------------------------------
 if [ "$SKIP_PLUGINS" -eq 0 ]; then

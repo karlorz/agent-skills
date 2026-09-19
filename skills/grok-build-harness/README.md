@@ -39,7 +39,9 @@ The skill runs `scripts/install.sh`, which:
    `~/.grok/backups/grok-build-harness-<timestamp>/`
 2. Installs the agents, `agentrules.md`, and `AGENTS.md` — the contract is
    spliced in: **all existing content is preserved** (user sections and the
-   llm-wiki skillwiki marker), only the harness marker block is replaced
+   llm-wiki skillwiki marker), only the harness marker block is replaced.
+   The English-thinking rule (`assets/reply-in-english.md`) is copied/spliced
+   into Grok, Claude, Codex, and Cursor native load paths under `--user-home`.
 3. Renders `config.toml`, carrying over any host-set keys the template does
    not emit (`[plugins].disabled`, extra marketplace sources, extra tables)
 4. Adds the companion marketplaces (karlorz-agent-skills, llm-wiki,
@@ -51,6 +53,8 @@ The skill runs `scripts/install.sh`, which:
 
 ```text
 --grok-home DIR        target grok home (default: $GROK_HOME or ~/.grok)
+--user-home DIR        parent for Claude/Codex/Cursor English-rule files
+                       (default: dirname of --grok-home)
 --hub-key / --new-key / --context7-key   API keys (or HARNESS_* env vars)
 --require-keys         fail when hub/new gateway keys are missing (headless-safe)
 --restrictive          render permission_mode = "plan" instead of "always-approve"

@@ -20,6 +20,7 @@ HERE = Path(__file__).resolve().parent
 DEFAULT_PLUGIN_ROOT = HERE.parent
 SPECS_PATH = DEFAULT_PLUGIN_ROOT / "assets" / "plugin-specs.json"
 MERGE = HERE / "merge-agents.py"
+ENGLISH_RULE = HERE / "english_rule.py"
 
 CONTRACT_MEANING = {
     "match": "harness block equals installed assets",
@@ -170,7 +171,18 @@ def stamp_fields(path: Path) -> dict:
     }
 
 
-def inventory(grok_home: Path, plugin_root: Path) -> list[str]:
+def _english_mod():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("english_rule", ENGLISH_RULE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("english_rule.py missing")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def inventory(grok_home: Path, plugin_root: Path, user_home: Path | None = None) -> list[str]:
     lines: list[str] = []
     contract = contract_status(plugin_root, grok_home)
     lines.append(f"contract: {contract}")
@@ -210,6 +222,9 @@ def inventory(grok_home: Path, plugin_root: Path) -> list[str]:
             if name not in expected:
                 present = "present" if plugin_present(grok_home, name, installed) else "missing"
                 lines.append(f"companion: {name} extra {present}")
+    eng = _english_mod()
+    uh = user_home if user_home is not None else eng.default_user_home(grok_home)
+    lines.extend(eng.inventory_lines(grok_home, uh, plugin_root))
     return lines
 
 
@@ -219,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         return as_bash()
     parser = argparse.ArgumentParser(description="No-secrets grok-build-harness inventory")
     parser.add_argument("--grok-home", default=os.environ.get("GROK_HOME", str(Path.home() / ".grok")))
+    parser.add_argument("--user-home", default="")
     parser.add_argument("--plugin-root", default=str(DEFAULT_PLUGIN_ROOT))
     parser.add_argument("--as-bash", action="store_true")
     args = parser.parse_args(argv)
@@ -226,7 +242,8 @@ def main(argv: list[str] | None = None) -> int:
         return as_bash()
     grok_home = Path(args.grok_home).expanduser()
     plugin_root = Path(args.plugin_root).expanduser()
-    sys.stdout.write("\n".join(inventory(grok_home, plugin_root)) + "\n")
+    user_home = Path(args.user_home).expanduser() if args.user_home else None
+    sys.stdout.write("\n".join(inventory(grok_home, plugin_root, user_home)) + "\n")
     return 0
 
 
