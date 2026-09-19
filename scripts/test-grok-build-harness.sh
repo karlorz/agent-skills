@@ -82,6 +82,8 @@ python3 -m py_compile "$STATUS_PY" 2>/dev/null \
   && ok "status.py compiles" || fail "status.py fails to compile"
 python3 -m py_compile "$PLUGIN/scripts/english_rule.py" 2>/dev/null \
   && ok "english_rule.py compiles" || fail "english_rule.py fails to compile"
+python3 -m py_compile "$PLUGIN/scripts/context_budget.py" 2>/dev/null \
+  && ok "context_budget.py compiles" || fail "context_budget.py fails to compile"
 assert_contains "english-rule SSOT asset exists" \
   "$(cat "$PLUGIN/assets/reply-in-english.md")" "You are an English-thinking assistant"
 assert_contains "harness plugin in plugin-specs.json" \
@@ -248,6 +250,14 @@ assert_contains "status: english_rule codex AGENTS match after docs-only" \
   "$DOCS_INV" "english_rule: codex/AGENTS.md match"
 assert_contains "status: english_rule cursor mdc match after docs-only" \
   "$DOCS_INV" "english_rule: cursor/rules/reply-in-english.mdc match"
+assert_contains "status: context grok AGENTS tok after docs-only" \
+  "$DOCS_INV" "context: grok/AGENTS.md "
+assert_contains "status: context grok-files after docs-only" \
+  "$DOCS_INV" "context: grok-files "
+assert_contains "status: context grok-catalog after docs-only" \
+  "$DOCS_INV" "context: grok-catalog "
+assert_contains "status: context grok-mcp after docs-only" \
+  "$DOCS_INV" "context: grok-mcp "
 assert_not_contains "status: no api_key leak" "$DOCS_INV" "api_key"
 PY_INV="$(python3 "$STATUS_PY" --grok-home "$DOCS_HOME" --plugin-root "$PLUGIN")"
 assert_eq "status.py matches install.sh --status" "$PY_INV" "$DOCS_INV"
@@ -605,6 +615,28 @@ if [ -d "$HOME/.claude/rules" ] && grep -Fq 'drift' "$HOME/.claude/rules/reply-i
 else
   ok "english_rule apply stays under --user-home"
 fi
+
+# --- context budget: instruction files, skill catalog, mcp names, no secrets ---
+CTX_GROK="$TEST_ROOT/context-budget-grok"
+CTX_USER="$TEST_ROOT/context-budget-user"
+mkdir -p "$CTX_GROK/installed-plugins/demo/.claude-plugin"
+mkdir -p "$CTX_GROK/installed-plugins/demo/skills/demo-skill"
+mkdir -p "$CTX_USER/.cursor"
+printf 'name = "grok-build-byok"\n[plugins]\nenabled = ["simplify"]\n[mcp_servers.context7]\ncommand = "npx"\n[mcp_servers.skillwiki]\nurl = "https://example.invalid"\n[mcp_servers.skillwiki.headers]\nAuthorization = "Bearer secret-token-do-not-print"\n' > "$CTX_GROK/config.toml"
+printf '# agents\n' > "$CTX_GROK/AGENTS.md"
+printf '# rules\n' > "$CTX_GROK/agentrules.md"
+printf '{"name":"demo"}\n' > "$CTX_GROK/installed-plugins/demo/.claude-plugin/plugin.json"
+printf '%s\n' '---' 'name: demo-skill' 'description: Demo skill for catalog token count.' '---' 'body' > "$CTX_GROK/installed-plugins/demo/skills/demo-skill/SKILL.md"
+printf '%s\n' '{"mcpServers":{"skillwiki":{"url":"https://example.invalid"}}}' > "$CTX_USER/.cursor/mcp.json"
+CTX_INV="$(python3 "$STATUS_PY" --grok-home "$CTX_GROK" --user-home "$CTX_USER" --plugin-root "$PLUGIN")"
+assert_contains "context: grok AGENTS tok" "$CTX_INV" "context: grok/AGENTS.md "
+assert_contains "context: grok-files" "$CTX_INV" "context: grok-files "
+assert_contains "context: grok-catalog 1 skill" "$CTX_INV" "context: grok-catalog 1 skills "
+assert_contains "context: grok-plugins-enabled 1" "$CTX_INV" "context: grok-plugins-enabled 1"
+assert_contains "context: grok-mcp 2 servers" "$CTX_INV" "context: grok-mcp 2 servers"
+assert_contains "context: cursor-mcp 1" "$CTX_INV" "context: cursor-mcp 1 servers"
+assert_not_contains "context: no bearer secret" "$CTX_INV" "secret-token-do-not-print"
+assert_not_contains "context: no mcp url leak" "$CTX_INV" "example.invalid"
 
 printf '\n=== Results: %d passed, %d failed ===\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -4,7 +4,7 @@
 Windows/Unix: python3 status.py --grok-home DIR --plugin-root DIR
 install.sh --status is a thin wrapper. --docs-status stays one word.
 
-Does not print API keys, env_key values, or tokens.
+Does not print API keys, env_key values, or secret tokens.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ DEFAULT_PLUGIN_ROOT = HERE.parent
 SPECS_PATH = DEFAULT_PLUGIN_ROOT / "assets" / "plugin-specs.json"
 MERGE = HERE / "merge-agents.py"
 ENGLISH_RULE = HERE / "english_rule.py"
+CONTEXT_BUDGET = HERE / "context_budget.py"
 
 CONTRACT_MEANING = {
     "match": "harness block equals installed assets",
@@ -171,15 +172,23 @@ def stamp_fields(path: Path) -> dict:
     }
 
 
-def _english_mod():
+def _load_mod(path: Path, name: str):
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("english_rule", ENGLISH_RULE)
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError("english_rule.py missing")
+        raise RuntimeError(f"{path.name} missing")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _english_mod():
+    return _load_mod(ENGLISH_RULE, "english_rule")
+
+
+def _context_mod():
+    return _load_mod(CONTEXT_BUDGET, "context_budget")
 
 
 def inventory(grok_home: Path, plugin_root: Path, user_home: Path | None = None) -> list[str]:
@@ -225,6 +234,8 @@ def inventory(grok_home: Path, plugin_root: Path, user_home: Path | None = None)
     eng = _english_mod()
     uh = user_home if user_home is not None else eng.default_user_home(grok_home)
     lines.extend(eng.inventory_lines(grok_home, uh, plugin_root))
+    enabled_count = len(enabled) if cfg["has_config"] else 0
+    lines.extend(_context_mod().inventory_lines(grok_home, uh, enabled_count))
     return lines
 
 

@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.7] - 2026-09-19
+
+- `--status` prints `context:` always-on token lines: Grok/Claude/Codex/Cursor instruction files, Grok unique skill-description catalog, enabled plugin count, MCP server counts (names only). No secret tokens, URLs, or headers.
+
 ## [0.5.6] - 2026-09-19
 
 - Own the English-thinking rule in the harness: SSOT is `assets/reply-in-english.md`. `--docs-only` copies/splices Grok, Claude, Codex, and Cursor native load paths. `--status` prints `english_rule:` `missing`|`match`|`drift` for each path. `--user-home` defaults to the parent of `--grok-home` so scratch `GROK_HOME` does not write live `~/.claude` / `~/.codex` / `~/.cursor`.
