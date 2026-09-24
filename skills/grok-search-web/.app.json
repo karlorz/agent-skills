@@ -1,0 +1,8 @@
+{
+  "apps": {
+    "grok-search": {
+      "id": "asdk_app_6ab480d9704881919acc0d96f3669d24",
+      "required": true
+    }
+  }
+}

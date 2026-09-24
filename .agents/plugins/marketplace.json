@@ -221,6 +221,18 @@
       "category": "Development"
     },
     {
+      "name": "grok-search-web",
+      "source": {
+        "source": "local",
+        "path": "./skills/grok-search-web"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Research"
+    },
+    {
       "name": "cursor-box-channel",
       "source": {
         "source": "local",
