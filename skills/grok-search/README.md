@@ -73,9 +73,13 @@ The Codex-native manifest embeds an HTTP MCP definition pointing to `https://sea
 3. **Diagnostic note on `agent mcp list`:** `agent mcp list` inspects `~/.cursor/mcp.json` and `.cursor/mcp.json`, not Claude-style plugin `.mcp.json` definitions. This is a known CLI diagnostic gap and is not the proof of install.
 4. **Optional headless wrapper (`cursor-cli-mcp.example.json`):** For headless batch commands (`agent -p`) invoked without `--plugin-dir`, you can optionally configure a JSON wrapper in `~/.cursor/mcp.json`. This wrapper is purely optional and is not required for normal interactive Cursor Agent TUI or plugin-chain usage. Do not treat writing that file as part of marketplace install.
 
-### ChatGPT Web Integration
+### ChatGPT web and Doubao Work
 
-ChatGPT web access is managed through **Admin Apps** (`https://chatgpt.com/admin/apps` Create App) pointing to `https://search.karldigi.dev/mcp` with OAuth. The GitHub marketplace card is desktop-only because `mcp.json` ships.
+A chat cannot finish first-time connector setup. The person completes consent outside the chat. After that, the chat may call `web_search`.
+
+ChatGPT web uses **Admin Apps** (`https://chatgpt.com/admin/apps` Create App) with `https://search.karldigi.dev/mcp` and OAuth. The GitHub marketplace card is desktop-only because `mcp.json` ships. The ChatGPT chat cannot open that admin page.
+
+Doubao Work uses `技能 · 連接器 · 夥伴` → 我的技能 → 連接器 → 新增自訂連接器. Choose HTTP, name `grok-search`, URL `https://search.karldigi.dev/mcp`, and add no custom headers. Then choose 去授權 and enter the operator password in the browser. The Doubao chat cannot click that button or type the password.
 
 ## Verification
 

@@ -129,7 +129,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.14"
+expected_version = "0.1.15"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -188,7 +188,7 @@ if not cursor_entry:
 if cursor_entry.get("source") != "skills/grok-search":
     raise SystemExit(f"{cursor_marketplace_path}: grok-search source must be skills/grok-search")
 
-# 5. Codex manifest: version 0.1.14, no bearer_token_env_var, no apps, type http, production url
+# 5. Codex manifest: version 0.1.15, no bearer_token_env_var, no apps, type http, production url
 codex_manifest = json.loads(texts[codex_manifest_path])
 if codex_manifest.get("version") != expected_version:
     raise SystemExit(f"{codex_manifest_path}: version must be {expected_version}")
@@ -322,6 +322,10 @@ if "https://chatgpt.com/admin/apps" not in body or "Create App" not in body:
     raise SystemExit(f"{skill_path}: must mention ChatGPT web route via https://chatgpt.com/admin/apps Create App")
 if "desktop-only" not in body.lower():
     raise SystemExit(f"{skill_path}: must explain GitHub marketplace import is desktop-only")
+if "a chat cannot finish first-time connector setup" not in body.lower():
+    raise SystemExit(f"{skill_path}: must state a chat cannot finish first-time connector setup")
+if "doubao" not in body.lower() or "去授權" not in body:
+    raise SystemExit(f"{skill_path}: must document Doubao Work 去授權 as a person step")
 if re.search(r"`/grok-search`", body) or re.search(r"start (?:the skill|it) with (?:a )?`/grok-search`", body):
     raise SystemExit(f"{skill_path}: must not instruct users to invoke skill with a leading slash")
 
@@ -343,6 +347,10 @@ if "https://chatgpt.com/admin/apps" not in readme_text or "Create App" not in re
     raise SystemExit(f"{readme_path}: must mention ChatGPT web admin apps Create App")
 if "desktop-only" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must explain GitHub import is desktop-only")
+if "a chat cannot finish first-time connector setup" not in readme_text.lower():
+    raise SystemExit(f"{readme_path}: must state a chat cannot finish first-time connector setup")
+if "doubao" not in readme_text.lower() or "去授權" not in readme_text:
+    raise SystemExit(f"{readme_path}: must document Doubao Work 去授權 as a person step")
 if "plugin-chain" not in readme_text and "plugin-grok-search-grok-search" not in readme_text:
     raise SystemExit(f"{readme_path}: must mention plugin-chain or plugin-grok-search-grok-search")
 if "agent mcp list" not in readme_text:
