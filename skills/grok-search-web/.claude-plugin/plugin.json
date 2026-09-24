@@ -1,6 +1,6 @@
 {
   "name": "grok-search-web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ChatGPT web plugin for the hosted Grok Search OAuth app. No local bearer and no bundled MCP server.",
   "author": {
     "name": "karlorz"
