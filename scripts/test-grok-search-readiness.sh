@@ -49,31 +49,21 @@ def base_env():
     }
 
 
-# Missing token → missing_prereq, no URL default
+# Empty environment is in_sync, migrated true, defaults to production URL, no token reason
 out = run(base_env())
-if out.get("status") != "missing_prereq":
-    raise SystemExit(f"empty env status={out!r}, want missing_prereq")
-if out.get("migrated") is True:
-    raise SystemExit("empty env must not migrate URL")
-if "GROK_SEARCH_MCP_TOKEN" not in " ".join(out.get("reasons") or []):
-    raise SystemExit(f"reasons must mention TOKEN: {out!r}")
-
-
-# Token set, URL empty → in_sync + migrated default production URL
-env = base_env()
-env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
-out = run(env)
 if out.get("status") != "in_sync":
-    raise SystemExit(f"token-only status={out!r}, want in_sync")
+    raise SystemExit(f"empty env status={out!r}, want in_sync")
 if out.get("migrated") is not True:
-    raise SystemExit(f"token-only must set migrated: {out!r}")
+    raise SystemExit("empty env must migrate URL to production default")
 if out.get("url") != "https://search.karldigi.dev/mcp":
-    raise SystemExit(f"default url={out.get('url')!r}")
+    raise SystemExit(f"empty env url={out.get('url')!r}, want https://search.karldigi.dev/mcp")
+for reason in out.get("reasons") or []:
+    if "TOKEN" in reason:
+        raise SystemExit(f"empty env must not emit token reason: {reason!r}")
 
 
-# Explicit URL wins; no migrate
+# Explicit URL wins; no migrate (no token required)
 env = base_env()
-env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
 env["GROK_SEARCH_MCP_URL"] = "http://127.0.0.1:8800/mcp"
 out = run(env)
 if out.get("status") != "in_sync":
@@ -88,7 +78,6 @@ if out.get("warnings"):
 
 # Stale Tailscale preview IP — warn, stay in_sync, do not live-probe
 env = base_env()
-env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
 env["GROK_SEARCH_MCP_URL"] = "http://100.76.134.104:8800/mcp"
 out = run(env)
 if out.get("status") != "in_sync":
@@ -102,7 +91,6 @@ if "stale" not in warns.lower() or "100.76.134.104" not in warns:
 
 # Current sg01 Tailscale + :8800 — same warning (no listener there)
 env = base_env()
-env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
 env["GROK_SEARCH_MCP_URL"] = "http://100.118.12.90:8800/mcp"
 out = run(env)
 if out.get("status") != "in_sync":
@@ -114,14 +102,26 @@ if "stale" not in warns.lower():
 
 # Production explicit URL — no stale warning
 env = base_env()
-env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
 env["GROK_SEARCH_MCP_URL"] = "https://search.karldigi.dev/mcp"
 out = run(env)
 if out.get("warnings"):
     raise SystemExit(f"production URL must not warn stale: {out!r}")
 
 
+# Token-present case: an optional environment token does not alter readiness or URL handling
+env = base_env()
+env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
+out = run(env)
+if out.get("status") != "in_sync":
+    raise SystemExit(f"token-present status={out!r}, want in_sync")
+if out.get("migrated") is not True:
+    raise SystemExit(f"token-present must set migrated: {out!r}")
+if out.get("url") != "https://search.karldigi.dev/mcp":
+    raise SystemExit(f"default url={out.get('url')!r}")
+
+
 # A token stored only in operator mcp.env is not process environment and must not be sourced.
+# Empty environment is in_sync, defaults URL, and never modifies operator files.
 with tempfile.TemporaryDirectory() as td:
     td_path = Path(td)
     config_dir = td_path / ".config" / "grok-search"
@@ -140,14 +140,14 @@ with tempfile.TemporaryDirectory() as td:
     env = base_env()
     env["HOME"] = str(td_path)
     out = run(env, extra_args=["--apply"])
-    if out.get("status") != "missing_prereq":
-        raise SystemExit(f"mcp.env-only token must remain missing_prereq: {out!r}")
+    if out.get("status") != "in_sync":
+        raise SystemExit(f"mcp.env-only token must remain in_sync: {out!r}")
     for path, expected in before.items():
         if path.read_bytes() != expected:
             raise SystemExit(f"probe modified operator file {path}")
 
 
-# --apply writes URL into CLAUDE_ENV_FILE, never mcp.json / mcp.env
+# --apply writes URL into CLAUDE_ENV_FILE without requiring a token, never mcp.json / mcp.env
 with tempfile.TemporaryDirectory() as td:
     td_path = Path(td)
     env_file = td_path / "claude.env"
@@ -156,7 +156,6 @@ with tempfile.TemporaryDirectory() as td:
     mcp_json.write_text("{}\n", encoding="utf-8")
     mcp_env.write_text("GROK_SEARCH_MCP_TOKEN=keep\n", encoding="utf-8")
     env = base_env()
-    env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
     env["CLAUDE_ENV_FILE"] = str(env_file)
     env["HOME"] = str(td_path)
     out = run(env, extra_args=["--apply"])
@@ -165,15 +164,13 @@ with tempfile.TemporaryDirectory() as td:
     written = env_file.read_text(encoding="utf-8")
     if written != "export GROK_SEARCH_MCP_URL=https://search.karldigi.dev/mcp\n":
         raise SystemExit(f"CLAUDE_ENV_FILE missing exact URL export line:\n{written!r}")
-    if "test-token" in written:
-        raise SystemExit("CLAUDE_ENV_FILE leaked token")
     if mcp_json.read_text(encoding="utf-8") != "{}\n":
         raise SystemExit("must not write mcp.json")
     if mcp_env.read_text(encoding="utf-8") != "GROK_SEARCH_MCP_TOKEN=keep\n":
         raise SystemExit("must not write mcp.env")
 
 
-# stdout JSON must never contain the raw token
+# stdout JSON must never contain the raw token when token is present
 env = base_env()
 env["GROK_SEARCH_MCP_TOKEN"] = "super-secret-token-value"
 raw = subprocess.run(

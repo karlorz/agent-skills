@@ -1,6 +1,6 @@
 {
   "name": "grok-search",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Thin marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via HTTP MCP.",
   "author": {
     "name": "karlorz"
@@ -15,14 +15,5 @@
     "http"
   ],
   "skills": "./skills/",
-  "hooks": "./claude-hooks/hooks.json",
-  "userConfig": {
-    "GROK_SEARCH_MCP_TOKEN": {
-      "type": "string",
-      "title": "Grok Search gateway-keys bearer",
-      "description": "Gateway key created at https://search.karldigi.dev/admin/gateway-keys.",
-      "sensitive": true,
-      "required": true
-    }
-  }
+  "hooks": "./claude-hooks/hooks.json"
 }

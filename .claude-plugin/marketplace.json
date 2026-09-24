@@ -338,8 +338,8 @@
     {
       "name": "grok-search",
       "source": "./skills/grok-search",
-      "description": "Thin marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via HTTP MCP.",
-      "version": "0.1.13",
+      "description": "Thin desktop marketplace plugin for GrokSearch: live web search, structured intent planning, source extraction, URL fetching, and site mapping via HTTP MCP OAuth.",
+      "version": "0.1.14",
       "category": "development",
       "keywords": [
         "mcp",
@@ -348,20 +348,6 @@
         "web-search",
         "research",
         "http"
-      ]
-    },
-    {
-      "name": "grok-search-web",
-      "source": "./skills/grok-search-web",
-      "description": "ChatGPT web plugin for the hosted Grok Search OAuth app. No local bearer and no bundled MCP server.",
-      "version": "0.1.1",
-      "category": "research",
-      "keywords": [
-        "grok",
-        "search",
-        "chatgpt",
-        "oauth",
-        "web"
       ]
     },
     {

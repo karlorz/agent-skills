@@ -7,21 +7,23 @@ description: This skill should be used when the user needs live web search, curr
 
 Use this skill to perform live web searches, plan search intent, fetch web content, map site topologies, and extract citations.
 
-Grok-search is HTTP MCP only (`type: http`). Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. Codex and Cursor-native pin production; the URL override is not configurable in Cursor or the Codex marketplace package. Every host requires an operator-provided gateway-keys bearer as `GROK_SEARCH_MCP_TOKEN` before MCP load. Do not start a local stdio `uvx` server.
+Grok-search is HTTP MCP only (`type: http`). The installed desktop plugin uses MCP OAuth for authentication and does not store or require a bearer token. Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. Codex and Cursor-native pin production; the URL override is not configurable in Cursor or the Codex marketplace package. Headless bearer access is only supported via the optional `cursor-cli-mcp.example.json` wrapper using `GROK_SEARCH_MCP_TOKEN`. Do not start a local stdio `uvx` server.
 
 ## First-run readiness
 
-- **Claude/Grok plugin hosts:** resolve the installed root from `GROK_PLUGIN_ROOT`, falling back to `CLAUDE_PLUGIN_ROOT`, and run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --apply --json` before the first grok-search MCP call. `missing_prereq` means the token is absent from process environment; stop and ask for a gateway-keys bearer. `in_sync` means the probe has a usable URL/token decision. If `warnings` mention a stale preview URL, report it and keep production; do not start sg01 `:8800` and do not live-probe that listener. Claude Code `userConfig` (`required` + `sensitive`) prompts on in-app `/plugin install` only; CLI `claude plugin install` does not. .mcp.json keeps `Bearer ${GROK_SEARCH_MCP_TOKEN}` (Grok process environment).
-- **Codex:** the native manifest embeds a Codex-specific production HTTP MCP definition with `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`; it never parses the Claude/Grok shell-style URL fallback. Codex Desktop/IDE may not inherit shell variables; place the token in Codex's supported environment file and fully restart Codex. Never put the token value in `config.toml` or plugin files.
-- **Cursor-native / Agent TUI:** the plugin's **Plugins → Configure** / `/plugin` form is the token surface (`required` does not auto-interrupt a running chat). Fill `GROK_SEARCH_MCP_TOKEN`, Confirm, then a **new** Agent chat. The manifest pins production, so Cursor-native does not run the probe or read a Cursor process environment variable. If `grok-search` tools are connected, continue; otherwise report the MCP connection error.
-- Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced. A restart cannot supply a missing token.
-- A 401 is an MCP handshake failure, not a readiness-probe status. Report it and stop.
+- **First-run OAuth:** The installed desktop plugin connects to `https://search.karldigi.dev/mcp` via MCP OAuth. On first run, complete the client OAuth authorization prompt in your host if prompted.
+- **Claude/Grok plugin hosts:** resolve the installed root from `GROK_PLUGIN_ROOT`, falling back to `CLAUDE_PLUGIN_ROOT`, and run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --apply --json` before the first grok-search MCP call. `in_sync` means the probe has verified the configuration. If `warnings` mention a stale preview URL, report it and keep production; do not start sg01 `:8800` and do not live-probe that listener. Claude Code `userConfig` is removed; in-app and CLI installs connect via HTTP MCP OAuth without prompting for a token. Grok process environment does not require a token for the installed plugin.
+- **Codex:** the native manifest embeds a Codex-specific production HTTP MCP definition without `bearer_token_env_var` or apps; it pins production and never parses the Claude/Grok shell-style URL fallback.
+- **Cursor-native / Agent TUI:** Cursor-native pins production and does not run the probe; the URL is not configurable in Cursor. Cursor does not require token variables or prompts. If `grok-search` tools are connected, continue; otherwise report the MCP connection error.
+- **ChatGPT web:** ChatGPT web access is configured separately via `https://chatgpt.com/admin/apps` Create App pointing to `https://search.karldigi.dev/mcp` with OAuth. The GitHub marketplace card is desktop-only because `mcp.json` ships.
+- Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced.
+- A 401 is an MCP handshake failure or expired OAuth session, not a readiness-probe status. Report it and stop.
 - Never auto-source `mcp.env` or auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
-- A leftover `grok-search-http` connection is a preview overlay inherited from operator Cursor MCP config. It is not a fallback. Never dual-call it.
+- A leftover `grok-search-http` connection is a preview overlay inherited from operator Cursor MCP config. It is not a fallback. Never dual-call it; do not dual-call preview aliases.
 
 ## Endpoint contract
 
-- Production (kr01, proven): `https://search.karldigi.dev/mcp` — gateway-keys bearer (recommended; Cursor-native pins this endpoint)
+- Production (kr01, proven): `https://search.karldigi.dev/mcp` — MCP OAuth (recommended; Cursor-native pins this endpoint)
 - Stale Tailscale preview (do not use, do not start on sg01): `http://100.76.134.104:8800/mcp` and `http://100.118.12.90:8800/mcp`. sg01 has no grok-search `:8800` listener. `check_readiness.py` warns if `GROK_SEARCH_MCP_URL` still points there; it does not fail the session and does not probe the port.
 - Cloudflare Access (preview / fallback): `https://search.termolo.com/mcp` — Claude/Grok override requiring operator-local Access headers
 

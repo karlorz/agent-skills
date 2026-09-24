@@ -161,8 +161,8 @@ not only the Claude catalog. If the helper cannot find those names in
 `ListMarketplacePlugins` for `karlorz-agent-skills`, finish the
 karlorz-agent-skills re-pin first, then install.
 
-`grok-search` may ask for `GROK_SEARCH_MCP_TOKEN` and
-`cursor-box-channel` may ask for `CURSOR_BOX_MCP_TOKEN` (Cursor Plugins →
+`grok-search` uses MCP OAuth and does not ask for a token;
+`cursor-box-channel` may still ask for `CURSOR_BOX_MCP_TOKEN` (Cursor Plugins →
 Configure). Do not invent a token. If a token is already configured, leave it.
 
 Grok Bot **public** catalog ids (`skillwiki` `57442251`, `vault-sync`

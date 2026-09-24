@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] - 2026-09-24
+
+### Changed
+- Converted grok-search installed plugin to HTTP MCP OAuth at `https://search.karldigi.dev/mcp`. Removed bearer token requirement from installed `.mcp.json` and `mcp.json`.
+- Removed Claude `userConfig` token prompt and Cursor plugin token `variables`.
+- Removed `bearer_token_env_var` from Codex-native plugin manifest; Codex connects via production HTTP MCP OAuth.
+- Updated `check_readiness.py` probe so missing token is `in_sync` and empty URL migrates to `https://search.karldigi.dev/mcp`.
+- Documented ChatGPT web integration via Admin Apps (`https://chatgpt.com/admin/apps` Create App) instead of GitHub card.
+- Retained `cursor-cli-mcp.example.json` as an optional headless wrapper using `Bearer ${env:GROK_SEARCH_MCP_TOKEN}`.
+
+### Removed
+- Removed `skills/grok-search-web/` package and its entries from Claude and Agents plugin marketplaces in favor of unified `grok-search`.
+
 ## [0.1.13] - 2026-09-15
 
 ### Added

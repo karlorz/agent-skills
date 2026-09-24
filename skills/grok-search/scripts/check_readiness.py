@@ -13,7 +13,6 @@ import sys
 from typing import Mapping
 
 PRODUCTION_MCP_URL = "https://search.karldigi.dev/mcp"
-TOKEN_ENV = "GROK_SEARCH_MCP_TOKEN"
 URL_ENV = "GROK_SEARCH_MCP_URL"
 # Dead preview listeners. Warn only — never live-probe, never fail the session.
 STALE_PREVIEW_HOSTS = frozenset({"100.76.134.104"})
@@ -45,20 +44,10 @@ def _stale_preview_warning(url: str) -> str | None:
 
 def probe(environ: Mapping[str, str] | None = None) -> dict:
     source = os.environ if environ is None else environ
-    token = _strip(source.get(TOKEN_ENV))
     url = _strip(source.get(URL_ENV))
     migrated = False
     warnings: list[str] = []
     reasons: list[str] = []
-
-    if not token:
-        return {
-            "status": "missing_prereq",
-            "reasons": [f"{TOKEN_ENV} unset"],
-            "url": url or None,
-            "migrated": False,
-            "warnings": warnings,
-        }
 
     if not url:
         url = PRODUCTION_MCP_URL
@@ -101,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="set GROK_SEARCH_MCP_URL in this child process and Claude's CLAUDE_ENV_FILE when TOKEN is set",
+        help="set GROK_SEARCH_MCP_URL in this child process and Claude's CLAUDE_ENV_FILE",
     )
     args = parser.parse_args(argv)
     result = apply() if args.apply else probe()
