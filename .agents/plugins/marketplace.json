@@ -1,0 +1,260 @@
+{
+  "name": "karlorz-agent-skills",
+  "interface": {
+    "displayName": "karlorz agent skills"
+  },
+  "plugins": [
+    {
+      "name": "deep-research",
+      "source": {
+        "source": "local",
+        "path": "./skills/deep-research"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Research"
+    },
+    {
+      "name": "deep-research-dev",
+      "source": {
+        "source": "local",
+        "path": "./skills/deep-research-dev"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Research"
+    },
+    {
+      "name": "simplify",
+      "source": {
+        "source": "local",
+        "path": "./skills/simplify"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Code Quality"
+    },
+    {
+      "name": "brainstorming",
+      "source": {
+        "source": "local",
+        "path": "./skills/brainstorming"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "dev-loop",
+      "source": {
+        "source": "local",
+        "path": "./skills/dev-loop"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Automation"
+    },
+    {
+      "name": "agent-plugin-porter",
+      "source": {
+        "source": "local",
+        "path": "./skills/agent-plugin-porter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Automation"
+    },
+    {
+      "name": "claude-md-management",
+      "source": {
+        "source": "local",
+        "path": "./skills/claude-md-management"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hermes-cli",
+      "source": {
+        "source": "local",
+        "path": "./skills/hermes-cli"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Reference"
+    },
+    {
+      "name": "playwright-cli",
+      "source": {
+        "source": "local",
+        "path": "./skills/playwright-cli"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Automation"
+    },
+    {
+      "name": "rtk-output-design",
+      "source": {
+        "source": "local",
+        "path": "./skills/rtk-output-design"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Code Quality"
+    },
+    {
+      "name": "host-backup-restore",
+      "source": {
+        "source": "local",
+        "path": "./skills/host-backup-restore"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Operations"
+    },
+    {
+      "name": "grill-me",
+      "source": {
+        "source": "local",
+        "path": "./skills/grill-me"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "domain-modeling",
+      "source": {
+        "source": "local",
+        "path": "./skills/domain-modeling"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Architecture"
+    },
+    {
+      "name": "grill-with-docs",
+      "source": {
+        "source": "local",
+        "path": "./skills/grill-with-docs"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "codebase-architecture",
+      "source": {
+        "source": "local",
+        "path": "./skills/codebase-architecture"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Architecture"
+    },
+    {
+      "name": "grok-resume",
+      "source": {
+        "source": "local",
+        "path": "./skills/grok-resume"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "grok-build-harness",
+      "source": {
+        "source": "local",
+        "path": "./skills/grok-build-harness"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Operations"
+    },
+    {
+      "name": "grok-search",
+      "source": {
+        "source": "local",
+        "path": "./skills/grok-search"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    },
+    {
+      "name": "cursor-box-channel",
+      "source": {
+        "source": "local",
+        "path": "./skills/cursor-box-channel"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    },
+    {
+      "name": "cursor-github-marketplace-repin",
+      "source": {
+        "source": "local",
+        "path": "./skills/cursor-github-marketplace-repin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    },
+    {
+      "name": "harness-doctor",
+      "source": {
+        "source": "local",
+        "path": "./skills/harness-doctor"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
