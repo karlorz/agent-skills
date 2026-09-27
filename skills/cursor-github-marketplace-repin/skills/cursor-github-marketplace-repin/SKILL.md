@@ -210,3 +210,15 @@ Third channel beside the two Cursor marketplaces (`llm-wiki`, `karlorz-agent-ski
 - `keep.local.json` may include a separate `gitSkills` array (not part of `extra` / `drop` marketplace KEEP).
 - Each host keeps its own `keep.local.json` — do not sync the Mac copy onto the box (or the reverse).
 - No installer behavior yet; this section and the example file are schema/docs only.
+
+## gitSkills installer (minimal)
+
+Allowlist: `scripts/git-skills.allowlist.json` (see also `.example`).
+Host request list: `~/.cursor/skills/cursor-github-marketplace-repin/keep.local.json` → `gitSkills: [{ "name", "ref" }]`.
+
+```bash
+bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/install-git-skills.sh
+bash ~/.cursor/skills/cursor-github-marketplace-repin/scripts/status.sh   # marketplace pins + gitSkills
+```
+
+Installs only allowlisted `https://github.com/karlorz/...` sources into namespaced `_git-sources/` dirs; records `resolvedSha` + `sha256` in `.repin-git-skill.json`. Uses a clean env (no `LD_LIBRARY_PATH`) for git/gh.
