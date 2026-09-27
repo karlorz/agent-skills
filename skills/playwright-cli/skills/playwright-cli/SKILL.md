@@ -1,6 +1,6 @@
 ---
 name: playwright-cli
-description: "Automate headed Chrome with Playwright CLI: inspect, screenshot, and test pages. Use for browser automation or chrome-debug setup."
+description: "Automate headed Chrome with Playwright CLI: inspect, screenshot, and test pages. Use for browser automation, chrome-debug setup, or a Cloudflare check stuck in chrome-debug."
 allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(chrome-debug:*) Bash(bash\ scripts/chrome-debug.sh:*) Bash(bash\ scripts/setup-playwright-cli.sh:*) Bash(make\ chrome-debug:*)
 ---
 
@@ -101,7 +101,7 @@ chrome-debug --json --explain
 chrome-debug --check-port
 chrome-debug
 playwright-cli attach
-# If stale / attach fails on owned_by_profile only:
+# owned_by_profile only: stale attach, or a Cloudflare check that never clears (references/chrome-debug.md):
 playwright-cli kill-all
 chrome-debug --restart
 playwright-cli attach
@@ -150,6 +150,7 @@ Details: [../../references/chrome-debug.md](../../references/chrome-debug.md)
 - **Vendoring `chrome-debug.sh` in a consumer repo** — one SSOT: this skill + the installed `chrome-debug` command
 - **Raw CDP `Extensions.loadUnpacked` or `chrome://extensions` Load unpacked** — use `chrome-debug --load-unpacked PATH` so restart re-applies it
 - **Installing an unpacked extension from a disposable worktree** — Chrome drops it when the path vanishes
+- **Clicking, reloading, or restart-looping a stuck Cloudflare check on long-lived chrome-debug** — `Just a moment...` or a `challenges.cloudflare.com` frame that never clears means this Chrome process cannot pass. Run the Phase 0 restart once on `owned_by_profile`, attach only on `owned_by_cmux`; the user completes any checkbox shown after the restart. Details: [chrome-debug.md, Cloudflare human check](../../references/chrome-debug.md#cloudflare-human-check-on-a-long-lived-debug-chrome)
 - Forgetting snapshot before click/fill (need element refs)
 
 ### Fallback: disposable browser (Microsoft default)

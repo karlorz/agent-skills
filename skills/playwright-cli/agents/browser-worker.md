@@ -72,4 +72,5 @@ Agent(description: "Restart Chrome CDP", model: "haiku", prompt: "Read chrome-de
 - Chrome launch failure: report port status (`--check-port` / `--explain`); suggest close personal Chrome if default-user clone is blocked; suggest `--restart` if port owned by debug profile
 - Attach timeout: if `owned_by_cmux`, diagnose and stop; if `owned_by_profile`, `playwright-cli kill-all` + `chrome-debug --restart` + attach
 - Navigation timeout: report current URL, try reload
+- Cloudflare check that never clears (`Just a moment...`, `Verify you are human`, `challenges.cloudflare.com` frame) on long-lived chrome-debug: do not click or reload it. Run the stale session recovery prompt once when `owned_by_profile`; leave `owned_by_cmux` up. Report any checkbox shown after the restart to the orchestrator for the user. See `references/chrome-debug.md`.
 - Stale element refs: re-snapshot before retry

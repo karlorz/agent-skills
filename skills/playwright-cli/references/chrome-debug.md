@@ -168,6 +168,20 @@ chrome-debug --json --explain
 - **`owned_by_profile` (macos-dev / normal chrome-debug):** `playwright-cli kill-all` then `chrome-debug --restart` then `playwright-cli attach`. This path stays on.
 - **`owned_by_cmux`:** do **not** `--restart` and do **not** recycle cmux-devtools Chrome. Re-attach once. If it still times out, `curl` `/json/version` and `/json/list`, print the diagnosis, and stop.
 
+## Cloudflare human check on a long-lived debug Chrome
+
+Known issue on chrome-debug CDP (`127.0.0.1:9222`), seen on macos-dev with Chrome 153 (2026-09-27). After the same Chrome process has been up for hours, `playwright-cli attach` still succeeds, but that process cannot finish a Cloudflare human check. Other tabs in that Chrome may already be past Cloudflare; a new challenge in the same process still does not clear.
+
+Recognize it when the target tab shows any of these:
+
+- Title or body is `Just a moment...`, `Performing security verification`, or `Verify you are human`
+- A child frame URL is on `challenges.cloudflare.com` (Turnstile)
+
+Do not click the checkbox or reload the tab; the Chrome process has to be replaced. Run `chrome-debug --json --explain` and use the host split from [Stale attach sessions](#stale-attach-sessions):
+
+- **`owned_by_profile`:** run the stale-attach restart sequence once. It keeps the same profile and reloads every debug tab, and the new process can pass Cloudflare. A checkbox that appears right after the restart is a fresh check: the user completes it. Do not restart again for it.
+- **`owned_by_cmux`:** leave the browser up and attach only; `--restart` is refused. Report the challenge and stop.
+
 ## Unpacked extension debugging (Chrome 137+)
 
 The launcher always passes `--enable-unsafe-extension-debugging` so branded Chrome 137+ accepts CDP `Extensions.loadUnpacked` on the TCP debug port (`:9222`), not only over a pipe.
