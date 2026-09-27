@@ -57,7 +57,7 @@ def clean_git_env():
 
 
 def ls_remote(url, *args):
-    cmd = ["/usr/bin/git", "ls-remote", url, *args]
+    cmd = [os.environ.get("CURSOR_REPIN_GIT_BIN", "/usr/bin/git"), "ls-remote", url, *args]
     out = subprocess.check_output(cmd, text=True, env=clean_git_env())
     lines = []
     for line in out.splitlines():

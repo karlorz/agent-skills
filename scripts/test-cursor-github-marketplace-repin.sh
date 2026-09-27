@@ -78,6 +78,7 @@ run_status() {
   set +e
   output="$(
     PATH="$FAKE_BIN:$PATH" \
+    CURSOR_REPIN_GIT_BIN="$FAKE_BIN/git" \
     CURSOR_AGENT_BIN="$FAKE_BIN/cursor-agent" \
     MARKETPLACE_LIST_JSON="$LIST_JSON" \
     bash "$STATUS_SCRIPT" 2>&1
