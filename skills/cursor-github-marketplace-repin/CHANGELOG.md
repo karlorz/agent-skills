@@ -19,3 +19,9 @@
 
 - Publish as a Cursor / Claude / Codex marketplace plugin on karlorz-agent-skills.
 - KEEP reinstall includes `cursor-github-marketplace-repin@karlorz-agent-skills`.
+
+## Unreleased
+
+- docs: draft `gitSkills` allowlist schema (`scripts/git-skills.allowlist.json.example`); no installer yet.
+
+- feat: minimal `install-git-skills.sh` + status.sh gitSkills reporting (allowlist-only; clean git env).
