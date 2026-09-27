@@ -4,8 +4,12 @@ All notable changes to this plugin will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-09-27
+
 ### Changed
-- Direct targets: `ask.to` / consumer id include `social` alongside `newbie` and `wiki-research`. There is still no `grok` target. Live hosted MCP may lag until Coolify HOLD lifts.
+- Document CDP as the default first wake in peerd and gate-loop, with `PEERD_GROK_COM_BOT_CDP_ENABLED=0` as the off switch and the live Mac Chrome reverse tunnel on box `:9223`. The helper submits a real Enter and verifies that the wake leaves the composer.
+- Document the :08/:28/:48 attended schedule as fallback, the deprecated routine webhook as opt-in, and the removal of the HMAC automation wake.
+- Direct targets include `social` alongside `newbie` and `wiki-research`. There is still no `grok` target. Live hosted MCP may lag until Coolify HOLD lifts.
 
 ## [0.3.7] - 2026-09-20
 
