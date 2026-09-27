@@ -6,6 +6,8 @@ Optional read-only audit UI: `https://channel.termolo.com/console` (Cloudflare A
 
 SKILL.md is a thin wrap (routing enum + tool names). Runbook, issue guide, and LaunchAgent leftover stay in the wiki.
 
+The tracked `skills/cursor-box-channel/SKILL.md` in this plugin is the maintained source for CDP wake guidance. Grok Bot Agent chats on cursor-box currently load a separate user workflow at `/home/box/agent-data/workflows/cursor-box-channel/SKILL.md`. After a plugin release, copy the source skill to that workflow with a pre-sync backup, then verify the loaded path and guidance in a new attended Agent chat. A plugin cache manifest alone does not prove marketplace skill injection into Grok Bot.
+
 ## Install
 
 From `karlorz-agent-skills`:

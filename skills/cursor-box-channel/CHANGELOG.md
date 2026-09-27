@@ -4,6 +4,11 @@ All notable changes to this plugin will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-09-27
+
+### Fixed
+- Correct the box-side reverse CDP tunnel endpoint to `127.0.0.1:19222`; ports `9223–9478` are reserved for sandbox browsers. The Grok Bot user workflow is a derived copy of this skill and needs a fresh Agent chat after sync to observe changes.
+
 ## [0.3.8] - 2026-09-27
 
 ### Changed
