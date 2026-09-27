@@ -651,13 +651,13 @@ run_playwright_cli_skill_contract_checks() {
   references="$package_root/references"
 
   assert_eq "playwright-cli Claude manifest version" \
-    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "1.4.0"
+    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "1.4.1"
   assert_eq "playwright-cli Codex manifest version" \
-    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "1.4.0"
+    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "1.4.1"
   assert_eq "playwright-cli Cursor manifest version" \
-    "$(read_json_version "$package_root/.cursor-plugin/plugin.json")" "1.4.0"
+    "$(read_json_version "$package_root/.cursor-plugin/plugin.json")" "1.4.1"
   assert_eq "playwright-cli marketplace version" \
-    "$(read_market_version "$marketplace" playwright-cli)" "1.4.0"
+    "$(read_market_version "$marketplace" playwright-cli)" "1.4.1"
   assert_contains "playwright-cli skill minimum" "$skill" '≥ 0.1.20'
   assert_contains "playwright-cli recording commands" "$skill" 'recording-start'
   assert_contains "playwright-cli WebMCP list" "$skill" 'webmcp-list'
