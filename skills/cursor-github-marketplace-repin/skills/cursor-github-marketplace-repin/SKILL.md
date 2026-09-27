@@ -201,3 +201,12 @@ includes openai-codex, newapi-skills, obsidian-skills).
 - Codex: `codex plugin marketplace upgrade <name>`.
 - Grok CLI: `grok plugin marketplace update <name>` then `grok plugin update <plugin>`.
 - Cursor-linked `npx skills` packages: `npx skills update <name> -g -y`.
+
+## gitSkills (draft)
+
+Third channel beside the two Cursor marketplaces (`llm-wiki`, `karlorz-agent-skills`): git-sourced skills.
+
+- Allowlist only (see `scripts/git-skills.allowlist.json.example`); start with `github.com/karlorz` repos and exact `skillPath` values.
+- `keep.local.json` may include a separate `gitSkills` array (not part of `extra` / `drop` marketplace KEEP).
+- Each host keeps its own `keep.local.json` — do not sync the Mac copy onto the box (or the reverse).
+- No installer behavior yet; this section and the example file are schema/docs only.

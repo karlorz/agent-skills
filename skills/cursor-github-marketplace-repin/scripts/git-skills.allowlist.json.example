@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "name": "orca-cli",
+      "gitUrl": "https://github.com/karlorz/orca.git",
+      "allowedRefs": ["fork-main"],
+      "skillPath": "skills/orca-cli/SKILL.md",
+      "installDir": "~/.cursor/skills/_git-sources/karlorz-orca/orca-cli"
+    }
+  ]
+}
