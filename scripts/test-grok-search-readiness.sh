@@ -145,6 +145,59 @@ with tempfile.TemporaryDirectory() as td:
     for path, expected in before.items():
         if path.read_bytes() != expected:
             raise SystemExit(f"probe modified operator file {path}")
+    warns = " ".join(out.get("warnings") or [])
+    if "leftover_stdio_config" in warns:
+        raise SystemExit(f"plugins-only config.toml must not warn leftover_stdio_config: {out!r}")
+
+
+# HOME with leftover stdio [mcp_servers.grok-search] command= warns leftover_stdio_config
+# and --apply must not rewrite config.toml
+with tempfile.TemporaryDirectory() as td:
+    td_path = Path(td)
+    grok_dir = td_path / ".grok"
+    grok_dir.mkdir(parents=True)
+    grok_config = grok_dir / "config.toml"
+    stdio = (
+        "[mcp_servers.grok-search]\n"
+        'command = "uvx"\n'
+        "args = [\"--from\", \"git+https://example.invalid/GrokSearch\"]\n"
+        "\n"
+        "[mcp_servers.grok-search.env]\n"
+        "GROK_SEARCH_MCP_TOKEN = \"must-not-appear\"\n"
+    )
+    grok_config.write_text(stdio, encoding="utf-8")
+    before = grok_config.read_bytes()
+    env = base_env()
+    env["HOME"] = str(td_path)
+    out = run(env, extra_args=["--apply"])
+    if out.get("status") != "in_sync":
+        raise SystemExit(f"stdio leftover status={out!r}, want in_sync")
+    warns = " ".join(out.get("warnings") or [])
+    if "leftover_stdio_config" not in warns:
+        raise SystemExit(f"stdio leftover must warn leftover_stdio_config: {out!r}")
+    if "must-not-appear" in json.dumps(out) or "must-not-appear" in warns:
+        raise SystemExit("probe leaked leftover stdio env value")
+    if grok_config.read_bytes() != before:
+        raise SystemExit("probe must not write leftover stdio config.toml")
+
+
+# HTTP url table under the same name is not leftover stdio
+with tempfile.TemporaryDirectory() as td:
+    td_path = Path(td)
+    grok_dir = td_path / ".grok"
+    grok_dir.mkdir(parents=True)
+    grok_config = grok_dir / "config.toml"
+    grok_config.write_text(
+        "[mcp_servers.grok-search]\n"
+        'url = "https://search.karldigi.dev/mcp"\n',
+        encoding="utf-8",
+    )
+    env = base_env()
+    env["HOME"] = str(td_path)
+    out = run(env)
+    warns = " ".join(out.get("warnings") or [])
+    if "leftover_stdio_config" in warns:
+        raise SystemExit(f"HTTP url table must not warn leftover_stdio_config: {out!r}")
 
 
 # --apply writes URL into CLAUDE_ENV_FILE without requiring a token, never mcp.json / mcp.env

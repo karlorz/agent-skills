@@ -22,6 +22,14 @@ HEADLESS_OAUTH_LOOPBACK_WARNING = (
     "does not skip plugin OAuth. Do not click the grok-search OAuth login "
     "on another machine."
 )
+LEFTOVER_STDIO_CONFIG_WARNING = (
+    "leftover_stdio_config: ~/.grok/config.toml [mcp_servers.grok-search] is "
+    "stdio (command=) and shadows the marketplace HTTP plugin. Grok /mcps i "
+    "auth is HTTP/SSE only. Remove that table so plugin grok-search can load. "
+    "This probe never writes config.toml."
+)
+GROK_CONFIG_RELATIVE = (".grok", "config.toml")
+STDIO_TABLE = "mcp_servers.grok-search"
 # Dead preview listeners. Warn only — never live-probe, never fail the session.
 STALE_PREVIEW_HOSTS = frozenset({"100.76.134.104"})
 STALE_PREVIEW_HOST_PORTS = frozenset({("100.118.12.90", 8800)})
@@ -34,6 +42,43 @@ def _strip(value: str | None) -> str:
 def _ssh_remote_session(source: Mapping[str, str]) -> bool:
     """True when this process is an SSH session (callback would bind here)."""
     return bool(_strip(source.get("SSH_CONNECTION")) or _strip(source.get("SSH_TTY")))
+
+
+def _grok_config_path(source: Mapping[str, str]) -> str | None:
+    home = _strip(source.get("HOME"))
+    if not home:
+        return None
+    return os.path.join(home, *GROK_CONFIG_RELATIVE)
+
+
+def _leftover_stdio_grok_search(config_text: str) -> bool:
+    """True when [mcp_servers.grok-search] sets command= (stdio), not url=."""
+    in_table = False
+    for raw in config_text.splitlines():
+        stripped = raw.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_table = stripped[1:-1] == STDIO_TABLE
+            continue
+        if not in_table or not stripped or stripped.startswith("#"):
+            continue
+        key = stripped.split("=", 1)[0].strip()
+        if key == "command":
+            return True
+    return False
+
+
+def _leftover_stdio_warning(source: Mapping[str, str]) -> str | None:
+    path = _grok_config_path(source)
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        return None
+    if _leftover_stdio_grok_search(text):
+        return LEFTOVER_STDIO_CONFIG_WARNING
+    return None
 
 
 def _stale_preview_warning(url: str) -> str | None:
@@ -70,6 +115,10 @@ def probe(environ: Mapping[str, str] | None = None) -> dict:
     stale = _stale_preview_warning(url)
     if stale:
         warnings.append(stale)
+
+    leftover = _leftover_stdio_warning(source)
+    if leftover:
+        warnings.append(leftover)
 
     if _ssh_remote_session(source):
         warnings.append(HEADLESS_OAUTH_LOOPBACK_WARNING)

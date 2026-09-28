@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.17] - 2026-09-28
+
+### Added
+- `check_readiness.py` warns `leftover_stdio_config` when `~/.grok/config.toml` `[mcp_servers.grok-search]` still has a stdio `command`. A Grok marketplace HTTP plugin upgrade does not remove that table, so `/mcps` `i` auth fails with `does not use OAuth`. The probe never writes `config.toml`.
+
 ## [0.1.16] - 2026-09-28
 
 ### Added

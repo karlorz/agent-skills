@@ -10,6 +10,8 @@ The installed desktop plugin connects via **MCP OAuth** and does not require or 
 
 For **SSH / headless Linux** (Claude on pvelxc, browser on a laptop), that loopback stays on the SSH host. Completing the grok-search OAuth login in the laptop browser delivers the code to the laptop Claude session. Overlay a gateway-keys bearer with `cursor-cli-mcp.example.json` using `Bearer ${env:GROK_SEARCH_MCP_TOKEN}`. Process environment `GROK_SEARCH_MCP_TOKEN` alone does not skip plugin OAuth. Do not finish the login link on another machine. Same-host desktop OAuth and ChatGPT/Doubao `https` redirects are unchanged.
 
+A Grok marketplace plugin upgrade does not remove leftover user TOML. If `~/.grok/config.toml` still has `[mcp_servers.grok-search]` with `command` (stdio `uvx`), that table shadows the HTTP plugin. `/mcps` `i` auth then fails with `does not use OAuth`. Remove the stdio table; the probe never writes `config.toml`.
+
 For headless batch workflows (such as `agent -p`), the same optional wrapper example applies.
 
 ```bash

@@ -129,7 +129,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.16"
+expected_version = "0.1.17"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -188,7 +188,7 @@ if not cursor_entry:
 if cursor_entry.get("source") != "skills/grok-search":
     raise SystemExit(f"{cursor_marketplace_path}: grok-search source must be skills/grok-search")
 
-# 5. Codex manifest: version 0.1.16, no bearer_token_env_var, no apps, type http, production url
+# 5. Codex manifest: version 0.1.17, no bearer_token_env_var, no apps, type http, production url
 codex_manifest = json.loads(texts[codex_manifest_path])
 if codex_manifest.get("version") != expected_version:
     raise SystemExit(f"{codex_manifest_path}: version must be {expected_version}")
@@ -330,6 +330,10 @@ if "cursor-cli-mcp.example.json" not in body:
     raise SystemExit(f"{skill_path}: must name cursor-cli-mcp.example.json for SSH bearer overlay")
 if "do not tell the operator to click the login link on another machine" not in body.lower():
     raise SystemExit(f"{skill_path}: must forbid completing OAuth login on another machine")
+if "leftover_stdio_config" not in body:
+    raise SystemExit(f"{skill_path}: must mention leftover_stdio_config for Grok config.toml stdio")
+if "does not use oauth" not in body.lower() and "http/sse only" not in body.lower():
+    raise SystemExit(f"{skill_path}: must state Grok i auth is HTTP/SSE only")
 if "doubao" not in body.lower() or "去授權" not in body:
     raise SystemExit(f"{skill_path}: must document Doubao Work 去授權 as a person step")
 if re.search(r"`/grok-search`", body) or re.search(r"start (?:the skill|it) with (?:a )?`/grok-search`", body):
@@ -361,6 +365,10 @@ if "does not skip plugin OAuth" not in readme_text:
     raise SystemExit(f"{readme_path}: must state process env token does not skip plugin OAuth")
 if "do not finish the login link on another machine" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must forbid finishing OAuth login on another machine")
+if "config.toml" not in readme_text or "stdio" not in readme_text.lower():
+    raise SystemExit(f"{readme_path}: must document leftover stdio config.toml shadowing marketplace HTTP")
+if "does not use OAuth" not in readme_text:
+    raise SystemExit(f"{readme_path}: must quote Grok i auth failure does not use OAuth")
 if "doubao" not in readme_text.lower() or "去授權" not in readme_text:
     raise SystemExit(f"{readme_path}: must document Doubao Work 去授權 as a person step")
 if "plugin-chain" not in readme_text and "plugin-grok-search-grok-search" not in readme_text:
