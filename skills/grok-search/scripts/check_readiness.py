@@ -14,6 +14,14 @@ from typing import Mapping
 
 PRODUCTION_MCP_URL = "https://search.karldigi.dev/mcp"
 URL_ENV = "GROK_SEARCH_MCP_URL"
+TOKEN_ENV = "GROK_SEARCH_MCP_TOKEN"
+HEADLESS_OAUTH_LOOPBACK_WARNING = (
+    "headless_oauth_loopback: SSH session cannot finish MCP OAuth in a laptop "
+    "browser; localhost callback stays on this host. Overlay Bearer "
+    f"{TOKEN_ENV} with cursor-cli-mcp.example.json. Process env token alone "
+    "does not skip plugin OAuth. Do not click the grok-search OAuth login "
+    "on another machine."
+)
 # Dead preview listeners. Warn only — never live-probe, never fail the session.
 STALE_PREVIEW_HOSTS = frozenset({"100.76.134.104"})
 STALE_PREVIEW_HOST_PORTS = frozenset({("100.118.12.90", 8800)})
@@ -21,6 +29,11 @@ STALE_PREVIEW_HOST_PORTS = frozenset({("100.118.12.90", 8800)})
 
 def _strip(value: str | None) -> str:
     return (value or "").strip()
+
+
+def _ssh_remote_session(source: Mapping[str, str]) -> bool:
+    """True when this process is an SSH session (callback would bind here)."""
+    return bool(_strip(source.get("SSH_CONNECTION")) or _strip(source.get("SSH_TTY")))
 
 
 def _stale_preview_warning(url: str) -> str | None:
@@ -57,6 +70,9 @@ def probe(environ: Mapping[str, str] | None = None) -> dict:
     stale = _stale_preview_warning(url)
     if stale:
         warnings.append(stale)
+
+    if _ssh_remote_session(source):
+        warnings.append(HEADLESS_OAUTH_LOOPBACK_WARNING)
 
     return {
         "status": "in_sync",

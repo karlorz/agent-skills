@@ -170,6 +170,40 @@ with tempfile.TemporaryDirectory() as td:
         raise SystemExit("must not write mcp.env")
 
 
+# SSH remote session warns headless_oauth_loopback and stays in_sync
+env = base_env()
+env["SSH_CONNECTION"] = "1.2.3.4 12345 5.6.7.8 22"
+out = run(env)
+if out.get("status") != "in_sync":
+    raise SystemExit(f"SSH env status={out!r}, want in_sync")
+warns = " ".join(out.get("warnings") or [])
+if "headless_oauth_loopback" not in warns:
+    raise SystemExit(f"SSH env must warn headless_oauth_loopback: {out!r}")
+if "GROK_SEARCH_MCP_TOKEN" not in warns:
+    raise SystemExit(f"SSH warning must name GROK_SEARCH_MCP_TOKEN overlay: {out!r}")
+if "cursor-cli-mcp.example.json" not in warns:
+    raise SystemExit(f"SSH warning must name cursor-cli-mcp.example.json: {out!r}")
+
+# SSH_TTY is the same signal; a process env token does not suppress the warning
+env = base_env()
+env["SSH_TTY"] = "/dev/pts/0"
+env["GROK_SEARCH_MCP_TOKEN"] = "test-token-not-a-secret"
+out = run(env)
+if out.get("status") != "in_sync":
+    raise SystemExit(f"SSH_TTY+token status={out!r}, want in_sync")
+warns = " ".join(out.get("warnings") or [])
+if "headless_oauth_loopback" not in warns:
+    raise SystemExit(f"SSH_TTY must still warn; env token does not skip plugin OAuth: {out!r}")
+if "test-token-not-a-secret" in json.dumps(out):
+    raise SystemExit("SSH probe leaked token in JSON")
+
+# Non-SSH empty env still has no headless warning
+out = run(base_env())
+warns = " ".join(out.get("warnings") or [])
+if "headless_oauth_loopback" in warns:
+    raise SystemExit(f"non-SSH env must not warn headless_oauth_loopback: {out!r}")
+
+
 # stdout JSON must never contain the raw token when token is present
 env = base_env()
 env["GROK_SEARCH_MCP_TOKEN"] = "super-secret-token-value"

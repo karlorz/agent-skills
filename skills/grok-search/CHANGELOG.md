@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2026-09-28
+
+### Added
+- SSH / headless Linux guidance: MCP OAuth loopback stays on the SSH host; overlay `GROK_SEARCH_MCP_TOKEN` with `cursor-cli-mcp.example.json` instead of completing the grok-search OAuth login in a laptop browser.
+- `check_readiness.py` emits `headless_oauth_loopback` when `SSH_CONNECTION` or `SSH_TTY` is set. Status stays `in_sync`. Process env token does not suppress the warning.
+
+### Changed
+- Installed desktop plugin remains MCP OAuth (same-host browser). Gateway authorize 302 is unchanged.
+
 ## [0.1.15] - 2026-09-24
 
 ### Changed

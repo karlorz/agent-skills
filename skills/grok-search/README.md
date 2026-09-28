@@ -6,9 +6,11 @@ Thin marketplace plugin for [GrokSearch](https://github.com/karlorz/GrokSearch),
 
 For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https://search.karldigi.dev/mcp`; set `GROK_SEARCH_MCP_URL` only to override that endpoint. **Codex and Cursor** marketplace packages pin production; the URL is not configurable in Cursor.
 
-The installed desktop plugin connects via **MCP OAuth** and does not require or store a bearer token. Claude `userConfig` token prompts and Cursor plugin variables have been removed.
+The installed desktop plugin connects via **MCP OAuth** and does not require or store a bearer token. Claude `userConfig` token prompts and Cursor plugin variables have been removed. Complete the first-run OAuth prompt on the **same host** as the waiting MCP client (the client binds `http://localhost:<port>/callback`).
 
-For headless batch workflows (such as `agent -p`), an optional wrapper example is available in `cursor-cli-mcp.example.json` using `Bearer ${env:GROK_SEARCH_MCP_TOKEN}`.
+For **SSH / headless Linux** (Claude on pvelxc, browser on a laptop), that loopback stays on the SSH host. Completing the grok-search OAuth login in the laptop browser delivers the code to the laptop Claude session. Overlay a gateway-keys bearer with `cursor-cli-mcp.example.json` using `Bearer ${env:GROK_SEARCH_MCP_TOKEN}`. Process environment `GROK_SEARCH_MCP_TOKEN` alone does not skip plugin OAuth. Do not finish the login link on another machine. Same-host desktop OAuth and ChatGPT/Doubao `https` redirects are unchanged.
+
+For headless batch workflows (such as `agent -p`), the same optional wrapper example applies.
 
 ```bash
 # Optional for Claude/Grok only:
