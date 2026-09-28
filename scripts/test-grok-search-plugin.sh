@@ -74,7 +74,7 @@ if "grok-search-web" in texts[claude_marketplace_path]:
 if "grok-search-web" in texts[agents_marketplace_path]:
     raise SystemExit(f"{agents_marketplace_path}: must not contain grok-search-web")
 
-# 2. Plugin .mcp.json contract: no Authorization header, no bearer interpolation
+# 2. Plugin .mcp.json contract: env-backed Authorization header
 data = json.loads(texts[mcp_path])
 servers = data.get("mcpServers")
 if not isinstance(servers, dict) or set(servers.keys()) != {"grok-search"}:
@@ -85,13 +85,13 @@ if server.get("type") != "http":
     raise SystemExit(f"{mcp_path}: type must be http")
 production_url = "https://search.karldigi.dev/mcp"
 expected_shared_url = f"${{GROK_SEARCH_MCP_URL:-{production_url}}}"
+expected_bearer = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
 if server.get("url") != expected_shared_url:
     raise SystemExit(f"{mcp_path}: url must be exactly {expected_shared_url}")
 
-if "headers" in server:
-    headers = server.get("headers")
-    if isinstance(headers, dict) and "Authorization" in headers:
-        raise SystemExit(f"{mcp_path}: must not have headers.Authorization in OAuth configuration")
+headers = server.get("headers")
+if not isinstance(headers, dict) or headers.get("Authorization") != expected_bearer:
+    raise SystemExit(f"{mcp_path}: headers.Authorization must be exactly {expected_bearer}")
 
 for forbidden in ("command", "args", "env"):
     if forbidden in server:
@@ -129,7 +129,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.18"
+expected_version = "0.1.19"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -160,7 +160,7 @@ if cursor_manifest.get("hooks") is not None:
 if cursor_manifest.get("skills") not in ("./skills/", "./skills/grok-search/SKILL.md"):
     raise SystemExit(f"{cursor_manifest_path}: skills must expose the shipped grok-search skill")
 
-# Cursor mcp.json: type http, url production, no Authorization header
+# Cursor mcp.json: type http, url production, env-backed Authorization header
 cursor_mcp = json.loads(texts[cursor_mcp_path])
 cursor_servers = cursor_mcp.get("mcpServers")
 if not isinstance(cursor_servers, dict) or set(cursor_servers) != {"grok-search"}:
@@ -170,8 +170,9 @@ if cursor_server.get("type") != "http":
     raise SystemExit(f"{cursor_mcp_path}: type must be http")
 if cursor_server.get("url") != production_url:
     raise SystemExit(f"{cursor_mcp_path}: must use production URL")
-if "headers" in cursor_server and "Authorization" in (cursor_server.get("headers") or {}):
-    raise SystemExit(f"{cursor_mcp_path}: must not have Authorization header")
+cursor_headers = cursor_server.get("headers")
+if not isinstance(cursor_headers, dict) or cursor_headers.get("Authorization") != expected_bearer:
+    raise SystemExit(f"{cursor_mcp_path}: headers.Authorization must be exactly {expected_bearer}")
 for forbidden in ("grok-search-http", "CF-Access-Client-Id", "CF-Access-Client-Secret"):
     if forbidden in texts[cursor_manifest_path] or forbidden in texts[cursor_mcp_path]:
         raise SystemExit(f"Cursor-native package must not contain {forbidden}")
@@ -188,7 +189,7 @@ if not cursor_entry:
 if cursor_entry.get("source") != "skills/grok-search":
     raise SystemExit(f"{cursor_marketplace_path}: grok-search source must be skills/grok-search")
 
-# 5. Codex manifest: expected version, no bearer_token_env_var, no apps, type http, production url
+# 5. Codex manifest: expected version, bearer_token_env_var, no apps, type http, production url
 codex_manifest = json.loads(texts[codex_manifest_path])
 if codex_manifest.get("version") != expected_version:
     raise SystemExit(f"{codex_manifest_path}: version must be {expected_version}")
@@ -209,17 +210,19 @@ if codex_interface.get("displayName") != "Grok Search":
 if codex_interface.get("category") != "Research":
     raise SystemExit(f"{codex_manifest_path}: interface.category must be Research")
 long_desc = codex_interface.get("longDescription", "")
-if "MCP OAuth" not in long_desc or "no bearer is stored" not in long_desc.lower():
-    raise SystemExit(f"{codex_manifest_path}: longDescription must mention MCP OAuth and that no bearer is stored in the plugin")
+if "GROK_SEARCH_MCP_TOKEN" not in long_desc:
+    raise SystemExit(f"{codex_manifest_path}: longDescription must name GROK_SEARCH_MCP_TOKEN")
+if "OAuth" not in long_desc:
+    raise SystemExit(f"{codex_manifest_path}: longDescription must keep ChatGPT/Doubao MCP OAuth")
 
 codex_server = codex_servers["grok-search"]
 if codex_server.get("type") != "http":
     raise SystemExit(f"{codex_manifest_path}: Codex MCP type must be http")
 if codex_server.get("url") != production_url:
     raise SystemExit(f"{codex_manifest_path}: Codex MCP url must be exactly {production_url}")
-if "bearer_token_env_var" in codex_server:
+if codex_server.get("bearer_token_env_var") != "GROK_SEARCH_MCP_TOKEN":
     raise SystemExit(
-        f"{codex_manifest_path}: Codex MCP server must not contain bearer_token_env_var"
+        f"{codex_manifest_path}: bearer_token_env_var must be GROK_SEARCH_MCP_TOKEN"
     )
 for forbidden in ("headers", "http_headers", "env_http_headers", "command", "args", "env"):
     if forbidden in codex_server:
@@ -342,6 +345,10 @@ if "headless_oauth_loopback" not in body:
     raise SystemExit(f"{skill_path}: must mention headless_oauth_loopback for SSH sessions")
 if "cursor-cli-mcp.example.json" not in body:
     raise SystemExit(f"{skill_path}: must name cursor-cli-mcp.example.json for Cursor CLI bearer overlay")
+if "Bearer ${GROK_SEARCH_MCP_TOKEN}" not in body:
+    raise SystemExit(f"{skill_path}: must document installed plugin Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
+if "bearer_token_env_var" not in body:
+    raise SystemExit(f"{skill_path}: must document Codex bearer_token_env_var")
 if grok_overlay_table not in body or grok_overlay_header not in body:
     raise SystemExit(f"{skill_path}: must document Grok config.toml HTTP url + headers.Authorization overlay")
 if discriminator not in body.lower() or "DISPLAY" not in body:
@@ -381,8 +388,10 @@ if "a chat cannot finish first-time connector setup" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must state a chat cannot finish first-time connector setup")
 if "SSH" not in readme_text or "headless" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must document SSH / headless Linux OAuth loopback")
-if "does not skip plugin OAuth" not in readme_text:
-    raise SystemExit(f"{readme_path}: must state process env token does not skip plugin OAuth")
+if "Bearer ${GROK_SEARCH_MCP_TOKEN}" not in readme_text:
+    raise SystemExit(f"{readme_path}: must document installed plugin Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
+if "skips OAuth" not in readme_text:
+    raise SystemExit(f"{readme_path}: must state Grok skips OAuth when the Authorization header is set")
 if "do not finish the login link on another machine" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must forbid finishing OAuth login on another machine")
 if "config.toml" not in readme_text or "stdio" not in readme_text.lower():
@@ -430,8 +439,8 @@ if "apply in-process GROK_SEARCH_MCP_URL default" in hook_text:
     raise SystemExit("SessionStart hook must not claim a parent-process URL mutation")
 
 # 11. Secret scan
-# Installed mcp.json, .mcp.json, and host manifests must NOT contain Bearer.
-for no_bearer_path in (mcp_path, cursor_mcp_path, manifest_path, codex_manifest_path, cursor_manifest_path):
+# Host manifests must not embed a Bearer header; plugin JSON may use the env placeholder.
+for no_bearer_path in (manifest_path, codex_manifest_path, cursor_manifest_path):
     if "Bearer" in texts[no_bearer_path]:
         raise SystemExit(f"{no_bearer_path}: must not contain Bearer header or field")
 

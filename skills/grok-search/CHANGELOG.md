@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19] - 2026-09-28
+
+### Changed
+- Restored 0.1.13 env-backed Authorization on installed desktop plugin JSON: `.mcp.json` and Cursor `mcp.json` send `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`; Codex `bearer_token_env_var` is `GROK_SEARCH_MCP_TOKEN`. Grok skips OAuth discovery when that header is present, so SSH/operator-browser loopback no longer blocks Grok TUI.
+- Missing `GROK_SEARCH_MCP_TOKEN` leaves the header key in place; Grok then 401s instead of sitting at `[authenticating]`.
+- Claude `userConfig` and Cursor plugin `variables` stay removed. ChatGPT Admin Apps and Doubao Work keep HTTPS OAuth with no custom headers. Gateway authorize 302 is unchanged.
+- `leftover_stdio_config` still warns when `~/.grok/config.toml` `[mcp_servers.grok-search]` has `command=`. The probe never writes `config.toml`.
+
 ## [0.1.18] - 2026-09-28
 
 ### Changed

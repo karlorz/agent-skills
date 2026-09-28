@@ -1,6 +1,6 @@
 {
   "name": "grok-search",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "Live web search, source extraction, URL fetching, and site mapping through the hosted GrokSearch HTTP MCP service.",
   "author": {
     "name": "karlorz"
@@ -18,13 +18,14 @@
   "mcpServers": {
     "grok-search": {
       "type": "http",
-      "url": "https://search.karldigi.dev/mcp"
+      "url": "https://search.karldigi.dev/mcp",
+      "bearer_token_env_var": "GROK_SEARCH_MCP_TOKEN"
     }
   },
   "interface": {
     "displayName": "Grok Search",
     "shortDescription": "Search and fetch current web sources",
-    "longDescription": "Use the hosted GrokSearch HTTP MCP service for live web search, source extraction, URL fetching, and site mapping via MCP OAuth. No bearer is stored in the plugin.",
+    "longDescription": "Use the hosted GrokSearch HTTP MCP service for live web search, source extraction, URL fetching, and site mapping. Desktop auth is GROK_SEARCH_MCP_TOKEN; ChatGPT and Doubao keep HTTPS MCP OAuth.",
     "developerName": "karlorz",
     "category": "Research",
     "capabilities": [

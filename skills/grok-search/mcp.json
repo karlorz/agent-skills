@@ -2,7 +2,10 @@
   "mcpServers": {
     "grok-search": {
       "type": "http",
-      "url": "https://search.karldigi.dev/mcp"
+      "url": "https://search.karldigi.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GROK_SEARCH_MCP_TOKEN}"
+      }
     }
   }
 }

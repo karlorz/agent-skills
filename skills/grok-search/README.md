@@ -1,29 +1,30 @@
 # grok-search
 
-Thin marketplace plugin for [GrokSearch](https://github.com/karlorz/GrokSearch), providing live web search, structured search intent planning, source extraction, web fetching, and site mapping via Context7-style HTTP MCP OAuth.
+Thin marketplace plugin for [GrokSearch](https://github.com/karlorz/GrokSearch), providing live web search, structured search intent planning, source extraction, web fetching, and site mapping via Context7-style HTTP MCP.
 
 ## Configuration & Environment
 
 For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https://search.karldigi.dev/mcp`; set `GROK_SEARCH_MCP_URL` only to override that endpoint. **Codex and Cursor** marketplace packages pin production; the URL is not configurable in Cursor.
 
-The installed desktop plugin connects via **MCP OAuth** and does not require or store a bearer token. Claude `userConfig` token prompts and Cursor plugin variables have been removed. Complete the first-run OAuth prompt on the **same host** as the waiting MCP client (the client binds `http://localhost:<port>/callback`).
+The installed desktop plugin sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}` from `.mcp.json` (Claude/Grok) and `mcp.json` (Cursor). Codex uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Export `GROK_SEARCH_MCP_TOKEN` in the shell that launches the client. Grok skips OAuth discovery when that Authorization header is present. Claude `userConfig` token prompts and Cursor plugin variables stay removed. ChatGPT Admin Apps and Doubao Work keep HTTPS OAuth.
 
 For headless batch workflows (such as `agent -p`), the optional `cursor-cli-mcp.example.json` wrapper applies.
 
 ```bash
 # Optional for Claude/Grok only:
 export GROK_SEARCH_MCP_URL="https://search.karldigi.dev/mcp"
-# Only needed for a bearer overlay (Grok config.toml headers or cursor-cli-mcp.example.json):
-# export GROK_SEARCH_MCP_TOKEN="your-gateway-keys-token"
+export GROK_SEARCH_MCP_TOKEN="your-gateway-keys-token"
 ```
 
-Operators may store a token at `~/.config/grok-search/http-mcp.token` for convenience when using gateway keys, but HTTP MCP does not auto-source that file or `mcp.env`. For **Cursor**, the installed plugin pins production and connects via OAuth without requiring process environment variables.
+Operators may store a token at `~/.config/grok-search/http-mcp.token` for convenience when using gateway keys, but HTTP MCP does not auto-source that file or `mcp.env`. Cursor-native pins production and reads `Bearer ${GROK_SEARCH_MCP_TOKEN}` from installed `mcp.json`.
 
 ### Operator browser not on this host (SSH)
 
-The OAuth loopback is same-host: it binds on the machine running the MCP client. When the operator browser is on another machine (for example Grok over SSH on pvelxc, browser on a Mac), the callback never reaches the waiting client, and Grok sits at `[authenticating]`. Headed vs headless is not the discriminator: `DISPLAY`, VNC, or a local Chrome on the SSH host opens a browser there, not on the operator's machine. `SSH_CONNECTION` / `SSH_TTY` is only a hint, and the probe reports it as `headless_oauth_loopback`. Do not finish the login link on another machine, and do not press `/mcps` `i` over SSH.
+The OAuth loopback is same-host: it binds on the machine running the MCP client. When the operator browser is on another machine (for example Grok over SSH on pvelxc, browser on a Mac), the callback never reaches the waiting client, and Grok sits at `[authenticating]` unless the installed plugin already has an Authorization header. Headed vs headless is not the discriminator: `DISPLAY`, VNC, or a local Chrome on the SSH host opens a browser there, not on the operator's machine. `SSH_CONNECTION` / `SSH_TTY` is only a hint, and the probe reports it as `headless_oauth_loopback`. Do not finish the login link on another machine, and do not press `/mcps` `i` over SSH.
 
-Overlay a gateway-keys bearer so the client skips OAuth. For **Grok**, add an HTTP table to user `~/.grok/config.toml` and export `GROK_SEARCH_MCP_TOKEN` in the shell that launches Grok. Grok skips OAuth discovery when the HTTP server already has an Authorization header:
+Export `GROK_SEARCH_MCP_TOKEN` so Grok skips OAuth. A missing token still leaves the header key, so Grok 401s instead of starting OAuth. For **Cursor CLI**, `cursor-cli-mcp.example.json` (`Bearer ${env:GROK_SEARCH_MCP_TOKEN}`) remains the optional batch wrapper. ChatGPT/Doubao `https` redirects stay OAuth.
+
+A Grok marketplace plugin upgrade does not remove leftover user TOML. If `~/.grok/config.toml` still has `[mcp_servers.grok-search]` with `command` (stdio `uvx`), that table still shadows the HTTP plugin and any HTTP overlay. `/mcps` `i` auth then fails with `does not use OAuth`. Remove the stdio table, or replace `command=` with this HTTP overlay. The probe never writes `config.toml`.
 
 ```toml
 [mcp_servers.grok-search]
@@ -33,15 +34,11 @@ url = "https://search.karldigi.dev/mcp"
 Authorization = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
 ```
 
-For **Cursor CLI**, use `cursor-cli-mcp.example.json` (`Bearer ${env:GROK_SEARCH_MCP_TOKEN}`). Process environment `GROK_SEARCH_MCP_TOKEN` alone does not skip plugin OAuth; the overlay is what adds the header. The installed plugin `.mcp.json` stays OAuth with no Authorization header. Same-host desktop OAuth and ChatGPT/Doubao `https` redirects are unchanged.
-
-A Grok marketplace plugin upgrade does not remove leftover user TOML. If `~/.grok/config.toml` still has `[mcp_servers.grok-search]` with `command` (stdio `uvx`), that table still shadows the HTTP plugin and any HTTP overlay. `/mcps` `i` auth then fails with `does not use OAuth`. Remove the stdio table, or replace `command=` with the HTTP `url` + `headers` overlay above. The probe never writes `config.toml`.
-
 ### Operator Endpoints
 
 1. **Production (recommended, kr01 proven):** `https://search.karldigi.dev/mcp`
-   - Installed plugin authenticates via **MCP OAuth** (gateway-keys bearer tokens generated from `https://search.karldigi.dev/admin/gateway-keys` remain supported for optional headless clients).
-   - Cursor-native pins this endpoint without requiring token configuration.
+   - Installed desktop plugin authenticates with `Bearer ${GROK_SEARCH_MCP_TOKEN}` (create a gateway key at `https://search.karldigi.dev/admin/gateway-keys`). ChatGPT/Doubao keep MCP OAuth.
+   - Cursor-native pins this endpoint and reads the same env-backed Authorization header.
 2. **Stale Tailscale preview — do not use, do not start on sg01:**
    - Retired URLs: `http://100.76.134.104:8800/mcp` (old Tailscale IP) and `http://100.118.12.90:8800/mcp` (current sg01 Tailscale, no `:8800` listener).
    - `scripts/check_readiness.py` emits a `warnings` entry if `GROK_SEARCH_MCP_URL` still points at those hosts. Status stays `in_sync`; the probe never live-checks `:8800` and never starts a service.
@@ -67,7 +64,7 @@ A SessionStart hook / `scripts/check_readiness.py` checks readiness and can writ
 
 ### Claude Code
 
-Install the plugin from the marketplace. Claude `userConfig` has been removed and does not prompt for a token; the plugin connects via HTTP MCP OAuth.
+Install the plugin from the marketplace. Claude `userConfig` stays removed and does not prompt for a token; export `GROK_SEARCH_MCP_TOKEN` in the process environment. The plugin `.mcp.json` sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`.
 
 ```bash
 claude plugin install grok-search@karlorz-agent-skills
@@ -82,12 +79,12 @@ codex plugin add grok-search@karlorz-agent-skills
 codex mcp get grok-search
 ```
 
-The Codex-native manifest embeds an HTTP MCP definition pointing to `https://search.karldigi.dev/mcp` via MCP OAuth with no bundled bearer or `bearer_token_env_var`.
+The Codex-native manifest embeds an HTTP MCP definition pointing to `https://search.karldigi.dev/mcp` with `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Export that env in the Codex process. ChatGPT/Doubao HTTPS OAuth is unchanged.
 
 ### Cursor (Desktop + Agent CLI)
 
 1. **Desktop / Agent settings:** Install/enable the plugin. Settings → Rules, Skills, Subagents → enable **Include third-party Plugins, Skills, and other configs**.
-2. **Plugin loading:** After marketplace install, grok-search MCP loads automatically in Cursor Agent TUI via the plugin chain (`plugin-grok-search-grok-search` or `plugin-chain`) using MCP OAuth. No token variable or `Plugins → Configure` step is required.
+2. **Plugin loading:** After marketplace install, grok-search MCP loads automatically in Cursor Agent TUI via the plugin chain (`plugin-grok-search-grok-search` or `plugin-chain`). Installed `mcp.json` sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`. Cursor plugin `variables` stay removed, so there is no `Plugins → Configure` token prompt; export the env in the process that launches Agent.
 3. **Diagnostic note on `agent mcp list`:** `agent mcp list` inspects `~/.cursor/mcp.json` and `.cursor/mcp.json`, not Claude-style plugin `.mcp.json` definitions. This is a known CLI diagnostic gap and is not the proof of install.
 4. **Optional headless wrapper (`cursor-cli-mcp.example.json`):** For headless batch commands (`agent -p`) invoked without `--plugin-dir`, you can optionally configure a JSON wrapper in `~/.cursor/mcp.json`. This wrapper is purely optional and is not required for normal interactive Cursor Agent TUI or plugin-chain usage. Do not treat writing that file as part of marketplace install.
 
@@ -107,7 +104,7 @@ To verify that grok-search MCP is active and functioning properly:
    ```text
    Use grok-search get_config_info and web_search for the latest AI news.
    ```
-2. Confirm the agent discovers and invokes tools such as `get_config_info` or `web_search`. Live session tool execution is the ground truth, not `agent mcp list`. Complete the first-run OAuth prompt if your host requests it.
+2. Confirm the agent discovers and invokes tools such as `get_config_info` or `web_search`. Live session tool execution is the ground truth, not `agent mcp list`. Desktop clients use `GROK_SEARCH_MCP_TOKEN`; a missing token is a 401. ChatGPT/Doubao still complete first-run OAuth outside the chat.
 
 A healthy production `get_config_info` response identifies the configured
 remote streamable-HTTP endpoint and confirms that the client needs no local
