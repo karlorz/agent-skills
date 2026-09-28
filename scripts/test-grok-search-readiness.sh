@@ -200,6 +200,33 @@ with tempfile.TemporaryDirectory() as td:
         raise SystemExit(f"HTTP url table must not warn leftover_stdio_config: {out!r}")
 
 
+# Documented Grok HTTP bearer overlay (url + headers.Authorization) is not leftover stdio,
+# and --apply over SSH must not rewrite it
+with tempfile.TemporaryDirectory() as td:
+    td_path = Path(td)
+    grok_dir = td_path / ".grok"
+    grok_dir.mkdir(parents=True)
+    grok_config = grok_dir / "config.toml"
+    grok_config.write_text(
+        "[mcp_servers.grok-search]\n"
+        'url = "https://search.karldigi.dev/mcp"\n'
+        "\n"
+        "[mcp_servers.grok-search.headers]\n"
+        'Authorization = "Bearer ${GROK_SEARCH_MCP_TOKEN}"\n',
+        encoding="utf-8",
+    )
+    before = grok_config.read_bytes()
+    env = base_env()
+    env["HOME"] = str(td_path)
+    env["SSH_CONNECTION"] = "1.2.3.4 12345 5.6.7.8 22"
+    out = run(env, extra_args=["--apply"])
+    warns = " ".join(out.get("warnings") or [])
+    if "leftover_stdio_config" in warns:
+        raise SystemExit(f"HTTP bearer overlay must not warn leftover_stdio_config: {out!r}")
+    if grok_config.read_bytes() != before:
+        raise SystemExit("probe must not write the Grok HTTP bearer overlay config.toml")
+
+
 # --apply writes URL into CLAUDE_ENV_FILE without requiring a token, never mcp.json / mcp.env
 with tempfile.TemporaryDirectory() as td:
     td_path = Path(td)
@@ -236,6 +263,16 @@ if "GROK_SEARCH_MCP_TOKEN" not in warns:
     raise SystemExit(f"SSH warning must name GROK_SEARCH_MCP_TOKEN overlay: {out!r}")
 if "cursor-cli-mcp.example.json" not in warns:
     raise SystemExit(f"SSH warning must name cursor-cli-mcp.example.json: {out!r}")
+if "operator browser" not in warns.lower() or "this host" not in warns.lower():
+    raise SystemExit(f"SSH warning must frame operator browser vs this-host loopback: {out!r}")
+if "hint" not in warns.lower():
+    raise SystemExit(f"SSH warning must call SSH a hint, not a detector: {out!r}")
+for needle in ("config.toml", "[mcp_servers.grok-search.headers]", "Authorization"):
+    if needle not in warns:
+        raise SystemExit(f"SSH warning must name Grok HTTP bearer overlay {needle!r}: {out!r}")
+for forbidden in ("DISPLAY", "headed", "auto-detect"):
+    if forbidden in warns:
+        raise SystemExit(f"SSH warning must not suggest headed auto-detect ({forbidden!r}): {out!r}")
 
 # SSH_TTY is the same signal; a process env token does not suppress the warning
 env = base_env()

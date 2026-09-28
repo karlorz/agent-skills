@@ -16,17 +16,21 @@ PRODUCTION_MCP_URL = "https://search.karldigi.dev/mcp"
 URL_ENV = "GROK_SEARCH_MCP_URL"
 TOKEN_ENV = "GROK_SEARCH_MCP_TOKEN"
 HEADLESS_OAUTH_LOOPBACK_WARNING = (
-    "headless_oauth_loopback: SSH session cannot finish MCP OAuth in a laptop "
-    "browser; localhost callback stays on this host. Overlay Bearer "
-    f"{TOKEN_ENV} with cursor-cli-mcp.example.json. Process env token alone "
-    "does not skip plugin OAuth. Do not click the grok-search OAuth login "
-    "on another machine."
+    "headless_oauth_loopback: SSH is a hint that the operator browser may not "
+    "be this host. MCP OAuth loopback (localhost callback) binds on this host, "
+    "so a browser on another machine cannot finish it. Grok: overlay a bearer "
+    "in ~/.grok/config.toml [mcp_servers.grok-search] url = "
+    f'"{PRODUCTION_MCP_URL}" plus [mcp_servers.grok-search.headers] '
+    f'Authorization = "Bearer ${{{TOKEN_ENV}}}"; Grok skips OAuth when that '
+    "header is set. Cursor CLI: cursor-cli-mcp.example.json. Process env "
+    "token alone does not skip plugin OAuth. Do not click the grok-search "
+    "OAuth login on another machine. This probe never writes config.toml."
 )
 LEFTOVER_STDIO_CONFIG_WARNING = (
     "leftover_stdio_config: ~/.grok/config.toml [mcp_servers.grok-search] is "
     "stdio (command=) and shadows the marketplace HTTP plugin. Grok /mcps i "
-    "auth is HTTP/SSE only. Remove that table so plugin grok-search can load. "
-    "This probe never writes config.toml."
+    "auth is HTTP/SSE only. Remove that table, or replace command= with the "
+    "HTTP url overlay. This probe never writes config.toml."
 )
 GROK_CONFIG_RELATIVE = (".grok", "config.toml")
 STDIO_TABLE = "mcp_servers.grok-search"
@@ -40,7 +44,7 @@ def _strip(value: str | None) -> str:
 
 
 def _ssh_remote_session(source: Mapping[str, str]) -> bool:
-    """True when this process is an SSH session (callback would bind here)."""
+    """SSH hint that the operator browser may not be this host (loopback binds here)."""
     return bool(_strip(source.get("SSH_CONNECTION")) or _strip(source.get("SSH_TTY")))
 
 

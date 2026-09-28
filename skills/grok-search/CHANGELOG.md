@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18] - 2026-09-28
+
+### Changed
+- MCP OAuth loopback is same-host. The discriminator is whether the operator browser is on the host running the MCP client; headed vs headless (`DISPLAY`, VNC, local Chrome) is not. `SSH_CONNECTION` / `SSH_TTY` stays a hint.
+- `check_readiness.py` `headless_oauth_loopback` copy now says SSH is a hint that the operator browser may not be this host, and names the Grok HTTP bearer overlay. The probe still never writes `config.toml`.
+- SKILL and README document the Grok overlay as user `~/.grok/config.toml` `[mcp_servers.grok-search]` `url = "https://search.karldigi.dev/mcp"` plus `[mcp_servers.grok-search.headers]` `Authorization = "Bearer ${GROK_SEARCH_MCP_TOKEN}"`; Grok skips OAuth when that header is set. Leftover stdio `command=` still shadows it. `cursor-cli-mcp.example.json` stays the Cursor CLI overlay. Installed `.mcp.json` stays OAuth with no Authorization header.
+
 ## [0.1.17] - 2026-09-28
 
 ### Added

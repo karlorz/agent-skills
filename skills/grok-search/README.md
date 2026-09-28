@@ -8,20 +8,34 @@ For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https:
 
 The installed desktop plugin connects via **MCP OAuth** and does not require or store a bearer token. Claude `userConfig` token prompts and Cursor plugin variables have been removed. Complete the first-run OAuth prompt on the **same host** as the waiting MCP client (the client binds `http://localhost:<port>/callback`).
 
-For **SSH / headless Linux** (Claude on pvelxc, browser on a laptop), that loopback stays on the SSH host. Completing the grok-search OAuth login in the laptop browser delivers the code to the laptop Claude session. Overlay a gateway-keys bearer with `cursor-cli-mcp.example.json` using `Bearer ${env:GROK_SEARCH_MCP_TOKEN}`. Process environment `GROK_SEARCH_MCP_TOKEN` alone does not skip plugin OAuth. Do not finish the login link on another machine. Same-host desktop OAuth and ChatGPT/Doubao `https` redirects are unchanged.
-
-A Grok marketplace plugin upgrade does not remove leftover user TOML. If `~/.grok/config.toml` still has `[mcp_servers.grok-search]` with `command` (stdio `uvx`), that table shadows the HTTP plugin. `/mcps` `i` auth then fails with `does not use OAuth`. Remove the stdio table; the probe never writes `config.toml`.
-
-For headless batch workflows (such as `agent -p`), the same optional wrapper example applies.
+For headless batch workflows (such as `agent -p`), the optional `cursor-cli-mcp.example.json` wrapper applies.
 
 ```bash
 # Optional for Claude/Grok only:
 export GROK_SEARCH_MCP_URL="https://search.karldigi.dev/mcp"
-# Only needed for optional headless bearer use (e.g. cursor-cli-mcp.example.json):
+# Only needed for a bearer overlay (Grok config.toml headers or cursor-cli-mcp.example.json):
 # export GROK_SEARCH_MCP_TOKEN="your-gateway-keys-token"
 ```
 
 Operators may store a token at `~/.config/grok-search/http-mcp.token` for convenience when using gateway keys, but HTTP MCP does not auto-source that file or `mcp.env`. For **Cursor**, the installed plugin pins production and connects via OAuth without requiring process environment variables.
+
+### Operator browser not on this host (SSH)
+
+The OAuth loopback is same-host: it binds on the machine running the MCP client. When the operator browser is on another machine (for example Grok over SSH on pvelxc, browser on a Mac), the callback never reaches the waiting client, and Grok sits at `[authenticating]`. Headed vs headless is not the discriminator: `DISPLAY`, VNC, or a local Chrome on the SSH host opens a browser there, not on the operator's machine. `SSH_CONNECTION` / `SSH_TTY` is only a hint, and the probe reports it as `headless_oauth_loopback`. Do not finish the login link on another machine, and do not press `/mcps` `i` over SSH.
+
+Overlay a gateway-keys bearer so the client skips OAuth. For **Grok**, add an HTTP table to user `~/.grok/config.toml` and export `GROK_SEARCH_MCP_TOKEN` in the shell that launches Grok. Grok skips OAuth discovery when the HTTP server already has an Authorization header:
+
+```toml
+[mcp_servers.grok-search]
+url = "https://search.karldigi.dev/mcp"
+
+[mcp_servers.grok-search.headers]
+Authorization = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
+```
+
+For **Cursor CLI**, use `cursor-cli-mcp.example.json` (`Bearer ${env:GROK_SEARCH_MCP_TOKEN}`). Process environment `GROK_SEARCH_MCP_TOKEN` alone does not skip plugin OAuth; the overlay is what adds the header. The installed plugin `.mcp.json` stays OAuth with no Authorization header. Same-host desktop OAuth and ChatGPT/Doubao `https` redirects are unchanged.
+
+A Grok marketplace plugin upgrade does not remove leftover user TOML. If `~/.grok/config.toml` still has `[mcp_servers.grok-search]` with `command` (stdio `uvx`), that table still shadows the HTTP plugin and any HTTP overlay. `/mcps` `i` auth then fails with `does not use OAuth`. Remove the stdio table, or replace `command=` with the HTTP `url` + `headers` overlay above. The probe never writes `config.toml`.
 
 ### Operator Endpoints
 

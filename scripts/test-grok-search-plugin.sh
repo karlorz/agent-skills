@@ -129,7 +129,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.17"
+expected_version = "0.1.18"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -188,7 +188,7 @@ if not cursor_entry:
 if cursor_entry.get("source") != "skills/grok-search":
     raise SystemExit(f"{cursor_marketplace_path}: grok-search source must be skills/grok-search")
 
-# 5. Codex manifest: version 0.1.17, no bearer_token_env_var, no apps, type http, production url
+# 5. Codex manifest: expected version, no bearer_token_env_var, no apps, type http, production url
 codex_manifest = json.loads(texts[codex_manifest_path])
 if codex_manifest.get("version") != expected_version:
     raise SystemExit(f"{codex_manifest_path}: version must be {expected_version}")
@@ -249,6 +249,20 @@ if not release_heading:
     raise SystemExit(f"{changelog_path}: must contain a dated release heading")
 if release_heading.group(1) != expected_version:
     raise SystemExit(f"{changelog_path}: latest release heading must match {expected_version}")
+version_headings = re.findall(r"^## \[([^]]+)\]", changelog_text, re.MULTILINE)
+duplicate_versions = sorted({v for v in version_headings if version_headings.count(v) > 1})
+if duplicate_versions:
+    raise SystemExit(f"{changelog_path}: duplicate release headings {duplicate_versions}")
+for section in re.split(r"^## ", changelog_text, flags=re.MULTILINE)[1:]:
+    subsections = re.findall(r"^### (.+)$", section, re.MULTILINE)
+    duplicate_subsections = sorted({s for s in subsections if subsections.count(s) > 1})
+    if duplicate_subsections:
+        heading = section.splitlines()[0]
+        raise SystemExit(f"{changelog_path}: {heading} repeats {duplicate_subsections}")
+
+grok_overlay_table = "[mcp_servers.grok-search.headers]"
+grok_overlay_header = 'Authorization = "Bearer ${GROK_SEARCH_MCP_TOKEN}"'
+discriminator = "headed vs headless is not the discriminator"
 
 # 8. SKILL.md contract
 skill_text = texts[skill_path]
@@ -327,7 +341,13 @@ if "a chat cannot finish first-time connector setup" not in body.lower():
 if "headless_oauth_loopback" not in body:
     raise SystemExit(f"{skill_path}: must mention headless_oauth_loopback for SSH sessions")
 if "cursor-cli-mcp.example.json" not in body:
-    raise SystemExit(f"{skill_path}: must name cursor-cli-mcp.example.json for SSH bearer overlay")
+    raise SystemExit(f"{skill_path}: must name cursor-cli-mcp.example.json for Cursor CLI bearer overlay")
+if grok_overlay_table not in body or grok_overlay_header not in body:
+    raise SystemExit(f"{skill_path}: must document Grok config.toml HTTP url + headers.Authorization overlay")
+if discriminator not in body.lower() or "DISPLAY" not in body:
+    raise SystemExit(f"{skill_path}: must state DISPLAY / headed vs headless is not the discriminator")
+if "operator browser" not in body.lower():
+    raise SystemExit(f"{skill_path}: must frame operator browser vs this-host loopback")
 if "do not tell the operator to click the login link on another machine" not in body.lower():
     raise SystemExit(f"{skill_path}: must forbid completing OAuth login on another machine")
 if "leftover_stdio_config" not in body:
@@ -369,6 +389,12 @@ if "config.toml" not in readme_text or "stdio" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must document leftover stdio config.toml shadowing marketplace HTTP")
 if "does not use OAuth" not in readme_text:
     raise SystemExit(f"{readme_path}: must quote Grok i auth failure does not use OAuth")
+if grok_overlay_table not in readme_text or grok_overlay_header not in readme_text:
+    raise SystemExit(f"{readme_path}: must document Grok config.toml HTTP url + headers.Authorization overlay")
+if discriminator not in readme_text.lower() or "DISPLAY" not in readme_text:
+    raise SystemExit(f"{readme_path}: must state DISPLAY / headed vs headless is not the discriminator")
+if "still shadows" not in readme_text:
+    raise SystemExit(f"{readme_path}: must state leftover stdio command= still shadows the HTTP overlay")
 if "doubao" not in readme_text.lower() or "去授權" not in readme_text:
     raise SystemExit(f"{readme_path}: must document Doubao Work 去授權 as a person step")
 if "plugin-chain" not in readme_text and "plugin-grok-search-grok-search" not in readme_text:
