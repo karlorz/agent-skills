@@ -48,6 +48,8 @@ The Mac launchd+stdio daemon still exists in `karlorz/cursor-box-channel`. Marke
 
 Plugin install does not write `~/.cursor/mcp.json`. `agent mcp list` inspects static `~/.cursor/mcp.json`, not plugin MCP. For headless `agent -p` without plugin flags, see `cursor-cli-mcp.example.json`.
 
+Installed `.mcp.json` sends `Authorization: Bearer ${CURSOR_BOX_MCP_TOKEN}`. Grok skips OAuth when that header is present; a missing token is a 401. Headed vs headless is not the discriminator: `DISPLAY` / VNC on the SSH host is not the operator browser. `SSH_CONNECTION` / `SSH_TTY` is a hint. `scripts/check_readiness.py` warns `headless_oauth_loopback` when SSH is set and the token is unset. Leftover `[mcp_servers.cursor-box-channel]` `command=` in `~/.grok/config.toml` still shadows marketplace HTTP (`leftover_stdio_config`). The probe never writes `config.toml`.
+
 ## License
 
 MIT

@@ -110,8 +110,8 @@ claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
 codex_manifest = json.loads(texts[codex_manifest_path])
 expected_version = claude_manifest.get("version")
-if expected_version != "0.3.9":
-    raise SystemExit(f"{manifest_path}: version must be 0.3.9")
+if expected_version != "0.3.10":
+    raise SystemExit(f"{manifest_path}: version must be 0.3.10")
 if cursor_manifest.get("version") != expected_version:
     raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if codex_manifest.get("version") != expected_version:
@@ -161,6 +161,8 @@ for forbidden in ("headers", "http_headers", "env_http_headers", "command", "arg
 
 # 5. CHANGELOG
 changelog_text = texts[changelog_path]
+if "## [0.3.10] - 2026-09-28" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must contain ## [0.3.10] - 2026-09-28")
 if "## [0.3.9] - 2026-09-27" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain ## [0.3.9] - 2026-09-27")
 if "## [0.3.8] - 2026-09-27" not in changelog_text:
@@ -242,6 +244,16 @@ if "end the turn" in body.lower() or "let the next turn" in body.lower():
     raise SystemExit(f"{skill_path}: must not tell the coordinator to end the turn for an operator poll")
 if "200 means the run started" not in body.lower():
     raise SystemExit(f"{skill_path}: must keep official Grok Bot routine webhook 200=started")
+if "check_readiness.py" not in body:
+    raise SystemExit(f"{skill_path}: must mention check_readiness.py")
+if "headless_oauth_loopback" not in body:
+    raise SystemExit(f"{skill_path}: must mention headless_oauth_loopback")
+if "leftover_stdio_config" not in body:
+    raise SystemExit(f"{skill_path}: must mention leftover_stdio_config")
+if "operator browser" not in body.lower():
+    raise SystemExit(f"{skill_path}: must frame operator browser vs this-host loopback")
+if "headed vs headless is not the discriminator" not in body.lower():
+    raise SystemExit(f"{skill_path}: must state headed vs headless is not the discriminator")
 if len(skill_text.split()) > 1500:
     raise SystemExit(f"{skill_path}: too long ({len(skill_text.split())} words > 1500)")
 
@@ -269,6 +281,18 @@ if "does not write" not in readme_text.lower():
     raise SystemExit(f"{readme_path}: must note plugin install does not write ~/.cursor/mcp.json")
 if "https://channel.termolo.com/console" not in readme_text:
     raise SystemExit(f"{readme_path}: must mention https://channel.termolo.com/console")
+if "check_readiness.py" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention check_readiness.py")
+if "headless_oauth_loopback" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention headless_oauth_loopback")
+if "leftover_stdio_config" not in readme_text:
+    raise SystemExit(f"{readme_path}: must mention leftover_stdio_config")
+if "headed vs headless is not the discriminator" not in readme_text.lower():
+    raise SystemExit(f"{readme_path}: must state headed vs headless is not the discriminator")
+if "still shadows" not in readme_text:
+    raise SystemExit(f"{readme_path}: must state leftover stdio command= still shadows marketplace HTTP")
+if "never writes `config.toml`" not in readme_text and "never writes config.toml" not in readme_text:
+    raise SystemExit(f"{readme_path}: must state the probe never writes config.toml")
 
 # 8. Cursor catalog + KEEP list
 cursor_marketplace = json.loads(texts[cursor_marketplace_path])

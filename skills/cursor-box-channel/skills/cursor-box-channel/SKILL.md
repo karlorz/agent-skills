@@ -13,7 +13,9 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 
 - Plugin client variable: `CURSOR_BOX_MCP_TOKEN` (Cursor: Plugins → Configure). Claude/Grok/Codex need the same bearer in process environment.
 - Sidecar server env is `MCP_HTTP_TOKEN`. The operator sets the same secret in both places. Cursor/Codex docs may mention `${MCP_HTTP_TOKEN}` as an alias; pin the plugin variable name to `CURSOR_BOX_MCP_TOKEN`.
-- Origin Bearer is required on `/mcp`. A 401 is a handshake failure; report it and stop.
+- Origin Bearer is required on `/mcp`. Installed `.mcp.json` sends `Authorization: Bearer ${CURSOR_BOX_MCP_TOKEN}`. A 401 is a handshake failure or missing token; report it and stop. Grok skips OAuth when that header is present.
+- Operator browser vs this-host loopback: headed vs headless is not the discriminator (`DISPLAY`, VNC). `SSH_CONNECTION` / `SSH_TTY` is a hint. If `check_readiness.py` `warnings` contain `headless_oauth_loopback`, export `CURSOR_BOX_MCP_TOKEN` and do not finish a login link on another machine. If `warnings` contain `leftover_stdio_config`, `~/.grok/config.toml` `[mcp_servers.cursor-box-channel]` still has stdio `command=` and shadows marketplace HTTP; Grok `/mcps` `i` auth is HTTP/SSE only. Do not write `config.toml`.
+- Resolve the installed root from `GROK_PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` and run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --json` before the first MCP call when those roots exist.
 - Never print a real token. Never auto-write `~/.cursor/mcp.json` or Grok `config.toml`.
 - Attended-only: the queue waits if Grok Bot is closed. Do not invent a grok CLI wrapper or force a closed consumer.
 

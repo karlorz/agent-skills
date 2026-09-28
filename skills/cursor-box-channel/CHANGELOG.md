@@ -4,6 +4,12 @@ All notable changes to this plugin will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-09-28
+
+### Added
+- `scripts/check_readiness.py` warns `headless_oauth_loopback` when SSH is a hint that the operator browser may not be this host and `CURSOR_BOX_MCP_TOKEN` is unset. Missing token is `missing_prereq` (401). Installed `.mcp.json` already sends `Authorization: Bearer ${CURSOR_BOX_MCP_TOKEN}`.
+- Probe warns `leftover_stdio_config` when `~/.grok/config.toml` `[mcp_servers.cursor-box-channel]` still has stdio `command=`. The probe never writes `config.toml`.
+
 ## [0.3.9] - 2026-09-27
 
 ### Fixed
