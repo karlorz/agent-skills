@@ -5,21 +5,19 @@ description: This skill should be used when the user needs live web search, curr
 
 # Grok Search
 
-Use this skill to perform live web searches, plan search intent, fetch web content, map site topologies, and extract citations.
+Live web search, fetch, and site mapping. Production HTTP MCP: `https://search.karldigi.dev/mcp`.
 
 ## Mode Selection: Connector vs CLI
 
-This skill operates in one of two modes:
+1. **Connector mode:** If host `grok-search` MCP tools (`web_search`, `get_sources`, etc.) are already connected, use them. Follow the server `plan_*` workflow. If a leftover `grok-search-http` server exists, ignore it; it is not a fallback. Never dual-call it.
+2. **CLI mode:** If those tools are missing, do not write host MCP configuration. Plan locally (intent, complexity, sub-queries, search terms). Do not call server `plan_*` tools. Run `node <skill-dir>/scripts/grok-search.cjs`.
 
-1. **Connector mode:** If host `grok-search` MCP tools (`web_search`, `get_sources`, etc.) are already connected, use the HTTP MCP tools directly. Follow the server `plan_*` workflow. Do not auto-disable other plugins or dual-call preview aliases.
-2. **CLI mode:** If no grok-search MCP connector tools are available, do not write host MCP configuration. Plan searches locally within the conversation (determine intent, complexity, sub-queries, and search terms locally; do NOT call server `plan_*` tools), then execute queries via the bundled CLI: `node <skill-dir>/scripts/grok-search.cjs`.
-
-Grok-search HTTP MCP uses `type: http`. The installed desktop plugin sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}` from `.mcp.json` / Cursor `mcp.json`; Codex uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. Codex and Cursor-native pin production; the URL override is not configurable in Cursor or the Codex marketplace package. Grok skips OAuth when that Authorization header is present. ChatGPT/Doubao keep HTTPS OAuth. Do not start a local stdio `uvx` server.
+HTTP MCP is `type: http`. Installed `.mcp.json` / Cursor `mcp.json` send `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`. Codex uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Claude/Grok default the URL to production; `GROK_SEARCH_MCP_URL` may override on those hosts only. Codex and Cursor-native pin production; the URL is not configurable in Cursor. Grok skips OAuth when that Authorization header is present. ChatGPT/Doubao keep HTTPS OAuth. Do not start a local stdio `uvx` server.
 
 ## First-run readiness
 
-- **Desktop token:** Export `GROK_SEARCH_MCP_TOKEN` in the shell that launches the client. The installed plugin already includes the Authorization header, so Grok skips OAuth. A missing token still leaves the header key and yields 401 instead of `[authenticating]`.
-- **Operator browser not on this host (SSH):** MCP OAuth loopback (`http://localhost:<port>/callback`) binds on the host running the MCP client. Headed vs headless is not the discriminator: `DISPLAY`, VNC, or a local Chrome on this host cannot help when the operator browser is on another machine. `SSH_CONNECTION` / `SSH_TTY` is only a hint. If `check_readiness.py` `warnings` contain `headless_oauth_loopback`, or Grok sits at `[authenticating]` / shows an OAuth login URL or 401 over SSH: stop, and do not press `/mcps` `i`. Confirm `GROK_SEARCH_MCP_TOKEN` is exported. Cursor CLI overlay remains `cursor-cli-mcp.example.json`. Optional Grok user `~/.grok/config.toml` HTTP overlay (table must not contain `command=`):
+- **Desktop token:** Export `GROK_SEARCH_MCP_TOKEN` in the process that launches the client. A missing token still leaves the header key and yields 401 instead of `[authenticating]`.
+- **Operator browser not on this host (SSH):** MCP OAuth loopback binds on the host running the MCP client. Headed vs headless is not the discriminator: `DISPLAY`, VNC, or local Chrome on this host cannot finish a login in a browser on another machine. `SSH_CONNECTION` / `SSH_TTY` is only a hint. If `check_readiness.py` warnings contain `headless_oauth_loopback`, or Grok sits at `[authenticating]` over SSH: stop, and do not press `/mcps` `i`. Confirm `GROK_SEARCH_MCP_TOKEN` is exported. Cursor CLI overlay: `cursor-cli-mcp.example.json`. Optional Grok `~/.grok/config.toml` HTTP overlay (table must not contain `command=`):
     ```toml
     [mcp_servers.grok-search]
     url = "https://search.karldigi.dev/mcp"
@@ -28,76 +26,44 @@ Grok-search HTTP MCP uses `type: http`. The installed desktop plugin sends `Auth
     Authorization = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
     ```
   Do not tell the operator to click the login link on another machine. If grok-search tools are already connected, continue.
-- **Claude/Grok plugin hosts:** resolve the installed root from `GROK_PLUGIN_ROOT`, falling back to `CLAUDE_PLUGIN_ROOT`, and run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --apply --json` before the first grok-search MCP call. `in_sync` means the probe has verified the configuration. If `warnings` mention a stale preview URL, report it and keep production; do not start sg01 `:8800` and do not live-probe that listener. If `warnings` mention `headless_oauth_loopback`, follow the operator-browser rule above. If `warnings` mention `leftover_stdio_config`, the marketplace HTTP plugin is shadowed by `~/.grok/config.toml` `[mcp_servers.grok-search]` stdio (`command=` / `uvx`). Tell the operator to remove that table, or replace `command=` with the HTTP overlay above; Grok `/mcps` `i` auth is HTTP/SSE only. Do not write `config.toml`. Claude Code `userConfig` stays removed; in-app and CLI installs read process env `GROK_SEARCH_MCP_TOKEN`.
-- **Codex:** the native manifest embeds a Codex-specific production HTTP MCP definition with `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN` and no apps; it pins production and never parses the Claude/Grok shell-style URL fallback.
-- **Cursor-native / Agent TUI:** Cursor-native pins production and does not run the probe; the URL is not configurable in Cursor. Cursor plugin `variables` stay removed; installed `mcp.json` sends `Bearer ${GROK_SEARCH_MCP_TOKEN}`. If `grok-search` tools are connected, continue; otherwise report the MCP connection error.
-- **ChatGPT web:** A person configures ChatGPT web at `https://chatgpt.com/admin/apps` Create App, URL `https://search.karldigi.dev/mcp`, auth OAuth. The GitHub marketplace card is desktop-only because `mcp.json` ships.
-- **A chat cannot finish first-time connector setup.** ChatGPT web chat and Doubao Work chat cannot open connector settings or submit consent. Doubao Work setup is `技能 · 連接器 · 夥伴` → 我的技能 → 連接器 → 新增自訂連接器, HTTP, the production URL, no custom headers, then 去授權 and the operator password in the browser. After that connector is authorized, the chat may call `web_search`. Do not ask the chat to create the app, click 去授權, or type the operator password.
-- Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced.
-- A 401 is an MCP handshake failure or missing `GROK_SEARCH_MCP_TOKEN`, not a readiness-probe status. Report it and stop. Over SSH, treat an OAuth login URL the same way: report `headless_oauth_loopback` and stop.
-- Never auto-source `mcp.env` or auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
-- A leftover `grok-search-http` connection is a preview overlay inherited from operator Cursor MCP config. It is not a fallback. Never dual-call it; do not dual-call preview aliases.
+- **Claude/Grok plugin hosts:** from `GROK_PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT`, run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --apply --json` before the first MCP call. `in_sync` means the probe verified configuration. If warnings mention a stale preview URL, keep production. If `headless_oauth_loopback`, follow the operator-browser rule. If `leftover_stdio_config`, `~/.grok/config.toml` `[mcp_servers.grok-search]` still has stdio `command=` / `uvx` and shadows the HTTP plugin; tell the operator to remove that table or replace `command=` with the overlay above. Grok `/mcps` `i` auth is HTTP/SSE only. Do not write `config.toml`.
+- **Codex:** native manifest pins production with `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`.
+- **Cursor-native / Agent TUI:** Cursor-native pins production and does not run the probe. Installed `mcp.json` sends `Bearer ${GROK_SEARCH_MCP_TOKEN}`.
+- **ChatGPT web:** A person creates the app at `https://chatgpt.com/admin/apps` Create App, URL `https://search.karldigi.dev/mcp`, OAuth. The GitHub marketplace card is desktop-only because `mcp.json` ships.
+- **A chat cannot finish first-time connector setup.** Doubao Work: `技能 · 連接器 · 夥伴` → 我的技能 → 連接器 → 新增自訂連接器, HTTP, production URL, no custom headers, then 去授權 in the browser. Do not ask the chat to create the app, click 去授權, or type the operator password.
+- Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced. Never auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `mcp.env`.
+- A 401 is a handshake failure or missing token. Report it and stop.
 
 ## CLI Execution (Standalone Mode)
 
-When grok-search MCP tools are not registered on the host, use the bundled CLI script `scripts/grok-search.cjs`.
+From the installed skill directory:
 
-### Planning Locally
-Plan the search locally inside your reasoning before running CLI search:
-- **plan_intent**: Identify search goals, entity disambiguation, and constraints.
-- **plan_complexity**: Gauge simple vs complex multi-hop research.
-- **plan_sub_query**: Break complex requests into targeted sub-queries.
-- **plan_search_term**: Formulate concise queries.
-- **plan_execution**: Sequence the search steps.
-Do NOT attempt to invoke server planning tools in CLI mode.
-
-### Running CLI Commands
-From the installed skill directory root:
 ```bash
 node scripts/grok-search.cjs search --query "..."
 node scripts/grok-search.cjs fetch --url "https://..."
 node scripts/grok-search.cjs map --url "https://..."
 ```
 
-If the CLI exits with `{ "ok": false, "error": { "code": "auth_required" } }`:
-1. Instruct the user to run `node scripts/grok-search.cjs auth-start`.
-2. The user approves authentication on mobile or browser.
-3. Check `node scripts/grok-search.cjs auth-status` until authenticated.
+Plan locally before search: **plan_intent**, **plan_complexity**, **plan_sub_query**, **plan_search_term**, **plan_execution**. Do not invoke server planning tools in CLI mode.
 
-## Endpoint contract
+On `auth_required`: run `auth-start`, approve in a browser, then `auth-status` until authenticated. Do not print the token or poll secret.
 
-- Production (kr01, proven): `https://search.karldigi.dev/mcp` — desktop `GROK_SEARCH_MCP_TOKEN`; ChatGPT/Doubao MCP OAuth (Cursor-native pins this endpoint)
-- Stale Tailscale preview (do not use, do not start on sg01): `http://100.76.134.104:8800/mcp` and `http://100.118.12.90:8800/mcp`. sg01 has no grok-search `:8800` listener. `check_readiness.py` warns if `GROK_SEARCH_MCP_URL` still points there; it does not fail the session and does not probe the port.
-- Cloudflare Access (preview / fallback): `https://search.termolo.com/mcp` — Claude/Grok override requiring operator-local Access headers
+## Connector workflow
 
-## Tool workflow (Connector Mode)
-
-### Search planning and execution
-
-Before every `web_search` in connector mode, follow the planning tool descriptions:
+Before every `web_search`:
 
 1. Call `plan_intent`.
 2. Call `plan_complexity`.
 3. Call `plan_sub_query` for each sub-query.
 4. For complexity levels that require them, call `plan_search_term`, `plan_tool_mapping`, and `plan_execution` in the order described by the tools.
-5. Call `web_search`. Leave `extra_sources` at its default unless the user explicitly requests extra provider hits.
-6. Treat `content == ""` or `content` starting with `upstream_error:` / `upstream_empty:` as a **failed search**, not “no results.” Report the envelope literally, retry `web_search` once, then `web_fetch` an authoritative URL. Do not tell the user the web had no hits.
-7. When `web_search` returns a `session_id` and non-empty answer content, call `get_sources` to retrieve full source metadata and cite canonical URLs.
+5. Call `web_search`. Leave `extra_sources` at default unless the user asks for extra hits.
+6. Treat `content == ""` or `content` starting with `upstream_error:` / `upstream_empty:` as a failed search. Report the envelope, retry `web_search` once, then `web_fetch`. Do not tell the user the web had no hits.
+7. When `web_search` returns a `session_id` and non-empty content, call `get_sources`.
 
-### Fetching and site exploration
+Use `web_fetch` for a specific URL. Use `web_map` to discover a site tree.
 
-- Use `web_fetch` for readable markdown from a specific URL when search snippets are insufficient.
-- Use `web_map` to discover pages and structure across a documentation tree or site.
-
-### Diagnostics
-
-- Use `get_config_info` only for connectivity or backend diagnostics. Never display credentials.
-- A healthy production response identifies the configured remote engine, `streamable_http` transport, and `https://search.karldigi.dev/mcp`, and explains that the client needs no local GrokSearch, GUDA, Tavily, Firecrawl, `uv`, or Python service.
-- Treat loopback or internal service URLs, filesystem paths, credential fields or masked fragments, upstream response bodies, and low-level exception details in the public diagnostic as a contract failure. Do not repeat sensitive output.
-- Call `toggle_builtin_tools` or `switch_model` only when explicitly requested.
+`get_config_info` is diagnostics only. Never display credentials. A healthy response names the remote `streamable_http` engine at `https://search.karldigi.dev/mcp` and that the client needs no local GrokSearch stack. Loopback URLs, filesystem paths, credential fragments, and exception bodies in that diagnostic are a contract failure; do not repeat them. Call `toggle_builtin_tools` or `switch_model` only when asked.
 
 ## Errors
 
-Report search, fetch, and handshake failures literally. Do not speculate, invent credentials, or switch to the leftover preview alias.
-
-A successful MCP tool result can still be a failed search: HTTP 200 with `content: ""` or `upstream_error:` / `upstream_empty:` means GrokSearch got no answer text. New API output tokens do not prove MCP `content` is usable. Retry once, then fetch.
+Report search, fetch, and handshake failures literally. Do not invent credentials or switch to another MCP server name.

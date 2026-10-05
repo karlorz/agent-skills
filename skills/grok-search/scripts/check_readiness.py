@@ -36,8 +36,8 @@ LEFTOVER_STDIO_CONFIG_WARNING = (
 )
 GROK_CONFIG_RELATIVE = (".grok", "config.toml")
 STDIO_TABLE = "mcp_servers.grok-search"
-# Dead preview listeners. Warn only — never live-probe, never fail the session.
-STALE_PREVIEW_HOSTS = frozenset({"100.76.134.104"})
+# Retired preview hosts. Warn only — never live-probe, never fail the session.
+STALE_PREVIEW_HOSTS = frozenset({"100.76.134.104", "search.termolo.com"})
 STALE_PREVIEW_HOST_PORTS = frozenset({("100.118.12.90", 8800)})
 
 
@@ -88,7 +88,7 @@ def _leftover_stdio_warning(source: Mapping[str, str]) -> str | None:
 
 
 def _stale_preview_warning(url: str) -> str | None:
-    """Return a warning if URL points at a retired Tailscale/sg01 :8800 preview."""
+    """Return a warning if URL points at a retired preview host."""
     from urllib.parse import urlparse
 
     parsed = urlparse(url)
@@ -101,7 +101,7 @@ def _stale_preview_warning(url: str) -> str | None:
     if host in STALE_PREVIEW_HOSTS or (host, port) in STALE_PREVIEW_HOST_PORTS:
         return (
             f"{URL_ENV} points at stale grok-search preview {host}:{port}; "
-            f"kr01 production is {PRODUCTION_MCP_URL}. Do not start sg01 :8800."
+            f"use {PRODUCTION_MCP_URL}."
         )
     return None
 
