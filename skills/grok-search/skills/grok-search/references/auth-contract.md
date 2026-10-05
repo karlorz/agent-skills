@@ -33,6 +33,9 @@ If no token is found, read commands return `auth_required` instructing the user 
 2. `auth-status`:
    - Reads private `authRunId` and `pollSecret` from `cli-auth.json`.
    - Makes a GET request to `https://search.karldigi.dev/auth/cli/check?authRunId=<id>` with `X-CLI-Poll-Secret: <pollSecret>`.
-   - If pending: returns `{ ok: true, data: { status: "pending", ... } }` with exit code `0`.
-   - If approved/ready: extracts token, atomically persists `http-mcp.token` and `token-meta.json`, cleans up `cli-auth.json`, and returns `{ ok: true, data: { status: "authenticated" } }` with exit code `0`.
-   - If cancelled/expired: cleans up `cli-auth.json` and exits with an error status.
+   - Maps hosted check JSON `status` (not the coordinator's internal `AuthRunState` names) as follows:
+     - `pending`, `awaiting_gateway`, `claiming`: returns `{ ok: true, data: { status: "pending", ... } }` with exit code `0`. Leaves `cli-auth.json` in place.
+     - `success`, `ready`, `authenticated`: token-bearing. The hosted coordinator's first successful claim is `success` plus `token`. Extracts `token` / `accessToken` / `bearer`, atomically persists `http-mcp.token` and `token-meta.json`, deletes `cli-auth.json`, and returns `{ ok: true, data: { status: "authenticated" } }` with exit code `0`.
+     - `consumed`: already claimed. If `http-mcp.token` exists, deletes `cli-auth.json` and returns authenticated. If the token file is missing, exits `auth_exchange_failed` and leaves `cli-auth.json` (the bearer is not on the consumed payload).
+     - `cancelled`, `expired`, `failed`: deletes `cli-auth.json` and exits with an error status.
+     - Any other check status: exits `auth_failed` with `retryable: true` and leaves `cli-auth.json` so a status mismatch cannot burn the session.

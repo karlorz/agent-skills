@@ -342,6 +342,133 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
     }
   });
 
+  async function runAuthStatusCheck(checkBody, options = {}) {
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-cli-test-'));
+    const origHome = process.env.HOME;
+    const configDir = path.join(tmpHome, '.config', 'grok-search');
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    const pendingFile = path.join(configDir, 'cli-auth.json');
+    fs.writeFileSync(pendingFile, JSON.stringify({
+      authRunId: 'run-check-1',
+      pollSecret: 'secret-check-1',
+      origin: 'https://search.karldigi.dev',
+      expiresAt: '2026-10-05T12:00:00Z',
+      intervalSeconds: 5,
+    }), { mode: 0o600 });
+    if (options.seedToken) {
+      fs.writeFileSync(path.join(configDir, 'http-mcp.token'), options.seedToken + '\n', { mode: 0o600 });
+    }
+    if (options.seedMeta) {
+      fs.writeFileSync(path.join(configDir, 'token-meta.json'), JSON.stringify(options.seedMeta), { mode: 0o600 });
+    }
+
+    process.env.HOME = tmpHome;
+    delete process.env.GROK_SEARCH_MCP_TOKEN;
+    const cliMod = require(nestedCliPath);
+    cliMod.setTransport(async () => ({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(checkBody),
+    }));
+
+    let stdoutData = '';
+    const origWrite = process.stdout.write;
+    process.stdout.write = (chunk) => { stdoutData += chunk; return true; };
+    const origExit = process.exit;
+    process.exit = (code) => { throw new Error('EXIT_' + code); };
+
+    let exitCode = null;
+    try {
+      await cliMod.handleAuthStatus();
+    } catch (err) {
+      const match = /EXIT_(\d+)/.exec(err && err.message);
+      exitCode = match ? Number(match[1]) : null;
+      if (exitCode === null) throw err;
+    } finally {
+      process.stdout.write = origWrite;
+      process.exit = origExit;
+      cliMod.setTransport(null);
+      process.env.HOME = origHome;
+    }
+
+    const parsed = stdoutData.trim() ? JSON.parse(stdoutData.trim()) : null;
+    const snapshot = {
+      exitCode,
+      json: parsed,
+      pendingExists: fs.existsSync(pendingFile),
+      tokenExists: fs.existsSync(path.join(configDir, 'http-mcp.token')),
+      token: fs.existsSync(path.join(configDir, 'http-mcp.token'))
+        ? fs.readFileSync(path.join(configDir, 'http-mcp.token'), 'utf8').trim()
+        : null,
+    };
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+    return snapshot;
+  }
+
+  it('auth-status persists token on GrokSearch check status success', async () => {
+    const snapshot = await runAuthStatusCheck({
+      status: 'success',
+      token: 'gsk_issued_cli_token_999',
+      token_type: 'Bearer',
+      expires_in: 7200,
+    });
+    assert.strictEqual(snapshot.exitCode, 0);
+    assert.strictEqual(snapshot.json.ok, true);
+    assert.strictEqual(snapshot.json.data.status, 'authenticated');
+    assert.strictEqual(snapshot.token, 'gsk_issued_cli_token_999');
+    assert.strictEqual(snapshot.pendingExists, false);
+  });
+
+  it('auth-status treats claiming as pending and keeps cli-auth.json', async () => {
+    const snapshot = await runAuthStatusCheck({ status: 'claiming', authRunId: 'run-check-1' });
+    assert.strictEqual(snapshot.exitCode, 0);
+    assert.strictEqual(snapshot.json.ok, true);
+    assert.strictEqual(snapshot.json.data.status, 'pending');
+    assert.strictEqual(snapshot.pendingExists, true);
+    assert.strictEqual(snapshot.tokenExists, false);
+  });
+
+  it('auth-status unknown check status keeps pending session', async () => {
+    const snapshot = await runAuthStatusCheck({ status: 'mystery' });
+    assert.strictEqual(snapshot.exitCode, 1);
+    assert.strictEqual(snapshot.json.ok, false);
+    assert.strictEqual(snapshot.json.error.code, 'auth_failed');
+    assert.strictEqual(snapshot.json.error.retryable, true);
+    assert.strictEqual(snapshot.pendingExists, true);
+    assert.strictEqual(snapshot.tokenExists, false);
+  });
+
+  it('auth-status consumed with existing token reports authenticated', async () => {
+    const snapshot = await runAuthStatusCheck(
+      { status: 'consumed', authRunId: 'run-check-1' },
+      { seedToken: 'already-saved-token', seedMeta: { expiresAt: '2026-10-05T14:00:00Z' } },
+    );
+    assert.strictEqual(snapshot.exitCode, 0);
+    assert.strictEqual(snapshot.json.ok, true);
+    assert.strictEqual(snapshot.json.data.status, 'authenticated');
+    assert.strictEqual(snapshot.json.data.expiresAt, '2026-10-05T14:00:00Z');
+    assert.strictEqual(snapshot.token, 'already-saved-token');
+    assert.strictEqual(snapshot.pendingExists, false);
+  });
+
+  it('auth-status consumed without token file fails and keeps pending', async () => {
+    const snapshot = await runAuthStatusCheck({ status: 'consumed', authRunId: 'run-check-1' });
+    assert.strictEqual(snapshot.exitCode, 1);
+    assert.strictEqual(snapshot.json.ok, false);
+    assert.strictEqual(snapshot.json.error.code, 'auth_exchange_failed');
+    assert.strictEqual(snapshot.pendingExists, true);
+    assert.strictEqual(snapshot.tokenExists, false);
+  });
+
+  it('auth-status failed check status deletes pending session', async () => {
+    const snapshot = await runAuthStatusCheck({ status: 'failed', error: 'Token exchange failed' });
+    assert.strictEqual(snapshot.exitCode, 1);
+    assert.strictEqual(snapshot.json.ok, false);
+    assert.strictEqual(snapshot.json.error.code, 'auth_failed');
+    assert.strictEqual(snapshot.json.error.message, 'Token exchange failed');
+    assert.strictEqual(snapshot.pendingExists, false);
+  });
+
   it('safe file permissions: symlinks rejected', () => {
     const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-cli-test-'));
     const origHome = process.env.HOME;
