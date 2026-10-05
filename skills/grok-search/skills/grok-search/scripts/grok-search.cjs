@@ -12,7 +12,7 @@ const DEFAULT_ORIGIN = 'https://search.karldigi.dev';
 const MCP_PATH = '/mcp';
 const REST_API_PREFIX = '/api/v1';
 const MCP_PROTOCOL_VERSION = '2025-03-26';
-const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.20' };
+const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.21' };
 
 const REQUEST_TIMEOUT_MS = 30000;
 const OVERALL_TIMEOUT_MS = 60000;
@@ -637,7 +637,10 @@ async function handleAuthStatus() {
   }
 
   const status = data.status;
-  if (status === 'pending' || status === 'awaiting_gateway') {
+  const pendingLike = status === 'pending' || status === 'awaiting_gateway' || status === 'claiming';
+  const tokenBearing = status === 'success' || status === 'ready' || status === 'authenticated';
+
+  if (pendingLike) {
     outputJson({
       ok: true,
       data: {
@@ -647,46 +650,73 @@ async function handleAuthStatus() {
         expiresAt: pendingState.expiresAt,
       },
     }, 0);
-  } else if (status === 'ready' || status === 'authenticated' || status === 'consumed') {
-    const token = data.token || data.accessToken || data.bearer;
-    if (!token) {
-      outputError('auth_exchange_failed', 'Approval indicated success but server returned no token.', { exitCode: 1 });
-    }
-
-    try {
-      const tokenFile = path.join(configDir, 'http-mcp.token');
-      atomicWriteFile(tokenFile, token.trim() + '\n', 0o600);
-
-      const metaFile = path.join(configDir, 'token-meta.json');
-      const meta = {
-        origin: origin || DEFAULT_ORIGIN,
-        expiresAt: data.expiresAt || null,
-        updatedAt: new Date().toISOString(),
-      };
-      atomicWriteFile(metaFile, JSON.stringify(meta, null, 2), 0o600);
-
+  } else if (tokenBearing) {
+    persistClaimedToken(configDir, pendingFile, origin, data);
+  } else if (status === 'consumed') {
+    const tokenFile = path.join(configDir, 'http-mcp.token');
+    if (fs.existsSync(tokenFile)) {
       try { fs.unlinkSync(pendingFile); } catch (_) {}
-    } catch (writeErr) {
-      outputError('token_save_failed', 'Failed to atomically save token to disk: ' + writeErr.message, { exitCode: 1 });
+      let expiresAt = null;
+      const metaFile = path.join(configDir, 'token-meta.json');
+      if (fs.existsSync(metaFile)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+          expiresAt = meta.expiresAt || null;
+        } catch (_) {}
+      }
+      outputJson({
+        ok: true,
+        data: {
+          status: 'authenticated',
+          expiresAt,
+        },
+      }, 0);
     }
-
-    outputJson({
-      ok: true,
-      data: {
-        status: 'authenticated',
-        expiresAt: data.expiresAt || null,
-      },
-    }, 0);
+    outputError('auth_exchange_failed', 'Authentication already consumed and no local token file is present.', { exitCode: 1 });
   } else if (status === 'cancelled') {
     try { fs.unlinkSync(pendingFile); } catch (_) {}
     outputError('auth_cancelled', 'Authentication was cancelled or denied by user.', { exitCode: 1 });
   } else if (status === 'expired') {
     try { fs.unlinkSync(pendingFile); } catch (_) {}
     outputError('auth_expired', 'Authentication session has expired.', { exitCode: 1 });
-  } else {
+  } else if (status === 'failed') {
     try { fs.unlinkSync(pendingFile); } catch (_) {}
-    outputError('auth_failed', `Authentication session ended with status: ${status}`, { exitCode: 1 });
+    outputError('auth_failed', data.error || 'Authentication exchange failed', { exitCode: 1 });
+  } else {
+    outputError('auth_failed', `Authentication session ended with status: ${status}`, { exitCode: 1, retryable: true });
   }
+}
+
+function persistClaimedToken(configDir, pendingFile, origin, data) {
+  const token = data.token || data.accessToken || data.bearer;
+  if (!token) {
+    outputError('auth_exchange_failed', 'Approval indicated success but server returned no token.', { exitCode: 1 });
+  }
+
+  try {
+    const tokenFile = path.join(configDir, 'http-mcp.token');
+    atomicWriteFile(tokenFile, token.trim() + '\n', 0o600);
+
+    const metaFile = path.join(configDir, 'token-meta.json');
+    const meta = {
+      origin: origin || DEFAULT_ORIGIN,
+      expiresAt: data.expiresAt || null,
+      updatedAt: new Date().toISOString(),
+    };
+    atomicWriteFile(metaFile, JSON.stringify(meta, null, 2), 0o600);
+
+    try { fs.unlinkSync(pendingFile); } catch (_) {}
+  } catch (writeErr) {
+    outputError('token_save_failed', 'Failed to atomically save token to disk: ' + writeErr.message, { exitCode: 1 });
+  }
+
+  outputJson({
+    ok: true,
+    data: {
+      status: 'authenticated',
+      expiresAt: data.expiresAt || null,
+    },
+  }, 0);
 }
 
 async function main() {
