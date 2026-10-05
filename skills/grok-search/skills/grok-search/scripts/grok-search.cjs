@@ -12,7 +12,7 @@ const DEFAULT_ORIGIN = 'https://search.karldigi.dev';
 const MCP_PATH = '/mcp';
 const REST_API_PREFIX = '/api/v1';
 const MCP_PROTOCOL_VERSION = '2025-03-26';
-const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.21' };
+const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.22' };
 
 const REQUEST_TIMEOUT_MS = 30000;
 const OVERALL_TIMEOUT_MS = 60000;

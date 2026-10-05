@@ -1,30 +1,28 @@
 # grok-search
 
-Thin marketplace plugin and standalone Skill+CLI for [GrokSearch](https://github.com/karlorz/GrokSearch), providing live web search, structured search intent planning, source extraction, web fetching, and site mapping via Context7-style HTTP MCP.
+Live web search, page fetch, and site mapping for agents. Two surfaces:
 
-## Standalone Skill+CLI Installation
+- **Skill+CLI** — copy the nested skill unit, run `scripts/grok-search.cjs`, no host MCP config.
+- **Marketplace HTTP MCP** — optional plugin for Claude, Codex, Cursor, Grok. Production only: `https://search.karldigi.dev/mcp`.
 
-For hosts without MCP registration or when running in standalone skill mode, install the canonical skill unit directly:
+Agent runtime rules live in [`skills/grok-search/SKILL.md`](skills/grok-search/SKILL.md). CLI and auth details live in the nested `references/` after install.
 
-### One-Sentence Install Request
+## Skill+CLI install
+
+One-sentence request:
 
 > Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills using sparse checkout of skills/grok-search, copy its skills/grok-search skill unit into this host's skill directory, and run that installed unit's scripts/grok-search.cjs without configuring host MCP.
 
-### Concrete Staging & Copy Recipe
-
-Choose **ONE** host skill directory (e.g. `~/.claude/skills/grok-search` or `~/.cursor/skills/grok-search` or `~/.agents/skills/grok-search`). Do not install across all hosts simultaneously. Refuse to overwrite without explicit operator intent.
+Copy the nested unit into **one** host skill directory. Do not overwrite without operator intent.
 
 ```bash
-# 1. Target destination (choose one)
 TARGET_DIR="${HOME}/.claude/skills/grok-search"
 
 if [ -e "$TARGET_DIR" ]; then
   echo "Target directory already exists: $TARGET_DIR" >&2
-  echo "Aborting to avoid accidental overwrite. Remove or back up existing directory first." >&2
   exit 1
 fi
 
-# 2. Stage via sparse checkout
 STAGING_DIR="$(mktemp -d)"
 git clone --filter=blob:none --no-checkout --depth 1 https://github.com/karlorz/agent-skills.git "$STAGING_DIR/repo"
 (
@@ -32,146 +30,46 @@ git clone --filter=blob:none --no-checkout --depth 1 https://github.com/karlorz/
   git sparse-checkout set skills/grok-search
   git checkout
 )
-
-# 3. Copy canonical nested skill unit only
 mkdir -p "$(dirname "$TARGET_DIR")"
 cp -R "$STAGING_DIR/repo/skills/grok-search/skills/grok-search" "$TARGET_DIR"
 rm -rf "$STAGING_DIR"
-
-# 4. Verify standalone CLI execution
 node "$TARGET_DIR/scripts/grok-search.cjs"
 ```
 
-The installed directory has root `SKILL.md`, bundled scripts, and references; it does not include plugin MCP manifests or hooks.
+Other hosts: `~/.cursor/skills/grok-search` or `~/.agents/skills/grok-search`. The copy contains `SKILL.md`, `scripts/`, and `references/` only.
 
-Supported runtime: **Node 22 or 24 LTS**. No `npm install` or package management is required. Node 18 is end-of-life and not supported.
+**Node 22 or 24.** No `npm install`.
 
-The standalone CLI defaults to authenticated REST queries (`POST /api/v1/{search,fetch,map}`) and transparently falls back to hidden Streamable HTTP MCP only when the REST route is absent (classified 404 from older servers).
+Same recipe: nested [`references/install.md`](skills/grok-search/references/install.md).
 
-### Dumpling-Mode Transfer Checklist
+## Skill+CLI usage
 
-When transferring the Skill+CLI pattern to new skill repositories or hosts:
-1. Copy only the self-contained nested skill unit `skills/grok-search/skills/grok-search/`.
-2. Ensure `scripts/grok-search.cjs` and `scripts/lib/toqr.cjs` are present with offline license notice.
-3. Validate that no runtime npm/pnpm package installs or network dependencies are required.
-4. Verify that local planning (intent, complexity, sub-query, search-term, execution) is conducted within agent reasoning and server planning tools are not called.
-5. Verify that host MCP configuration (`mcp.json`, `config.toml`, `mcp.env`) remains untouched.
-
----
-
-## Configuration & Environment (Marketplace MCP Mode)
-
-For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https://search.karldigi.dev/mcp`; set `GROK_SEARCH_MCP_URL` only to override that endpoint. **Codex and Cursor** marketplace packages pin production; the URL is not configurable in Cursor.
-
-The installed desktop plugin sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}` from `.mcp.json` (Claude/Grok) and `mcp.json` (Cursor). Codex uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Export `GROK_SEARCH_MCP_TOKEN` in the shell that launches the client. Grok skips OAuth discovery when that Authorization header is present. Claude `userConfig` token prompts and Cursor plugin variables stay removed. ChatGPT Admin Apps and Doubao Work keep HTTPS OAuth.
-
-For headless batch workflows (such as `agent -p`), the optional `cursor-cli-mcp.example.json` wrapper applies.
+From the installed skill directory:
 
 ```bash
-# Optional for Claude/Grok only:
-export GROK_SEARCH_MCP_URL="https://search.karldigi.dev/mcp"
-export GROK_SEARCH_MCP_TOKEN="your-gateway-keys-token"
+node scripts/grok-search.cjs auth-start
+node scripts/grok-search.cjs auth-status
+node scripts/grok-search.cjs search --query "..."
+node scripts/grok-search.cjs fetch --url "https://..."
+node scripts/grok-search.cjs map --url "https://..."
 ```
 
-Operators may store a token at `~/.config/grok-search/http-mcp.token` for convenience when using gateway keys, but HTTP MCP does not auto-source that file or `mcp.env`. Cursor-native pins production and reads `Bearer ${GROK_SEARCH_MCP_TOKEN}` from installed `mcp.json`.
+`auth-start` prints an HTTPS approve URL. Approve in a browser. `auth-status` writes `~/.config/grok-search/http-mcp.token` (mode `0600`). Do not print the token or poll secret.
 
-### Operator browser not on this host (SSH)
+If MCP tools are already connected on the host, use those tools (connector mode). If they are not, plan locally and use the CLI. Do not write `mcp.json`, `config.toml`, or `mcp.env`.
 
-The OAuth loopback is same-host: it binds on the machine running the MCP client. When the operator browser is on another machine (for example Grok over SSH on pvelxc, browser on a Mac), the callback never reaches the waiting client, and Grok sits at `[authenticating]` unless the installed plugin already has an Authorization header. Headed vs headless is not the discriminator: `DISPLAY`, VNC, or a local Chrome on the SSH host opens a browser there, not on the operator's machine. `SSH_CONNECTION` / `SSH_TTY` is only a hint, and the probe reports it as `headless_oauth_loopback`. Do not finish the login link on another machine, and do not press `/mcps` `i` over SSH.
-
-Export `GROK_SEARCH_MCP_TOKEN` so Grok skips OAuth. A missing token still leaves the header key, so Grok 401s instead of starting OAuth. For **Cursor CLI**, `cursor-cli-mcp.example.json` (`Bearer ${env:GROK_SEARCH_MCP_TOKEN}`) remains the optional batch wrapper. ChatGPT/Doubao `https` redirects stay OAuth.
-
-A Grok marketplace plugin upgrade does not remove leftover user TOML. If `~/.grok/config.toml` still has `[mcp_servers.grok-search]` with `command` (stdio `uvx`), that table still shadows the HTTP plugin and any HTTP overlay. `/mcps` `i` auth then fails with `does not use OAuth`. Remove the stdio table, or replace `command=` with this HTTP overlay. The probe never writes `config.toml`.
-
-```toml
-[mcp_servers.grok-search]
-url = "https://search.karldigi.dev/mcp"
-
-[mcp_servers.grok-search.headers]
-Authorization = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
-```
-
-### Operator Endpoints
-
-1. **Production (recommended, kr01 proven):** `https://search.karldigi.dev/mcp`
-   - Installed desktop plugin authenticates with `Bearer ${GROK_SEARCH_MCP_TOKEN}` (create a gateway key at `https://search.karldigi.dev/admin/gateway-keys`). ChatGPT/Doubao keep MCP OAuth.
-   - Cursor-native pins this endpoint and reads the same env-backed Authorization header.
-2. **Stale Tailscale preview — do not use, do not start on sg01:**
-   - Retired URLs: `http://100.76.134.104:8800/mcp` (old Tailscale IP) and `http://100.118.12.90:8800/mcp` (current sg01 Tailscale, no `:8800` listener).
-   - `scripts/check_readiness.py` emits a `warnings` entry if `GROK_SEARCH_MCP_URL` still points at those hosts. Status stays `in_sync`; the probe never live-checks `:8800` and never starts a service.
-3. **Cloudflare Access (preview / fallback):** `https://search.termolo.com/mcp`
-   - Requires operator-local Access headers (`CF-Access-Client-Id`, `CF-Access-Client-Secret`).
-   - Access headers stay operator-local and never belong in plugin JSON.
-
-### Grok startup boundary
-
-Grok resolves plugin MCP configuration before a SessionStart child can change the parent environment. **SessionStart cannot inject Grok's parent MCP environment.** The hook may populate Claude's `CLAUDE_ENV_FILE`, but it cannot supply parent environment variables.
-
-A leftover `grok-search-http` server inherited from `~/.cursor/mcp.json` is **not a fallback**. It is a separate preview overlay and must not be dual-called. Remove it only after native Cursor and Grok `grok-search` handshakes are proven.
-
-### Operator Troubleshooting Note
-
-Upstream x.ai web → grok2api can make the gateway `POST /grok/v1/chat/completions` return empty `content` (seen with `grok-4.3-fast`). If MCP tools/list works but `web_search` returns blank results, debug grok2api / model routing on the backend, not the plugin URL or client configuration.
-
-Inbound /mcp is not the outbound httpx client GrokSearch uses toward Grok/Tavily/Firecrawl. Never bind a local grok-search listener to `0.0.0.0`.
-
-A SessionStart hook / `scripts/check_readiness.py` checks readiness and can write the production URL to Claude's `CLAUDE_ENV_FILE` when available. It warns when `GROK_SEARCH_MCP_URL` still names the retired Tailscale/sg01 `:8800` preview. It does not auto-source `mcp.env`, change Grok's parent MCP environment, live-probe sg01, start `:8800`, or auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
-
-## Installation (Marketplace MCP Mode)
-
-### Claude Code
-
-Install the plugin from the marketplace. Claude `userConfig` stays removed and does not prompt for a token; export `GROK_SEARCH_MCP_TOKEN` in the process environment. The plugin `.mcp.json` sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`.
+## Marketplace plugin
 
 ```bash
 claude plugin install grok-search@karlorz-agent-skills
-```
-
-### Codex
-
-Install from the configured `karlorz-agent-skills` marketplace and restart Codex:
-
-```bash
 codex plugin add grok-search@karlorz-agent-skills
-codex mcp get grok-search
 ```
 
-The Codex-native manifest embeds an HTTP MCP definition pointing to `https://search.karldigi.dev/mcp` with `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Export that env in the Codex process. ChatGPT/Doubao HTTPS OAuth is unchanged.
+Cursor: install `grok-search` from the `karlorz-agent-skills` marketplace.
 
-### Cursor (Desktop + Agent CLI)
+Export `GROK_SEARCH_MCP_TOKEN` (gateway key from `https://search.karldigi.dev/admin/gateway-keys`) in the process that launches the client. Installed `.mcp.json` / Cursor `mcp.json` send `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`; Grok skips OAuth when that header is present. Codex uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. ChatGPT web and Doubao Work use HTTPS OAuth completed by a person outside the chat.
 
-1. **Desktop / Agent settings:** Install/enable the plugin. Settings → Rules, Skills, Subagents → enable **Include third-party Plugins, Skills, and other configs**.
-2. **Plugin loading:** After marketplace install, grok-search MCP loads automatically in Cursor Agent TUI via the plugin chain (`plugin-grok-search-grok-search` or `plugin-chain`). Installed `mcp.json` sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`. Cursor plugin `variables` stay removed, so there is no `Plugins → Configure` token prompt; export the env in the process that launches Agent.
-3. **Diagnostic note on `agent mcp list`:** `agent mcp list` inspects `~/.cursor/mcp.json` and `.cursor/mcp.json`, not Claude-style plugin `.mcp.json` definitions. This is a known CLI diagnostic gap and is not the proof of install.
-4. **Optional headless wrapper (`cursor-cli-mcp.example.json`):** For headless batch commands (`agent -p`) invoked without `--plugin-dir`, you can optionally configure a JSON wrapper in `~/.cursor/mcp.json`. This wrapper is purely optional and is not required for normal interactive Cursor Agent TUI or plugin-chain usage. Do not treat writing that file as part of marketplace install.
-
-### ChatGPT web and Doubao Work
-
-A chat cannot finish first-time connector setup. The person completes consent outside the chat. After that, the chat may call `web_search`.
-
-ChatGPT web uses **Admin Apps** (`https://chatgpt.com/admin/apps` Create App) with `https://search.karldigi.dev/mcp` and OAuth. The GitHub marketplace card is desktop-only because `mcp.json` ships. The ChatGPT chat cannot open that admin page.
-
-Doubao Work uses `技能 · 連接器 · 夥伴` → 我的技能 → 連接器 → 新增自訂連接器. Choose HTTP, name `grok-search`, URL `https://search.karldigi.dev/mcp`, and add no custom headers. Then choose 去授權 and enter the operator password in the browser. The Doubao chat cannot click that button or type the password.
-
-## Verification
-
-To verify that grok-search MCP is active and functioning properly:
-
-1. In a live Cursor Agent session or Claude Code session, ask the agent to run an MCP tool check:
-   ```text
-   Use grok-search get_config_info and web_search for the latest AI news.
-   ```
-2. Confirm the agent discovers and invokes tools such as `get_config_info` or `web_search`. Live session tool execution is the ground truth, not `agent mcp list`. Desktop clients use `GROK_SEARCH_MCP_TOKEN`; a missing token is a 401. ChatGPT/Doubao still complete first-run OAuth outside the chat.
-
-A healthy production `get_config_info` response identifies the configured
-remote streamable-HTTP endpoint and confirms that the client needs no local
-server stack. See the companion
-[SKILL.md](skills/grok-search/SKILL.md#diagnostics) for the canonical diagnostic
-safety contract.
-
-## Archived stdio Client
-
-Previous versions supported local stdio execution via `uvx`. All legacy stdio scripts, migration utilities, and stdio examples have been archived under `archive/skills/grok-search-stdio/`.
+Verify in a live session: search or `get_config_info` against production. Live tool execution is the proof of install.
 
 ## License
 
