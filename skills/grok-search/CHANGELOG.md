@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.22] - 2026-10-06
+
+### Changed
+- README is agent-facing install and usage only: Skill+CLI one-sentence plus recipe, CLI commands, marketplace one-liners, production URL.
+- SKILL.md endpoint contract is production `https://search.karldigi.dev/mcp` only. Removed Tailscale IPs, sg01/kr01 nicknames, and `https://search.termolo.com/mcp` Cloudflare Access preview (gated 302, not an agent fallback).
+- `check_readiness.py` still warns if `GROK_SEARCH_MCP_URL` points at those retired hosts (including `search.termolo.com`) and stays `in_sync`. Warning text no longer names fleet hosts.
+
 ## [0.1.21] - 2026-10-05
 
 ### Fixed

@@ -100,6 +100,17 @@ if "stale" not in warns.lower():
     raise SystemExit(f"sg01 :8800 must warn stale: {out!r}")
 
 
+# Retired Cloudflare Access preview — warn, stay in_sync
+env = base_env()
+env["GROK_SEARCH_MCP_URL"] = "https://search.termolo.com/mcp"
+out = run(env)
+if out.get("status") != "in_sync":
+    raise SystemExit(f"termolo preview must stay in_sync: {out!r}")
+warns = " ".join(out.get("warnings") or [])
+if "stale" not in warns.lower() or "search.termolo.com" not in warns:
+    raise SystemExit(f"termolo preview must warn stale: {out!r}")
+
+
 # Production explicit URL — no stale warning
 env = base_env()
 env["GROK_SEARCH_MCP_URL"] = "https://search.karldigi.dev/mcp"
