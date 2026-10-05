@@ -10,12 +10,15 @@ From the installed skill directory root:
 node scripts/grok-search.cjs search --query '...' [--platform <platform>] [--model <model>] [--extra-sources <n>]
 node scripts/grok-search.cjs fetch --url 'https://...'
 node scripts/grok-search.cjs map --url 'https://...' [--instructions '...'] [--depth 1-5] [--breadth 1-500] [--limit 1-500] [--timeout 10-150]
-node scripts/grok-search.cjs auth-start
+node scripts/grok-search.cjs auth-start [--agent-id <agent_id>] [--invite-code <invite_code>]
 node scripts/grok-search.cjs auth-status
 ```
 
 ## Options and Validation
 
+- `auth-start`:
+  - `--agent-id` (string, optional): Short host or agent label (e.g. `muse`). Sent as `agent_id` in start request body so gateway can identify/label the issuance.
+  - `--invite-code` (string, optional): Operator-supplied invite code. Sent as `invite_code` in start request body and appended to approve URL query parameter `invite=`.
 - `search`:
   - `--query` (string, required): Self-contained natural-language query.
   - `--platform` (string, optional): Target platform focus (e.g. `Twitter`, `GitHub`, `Reddit`).

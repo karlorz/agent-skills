@@ -46,7 +46,7 @@ node scripts/grok-search.cjs map --url "https://..."
 
 Plan locally before search: **plan_intent**, **plan_complexity**, **plan_sub_query**, **plan_search_term**, **plan_execution**. Do not invoke server planning tools in CLI mode.
 
-On `auth_required`: run `auth-start`, approve in a browser, then `auth-status` until authenticated. Do not print the token or poll secret.
+On `auth_required`: run `auth-start`, approve in a browser, then `auth-status` until authenticated. Do not print the token or poll secret. Pass `--agent-id <id>` for this host (`muse` on Muse; otherwise a short host label). If the operator provided an invite code, pass `--invite-code <code>`.
 
 ## Connector workflow
 

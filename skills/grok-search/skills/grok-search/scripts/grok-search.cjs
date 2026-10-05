@@ -12,7 +12,7 @@ const DEFAULT_ORIGIN = 'https://search.karldigi.dev';
 const MCP_PATH = '/mcp';
 const REST_API_PREFIX = '/api/v1';
 const MCP_PROTOCOL_VERSION = '2025-03-26';
-const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.22' };
+const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.23' };
 
 const REQUEST_TIMEOUT_MS = 30000;
 const OVERALL_TIMEOUT_MS = 60000;
@@ -495,7 +495,7 @@ class HiddenMcpClient {
   }
 }
 
-async function handleAuthStart() {
+async function handleAuthStart(authOptions = {}) {
   const origin = DEFAULT_ORIGIN;
   const configDir = resolveConfigDir();
   ensureConfigDir();
@@ -525,10 +525,17 @@ async function handleAuthStart() {
 
   try {
     const startUrl = `${origin}/auth/cli/start`;
+    const startPayload = {};
+    if (authOptions.agentId) {
+      startPayload.agent_id = authOptions.agentId;
+    }
+    if (authOptions.inviteCode) {
+      startPayload.invite_code = authOptions.inviteCode;
+    }
     const res = await performHttpRequest(startUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    }, JSON.stringify({}));
+    }, JSON.stringify(startPayload));
 
     if (res.status < 200 || res.status >= 300) {
       outputError('auth_start_failed', `Failed to start auth flow (HTTP ${res.status}): ${res.body}`, { exitCode: 1 });
@@ -738,13 +745,15 @@ async function main() {
   }
 
   if (command === 'auth-start') {
-    const allowed = new Set();
+    const allowed = new Set(['agent-id', 'invite-code']);
     for (const k of Object.keys(options)) {
       if (!allowed.has(k)) {
         outputError('unknown_option', `Unknown option --${k} for auth-start`, { exitCode: 2 });
       }
     }
-    await handleAuthStart();
+    const agentId = typeof options['agent-id'] === 'string' ? options['agent-id'].trim() : null;
+    const inviteCode = typeof options['invite-code'] === 'string' ? options['invite-code'].trim() : null;
+    await handleAuthStart({ agentId, inviteCode });
     return;
   }
 

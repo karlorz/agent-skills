@@ -24,7 +24,10 @@ If no token is found, read commands return `auth_required` instructing the user 
 ## Auth Lifecycle
 
 1. `auth-start`:
-   - Makes a POST request to `https://search.karldigi.dev/auth/cli/start`.
+   - Makes a POST request to `https://search.karldigi.dev/auth/cli/start` with optional JSON fields:
+     - `agent_id`: optional string identifying the host or agent requesting access (e.g. `muse`). Never logged as a secret.
+     - `invite_code`: optional string invite code supplied by the operator. Never printed in logs or error messages.
+   - The coordinator generates an `approveUrl` (using query `ref` for session pairing; appends `invite=<invite_code>` when invite is present, without overloading `ref`).
    - Persists pending session state (`authRunId`, `pollSecret`, `approveUrl`, `expiresAt`, `intervalSeconds`) privately in `cli-auth.json`.
    - Emits public parameters (`approveUrl`, `authRunId`, `expiresAt`, `intervalSeconds`) to `stdout`.
    - On interactive TTY terminals, renders a scannable QR code of `approveUrl` to `stderr`.
