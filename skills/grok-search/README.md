@@ -1,8 +1,65 @@
 # grok-search
 
-Thin marketplace plugin for [GrokSearch](https://github.com/karlorz/GrokSearch), providing live web search, structured search intent planning, source extraction, web fetching, and site mapping via Context7-style HTTP MCP.
+Thin marketplace plugin and standalone Skill+CLI for [GrokSearch](https://github.com/karlorz/GrokSearch), providing live web search, structured search intent planning, source extraction, web fetching, and site mapping via Context7-style HTTP MCP.
 
-## Configuration & Environment
+## Standalone Skill+CLI Installation
+
+For hosts without MCP registration or when running in standalone skill mode, install the canonical skill unit directly:
+
+### One-Sentence Install Request
+
+> Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills using sparse checkout of skills/grok-search, copy its skills/grok-search skill unit into this host's skill directory, and run that installed unit's scripts/grok-search.cjs without configuring host MCP.
+
+### Concrete Staging & Copy Recipe
+
+Choose **ONE** host skill directory (e.g. `~/.claude/skills/grok-search` or `~/.cursor/skills/grok-search` or `~/.agents/skills/grok-search`). Do not install across all hosts simultaneously. Refuse to overwrite without explicit operator intent.
+
+```bash
+# 1. Target destination (choose one)
+TARGET_DIR="${HOME}/.claude/skills/grok-search"
+
+if [ -e "$TARGET_DIR" ]; then
+  echo "Target directory already exists: $TARGET_DIR" >&2
+  echo "Aborting to avoid accidental overwrite. Remove or back up existing directory first." >&2
+  exit 1
+fi
+
+# 2. Stage via sparse checkout
+STAGING_DIR="$(mktemp -d)"
+git clone --filter=blob:none --no-checkout --depth 1 https://github.com/karlorz/agent-skills.git "$STAGING_DIR/repo"
+(
+  cd "$STAGING_DIR/repo"
+  git sparse-checkout set skills/grok-search
+  git checkout
+)
+
+# 3. Copy canonical nested skill unit only
+mkdir -p "$(dirname "$TARGET_DIR")"
+cp -R "$STAGING_DIR/repo/skills/grok-search/skills/grok-search" "$TARGET_DIR"
+rm -rf "$STAGING_DIR"
+
+# 4. Verify standalone CLI execution
+node "$TARGET_DIR/scripts/grok-search.cjs"
+```
+
+The installed directory has root `SKILL.md`, bundled scripts, and references; it does not include plugin MCP manifests or hooks.
+
+Supported runtime: **Node 22 or 24 LTS**. No `npm install` or package management is required. Node 18 is end-of-life and not supported.
+
+The standalone CLI defaults to authenticated REST queries (`POST /api/v1/{search,fetch,map}`) and transparently falls back to hidden Streamable HTTP MCP only when the REST route is absent (classified 404 from older servers).
+
+### Dumpling-Mode Transfer Checklist
+
+When transferring the Skill+CLI pattern to new skill repositories or hosts:
+1. Copy only the self-contained nested skill unit `skills/grok-search/skills/grok-search/`.
+2. Ensure `scripts/grok-search.cjs` and `scripts/lib/toqr.cjs` are present with offline license notice.
+3. Validate that no runtime npm/pnpm package installs or network dependencies are required.
+4. Verify that local planning (intent, complexity, sub-query, search-term, execution) is conducted within agent reasoning and server planning tools are not called.
+5. Verify that host MCP configuration (`mcp.json`, `config.toml`, `mcp.env`) remains untouched.
+
+---
+
+## Configuration & Environment (Marketplace MCP Mode)
 
 For **Claude and Grok plugin hosts**, the plugin defaults the MCP URL to `https://search.karldigi.dev/mcp`; set `GROK_SEARCH_MCP_URL` only to override that endpoint. **Codex and Cursor** marketplace packages pin production; the URL is not configurable in Cursor.
 
@@ -60,7 +117,7 @@ Inbound /mcp is not the outbound httpx client GrokSearch uses toward Grok/Tavily
 
 A SessionStart hook / `scripts/check_readiness.py` checks readiness and can write the production URL to Claude's `CLAUDE_ENV_FILE` when available. It warns when `GROK_SEARCH_MCP_URL` still names the retired Tailscale/sg01 `:8800` preview. It does not auto-source `mcp.env`, change Grok's parent MCP environment, live-probe sg01, start `:8800`, or auto-write `~/.cursor/mcp.json`, `~/.cursor/plugins/local/*`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
 
-## Installation
+## Installation (Marketplace MCP Mode)
 
 ### Claude Code
 

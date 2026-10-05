@@ -1,13 +1,20 @@
 ---
 name: grok-search
-description: This skill should be used when the user needs live web search, current docs, page fetch, or site mapping via grok-search MCP.
+description: This skill should be used when the user needs live web search, current docs, page fetch, or site mapping via grok-search MCP or standalone CLI.
 ---
 
 # Grok Search
 
 Use this skill to perform live web searches, plan search intent, fetch web content, map site topologies, and extract citations.
 
-Grok-search is HTTP MCP only (`type: http`). The installed desktop plugin sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}` from `.mcp.json` / Cursor `mcp.json`; Codex uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. Codex and Cursor-native pin production; the URL override is not configurable in Cursor or the Codex marketplace package. Grok skips OAuth when that Authorization header is present. ChatGPT/Doubao keep HTTPS OAuth. Do not start a local stdio `uvx` server.
+## Mode Selection: Connector vs CLI
+
+This skill operates in one of two modes:
+
+1. **Connector mode:** If host `grok-search` MCP tools (`web_search`, `get_sources`, etc.) are already connected, use the HTTP MCP tools directly. Follow the server `plan_*` workflow. Do not auto-disable other plugins or dual-call preview aliases.
+2. **CLI mode:** If no grok-search MCP connector tools are available, do not write host MCP configuration. Plan searches locally within the conversation (determine intent, complexity, sub-queries, and search terms locally; do NOT call server `plan_*` tools), then execute queries via the bundled CLI: `node <skill-dir>/scripts/grok-search.cjs`.
+
+Grok-search HTTP MCP uses `type: http`. The installed desktop plugin sends `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}` from `.mcp.json` / Cursor `mcp.json`; Codex uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`. Claude/Grok use `GROK_SEARCH_MCP_URL` as an optional override and otherwise default to `https://search.karldigi.dev/mcp`. Codex and Cursor-native pin production; the URL override is not configurable in Cursor or the Codex marketplace package. Grok skips OAuth when that Authorization header is present. ChatGPT/Doubao keep HTTPS OAuth. Do not start a local stdio `uvx` server.
 
 ## First-run readiness
 
@@ -31,17 +38,43 @@ Grok-search is HTTP MCP only (`type: http`). The installed desktop plugin sends 
 - Never auto-source `mcp.env` or auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `~/.config/grok-search/mcp.env`.
 - A leftover `grok-search-http` connection is a preview overlay inherited from operator Cursor MCP config. It is not a fallback. Never dual-call it; do not dual-call preview aliases.
 
+## CLI Execution (Standalone Mode)
+
+When grok-search MCP tools are not registered on the host, use the bundled CLI script `scripts/grok-search.cjs`.
+
+### Planning Locally
+Plan the search locally inside your reasoning before running CLI search:
+- **plan_intent**: Identify search goals, entity disambiguation, and constraints.
+- **plan_complexity**: Gauge simple vs complex multi-hop research.
+- **plan_sub_query**: Break complex requests into targeted sub-queries.
+- **plan_search_term**: Formulate concise queries.
+- **plan_execution**: Sequence the search steps.
+Do NOT attempt to invoke server planning tools in CLI mode.
+
+### Running CLI Commands
+From the installed skill directory root:
+```bash
+node scripts/grok-search.cjs search --query "..."
+node scripts/grok-search.cjs fetch --url "https://..."
+node scripts/grok-search.cjs map --url "https://..."
+```
+
+If the CLI exits with `{ "ok": false, "error": { "code": "auth_required" } }`:
+1. Instruct the user to run `node scripts/grok-search.cjs auth-start`.
+2. The user approves authentication on mobile or browser.
+3. Check `node scripts/grok-search.cjs auth-status` until authenticated.
+
 ## Endpoint contract
 
 - Production (kr01, proven): `https://search.karldigi.dev/mcp` — desktop `GROK_SEARCH_MCP_TOKEN`; ChatGPT/Doubao MCP OAuth (Cursor-native pins this endpoint)
 - Stale Tailscale preview (do not use, do not start on sg01): `http://100.76.134.104:8800/mcp` and `http://100.118.12.90:8800/mcp`. sg01 has no grok-search `:8800` listener. `check_readiness.py` warns if `GROK_SEARCH_MCP_URL` still points there; it does not fail the session and does not probe the port.
 - Cloudflare Access (preview / fallback): `https://search.termolo.com/mcp` — Claude/Grok override requiring operator-local Access headers
 
-## Tool workflow
+## Tool workflow (Connector Mode)
 
 ### Search planning and execution
 
-Before every `web_search`, follow the planning tool descriptions as the source of truth:
+Before every `web_search` in connector mode, follow the planning tool descriptions:
 
 1. Call `plan_intent`.
 2. Call `plan_complexity`.
