@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] - 2026-10-05
+
+### Added
+- Standalone Skill+CLI unit under `skills/grok-search/skills/grok-search/` with bundled `scripts/grok-search.cjs` and offline QR generator `scripts/lib/toqr.cjs`.
+- Outer convenience script wrapper `skills/grok-search/scripts/grok-search.cjs`.
+- Reference contracts: `references/cli-contract.md`, `references/auth-contract.md`, and `references/install.md`.
+- Dual-mode support in `SKILL.md`: connector mode when MCP tools are connected; local planning and standalone CLI execution when no host connector is registered.
+- Hosted approve+poll CLI authentication commands `auth-start` and `auth-status`.
+
 ## [0.1.19] - 2026-09-28
 
 ### Changed

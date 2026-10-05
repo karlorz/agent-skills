@@ -30,6 +30,12 @@ cursor_marketplace_path = repo_root / ".cursor-plugin" / "marketplace.json"
 claude_marketplace_path = repo_root / ".claude-plugin" / "marketplace.json"
 agents_marketplace_path = repo_root / ".agents" / "plugins" / "marketplace.json"
 grok_search_web_path = repo_root / "skills" / "grok-search-web"
+cli_wrapper_path = root / "scripts" / "grok-search.cjs"
+nested_cli_path = root / "skills" / "grok-search" / "scripts" / "grok-search.cjs"
+toqr_lib_path = root / "skills" / "grok-search" / "scripts" / "lib" / "toqr.cjs"
+cli_contract_path = root / "skills" / "grok-search" / "references" / "cli-contract.md"
+auth_contract_path = root / "skills" / "grok-search" / "references" / "auth-contract.md"
+install_contract_path = root / "skills" / "grok-search" / "references" / "install.md"
 
 # 1. Non-existence of removed stdio / legacy files in live plugin tree
 http_example = root / "cursor-cli-http.example.json"
@@ -63,6 +69,12 @@ for path in (
     cursor_marketplace_path,
     claude_marketplace_path,
     agents_marketplace_path,
+    cli_wrapper_path,
+    nested_cli_path,
+    toqr_lib_path,
+    cli_contract_path,
+    auth_contract_path,
+    install_contract_path,
 ):
     try:
         texts[path] = path.read_text(encoding="utf-8")
@@ -129,7 +141,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.19"
+expected_version = "0.1.20"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -459,19 +471,29 @@ blob = "".join(
         cursor_manifest_path,
         cursor_mcp_path,
         cursor_marketplace_path,
+        cli_wrapper_path,
+        nested_cli_path,
+        toqr_lib_path,
+        cli_contract_path,
+        auth_contract_path,
+        install_contract_path,
     )
 )
 allowed_env_bearer = "Bearer ${env:GROK_SEARCH_MCP_TOKEN}"
 allowed_changelog_bearer = "Bearer ${GROK_SEARCH_MCP_TOKEN}"
+allowed_auth_bearer = "Bearer ${this.token}"
 allowed_shared_url = f"${{GROK_SEARCH_MCP_URL:-{production_url}}}"
 allowed_prod = production_url
 allowed_admin = "https://search.karldigi.dev/admin/gateway-keys"
+allowed_origin = "https://search.karldigi.dev"
 scanned = (
     blob.replace(allowed_env_bearer, "")
     .replace(allowed_changelog_bearer, "")
+    .replace(allowed_auth_bearer, "")
     .replace(allowed_shared_url, "")
     .replace(allowed_prod, "")
     .replace(allowed_admin, "")
+    .replace(allowed_origin, "")
     .replace("Bearer-only", "")
     .replace("Bearer is", "")
 )
