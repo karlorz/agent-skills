@@ -8,7 +8,7 @@
 
 Choose ONE target host skill directory (e.g. `~/.claude/skills/grok-search` or `~/.cursor/skills/grok-search` or `~/.agents/skills/grok-search`).
 
-Refuse to overwrite an existing installation without explicit operator intent.
+Refuse to overwrite an existing installation without explicit operator intent. If the target already contains the grok-search skill unit, reuse it unless the operator asks to replace it.
 
 ```bash
 # 1. Prepare staging directory
@@ -34,8 +34,8 @@ cp -R "$STAGING_DIR/repo/skills/grok-search/skills/grok-search" "$TARGET_SKILL_D
 # 4. Cleanup staging
 rm -rf "$STAGING_DIR"
 
-# 5. Verify installation
-node "$TARGET_SKILL_DIR/scripts/grok-search.cjs"
+# 5. Verify installation (no subcommand prints usage and exits 2).
+node "$TARGET_SKILL_DIR/scripts/grok-search.cjs"; test $? -eq 2
 ```
 
 ## Installed Unit Contents

@@ -30,7 +30,7 @@ HTTP MCP is `type: http`. Installed `.mcp.json` / Cursor `mcp.json` send `Author
 - **Codex:** native manifest pins production with `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`.
 - **Cursor-native / Agent TUI:** Cursor-native pins production and does not run the probe. Installed `mcp.json` sends `Bearer ${GROK_SEARCH_MCP_TOKEN}`.
 - **ChatGPT web:** A person creates the app at `https://chatgpt.com/admin/apps` Create App, URL `https://search.karldigi.dev/mcp`, OAuth. The GitHub marketplace card is desktop-only because `mcp.json` ships.
-- **A chat cannot finish first-time connector setup.** Doubao Work: `技能 · 連接器 · 夥伴` → 我的技能 → 連接器 → 新增自訂連接器, HTTP, production URL, no custom headers, then 去授權 in the browser. Do not ask the chat to create the app, click 去授權, or type the operator password.
+- **A chat cannot finish first-time connector setup.** Doubao Work paid/connector path: `技能 · 連接器 · 夥伴` → 连接器 → 新增自定义连接器, HTTP, production URL, no custom headers, then 去授權 in the browser. Doubao **free** often greys out `新建自定义连接器`; install Skill+CLI in 工作 / 云电脑 instead. Do not ask the chat to create the app, click 去授權, or type the operator password.
 - Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced. Never auto-write `~/.cursor/mcp.json`, Grok `config.toml`, or `mcp.env`.
 - A 401 is a handshake failure or missing token. Report it and stop.
 
@@ -46,7 +46,9 @@ node scripts/grok-search.cjs map --url "https://..."
 
 Plan locally before search: **plan_intent**, **plan_complexity**, **plan_sub_query**, **plan_search_term**, **plan_execution**. Do not invoke server planning tools in CLI mode.
 
-On `auth_required`: run `auth-start`, approve in a browser, then `auth-status` until authenticated. Do not print the token or poll secret. Pass `--agent-id <id>` for this host (`muse` on Muse; otherwise a short host label). If the operator provided an invite code, pass `--invite-code <code>`.
+On `auth_required`: run `auth-start --agent-id <id>` (`muse` on Muse, `doubao` on Doubao 工作, otherwise a short host label). If the operator provided an invite code, pass `--invite-code <code>`. Reply with `approveUrl` only. In the **same turn**, loop `auth-status` until `authenticated` (do not wait for another user message). Do not print the token or poll secret.
+
+Skill+CLI needs git and Node on the host. Chat-only bots cannot run it. Doubao free accounts may disable `新建自定义连接器`; use the sandbox CLI in 工作 / 云电脑, not 去授权 from chat.
 
 ## Connector workflow
 

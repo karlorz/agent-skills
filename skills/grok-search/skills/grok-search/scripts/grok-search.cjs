@@ -12,7 +12,7 @@ const DEFAULT_ORIGIN = 'https://search.karldigi.dev';
 const MCP_PATH = '/mcp';
 const REST_API_PREFIX = '/api/v1';
 const MCP_PROTOCOL_VERSION = '2025-03-26';
-const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.23' };
+const CLIENT_INFO = { name: 'grok-search-cli', version: '0.1.24' };
 
 const REQUEST_TIMEOUT_MS = 30000;
 const OVERALL_TIMEOUT_MS = 60000;
@@ -69,6 +69,21 @@ function atomicWriteFile(targetPath, content, mode = 0o600) {
     fs.chmodSync(tmpPath, mode);
   }
   fs.renameSync(tmpPath, targetPath);
+}
+
+function withInviteQuery(approveUrl, inviteCode) {
+  if (!inviteCode || !approveUrl) {
+    return approveUrl;
+  }
+  try {
+    const parsed = new URL(approveUrl);
+    if (!parsed.searchParams.get('invite')) {
+      parsed.searchParams.set('invite', inviteCode);
+    }
+    return parsed.toString();
+  } catch (_) {
+    return approveUrl;
+  }
 }
 
 function getTokenResolution() {
@@ -548,10 +563,12 @@ async function handleAuthStart(authOptions = {}) {
       outputError('invalid_auth_start_response', 'Invalid JSON from auth start: ' + e.message, { exitCode: 1 });
     }
 
-    const { approveUrl, authRunId, pollSecret, pairingCode, expiresAt, intervalSeconds } = startData;
+    const { authRunId, pollSecret, pairingCode, expiresAt, intervalSeconds } = startData;
+    let approveUrl = startData.approveUrl;
     if (!approveUrl || !authRunId || !pollSecret) {
       outputError('invalid_auth_start_response', 'Auth start response missing required fields', { exitCode: 1 });
     }
+    approveUrl = withInviteQuery(approveUrl, authOptions.inviteCode);
 
     const pendingState = {
       authRunId,
@@ -1069,6 +1086,7 @@ module.exports = {
   renderTerminalQr,
   setTransport,
   getTokenResolution,
+  withInviteQuery,
   handleAuthStart,
   handleAuthStatus,
   main,

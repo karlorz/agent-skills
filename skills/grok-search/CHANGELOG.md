@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.24] - 2026-10-06
+
+### Fixed
+- `auth-start` appends `invite=` on `approveUrl` when the hosted coordinator omits it (kr01 GrokSearch still on `a454afd` during 0.1.23 proofs).
+
+### Changed
+- README: Skill+CLI needs git+Node on the host; chat-only bots cannot run the one-liner. Install does not mint a gateway key. After `auth_required`, `auth-start --agent-id` / `--invite-code` then `auth-status` in the same turn.
+- SKILL.md: poll `auth-status` in the same turn; Doubao free uses sandbox CLI when `新建自定义连接器` is disabled.
+- install.md: no-subcommand CLI prints usage; reuse an existing skill directory unless the operator asks to replace it.
+
 ## [0.1.23] - 2026-10-06
 
 ### Added

@@ -18,7 +18,7 @@ node scripts/grok-search.cjs auth-status
 
 - `auth-start`:
   - `--agent-id` (string, optional): Short host or agent label (e.g. `muse`). Sent as `agent_id` in start request body so gateway can identify/label the issuance.
-  - `--invite-code` (string, optional): Operator-supplied invite code. Sent as `invite_code` in start request body and appended to approve URL query parameter `invite=`.
+  - `--invite-code` (string, optional): Operator-supplied invite code. Sent as `invite_code` in start request body. The CLI also sets approve URL query `invite=` when the coordinator omits it (older hosted coordinators).
 - `search`:
   - `--query` (string, required): Self-contained natural-language query.
   - `--platform` (string, optional): Target platform focus (e.g. `Twitter`, `GitHub`, `Reddit`).

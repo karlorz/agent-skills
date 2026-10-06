@@ -332,6 +332,57 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
     }
   });
 
+  it('auth-start appends invite= when coordinator approveUrl omits it', async () => {
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-cli-test-'));
+    const origHome = process.env.HOME;
+    const origToken = process.env.GROK_SEARCH_MCP_TOKEN;
+    try {
+      process.env.HOME = tmpHome;
+      delete process.env.GROK_SEARCH_MCP_TOKEN;
+
+      const cliMod = require(nestedCliPath);
+      cliMod.setTransport(async () => ({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          approveUrl: 'https://search.karldigi.dev/auth/cli/approve?ref=abc123ref',
+          authRunId: 'auth-run-test-id-3',
+          pollSecret: 'poll-secret-collector-keep-private-3',
+          expiresAt: '2026-10-05T12:00:00Z',
+          intervalSeconds: 5,
+        }),
+      }));
+
+      let stdoutData = '';
+      const origWrite = process.stdout.write;
+      process.stdout.write = (chunk) => { stdoutData += chunk; return true; };
+      const origExit = process.exit;
+      process.exit = (code) => { throw new Error('EXIT_' + code); };
+
+      try {
+        await assert.rejects(async () => {
+          await cliMod.handleAuthStart({ agentId: 'doubao', inviteCode: 'inv-xyz' });
+        }, /EXIT_0/);
+      } finally {
+        process.stdout.write = origWrite;
+        process.exit = origExit;
+        cliMod.setTransport(null);
+      }
+
+      const res = JSON.parse(stdoutData.trim());
+      assert.strictEqual(res.ok, true);
+      assert.strictEqual(
+        res.data.approveUrl,
+        'https://search.karldigi.dev/auth/cli/approve?ref=abc123ref&invite=inv-xyz',
+      );
+      assert.strictEqual(cliMod.withInviteQuery('https://search.karldigi.dev/auth/cli/approve?ref=abc', 'inv-1').includes('invite=inv-1'), true);
+    } finally {
+      process.env.HOME = origHome;
+      if (origToken) process.env.GROK_SEARCH_MCP_TOKEN = origToken;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+
   it('auth-status handles pending and authenticated transitions', async () => {
     const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-cli-test-'));
     const origHome = process.env.HOME;

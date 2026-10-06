@@ -13,7 +13,20 @@ One-sentence request:
 
 > Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills using sparse checkout of skills/grok-search, copy its skills/grok-search skill unit into this host's skill directory, and run that installed unit's scripts/grok-search.cjs without configuring host MCP.
 
-Copy the nested unit into **one** host skill directory. Do not overwrite without operator intent.
+That sentence needs **git and Node 22 or 24 on the host** (Muse, Doubao 工作 / 云电脑, Orca worker). A chat-only bot cannot execute it.
+
+The one-liner **installs**. `node scripts/grok-search.cjs` with no command prints usage. A later `search` without a token returns `auth_required`. Then, in the **same turn**:
+
+```bash
+node scripts/grok-search.cjs auth-start --agent-id <label>
+node scripts/grok-search.cjs auth-status
+```
+
+Pass `--invite-code <code>` on `auth-start` when the operator gave one. Reply with `approveUrl` only; never print the token or poll secret. Keep `auth-status` until `authenticated`.
+
+Doubao free: `新建自定义连接器` may be disabled. Use Skill+CLI in 工作 mode. Skip 连接器 / 去授权 from the chat.
+
+Copy the nested unit into **one** host skill directory. If that directory already exists, reuse it unless the operator asks to replace it.
 
 ```bash
 TARGET_DIR="${HOME}/.claude/skills/grok-search"
@@ -47,7 +60,7 @@ Same recipe: nested [`references/install.md`](skills/grok-search/references/inst
 From the installed skill directory:
 
 ```bash
-node scripts/grok-search.cjs auth-start
+node scripts/grok-search.cjs auth-start --agent-id <label> [--invite-code <code>]
 node scripts/grok-search.cjs auth-status
 node scripts/grok-search.cjs search --query "..."
 node scripts/grok-search.cjs fetch --url "https://..."
