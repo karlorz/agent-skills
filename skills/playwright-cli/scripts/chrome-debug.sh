@@ -37,6 +37,11 @@ CHROME_ARGS=()
 LOAD_UNPACKED_CLI=()
 LOAD_UNPACKED_PATHS=()
 
+case "${OSTYPE:-}" in
+  msys*|cygwin*|win32*) IS_WINDOWS=1 ;;
+  *) IS_WINDOWS=0 ;;
+esac
+
 get_repo_local_profile_dir() {
   printf '%s\n' "${PROJECT_ROOT}/.chrome-debug-profile"
 }
@@ -177,6 +182,38 @@ detect_chrome() {
     if [[ -n "${p}" && -x "${p}" ]]; then
       echo "${p}"
       return 0
+    fi
+  elif [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* || "${OSTYPE:-}" == win32* ]]; then
+    # Windows (Git Bash/MSYS): Chrome installs outside PATH, so probe the
+    # standard locations. cygpath keeps this working when Git Bash is not
+    # installed at the default /c/ mount.
+    local win_paths=(
+      "/c/Program Files/Google/Chrome/Application/chrome.exe"
+      "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+    )
+    local p
+    for p in "${win_paths[@]}"; do
+      if [[ -x "${p}" ]]; then
+        echo "${p}"
+        return 0
+      fi
+    done
+
+    # Resolve through the Windows env vars so non-default install roots work.
+    if command -v cygpath >/dev/null 2>&1; then
+      local win_root
+      for win_root in \
+        "${PROGRAMFILES:-}" \
+        "${PROGRAMFILES_X86:-}" \
+        "${LOCALAPPDATA:-}"; do
+        if [[ -n "${win_root}" ]]; then
+          p="$(cygpath -u "${win_root}")/Google/Chrome/Application/chrome.exe"
+          if [[ -x "${p}" ]]; then
+            echo "${p}"
+            return 0
+          fi
+        fi
+      done
     fi
   else
     local chrome_cmd
@@ -356,7 +393,21 @@ sync_default_user_profile() {
 }
 
 list_profile_pids() {
-  ps -ax -o pid= -o command= | awk -v marker="$PROFILE_MARKER" 'index($0, marker) { print $1 }'
+  case "${OSTYPE:-}" in
+    msys*|cygwin*|win32*)
+      # Git Bash/MSYS has no `ps -ax`; use the Windows command line instead.
+      # PROFILE_MARKER is an MSYS path, so match on the profile directory name
+      # that appears in Chrome's --user-data-dir argument.
+      local marker_name="${PROFILE_DIR##*/}"
+      [[ -z "${marker_name}" ]] && return 0
+      powershell.exe -NoProfile -NonInteractive -Command \
+        "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { \$_.CommandLine -like '*${marker_name}*' } | ForEach-Object { \$_.ProcessId }" \
+        2>/dev/null | tr -d '\r' || true
+      ;;
+    *)
+      ps -ax -o pid= -o command= | awk -v marker="$PROFILE_MARKER" 'index($0, marker) { print $1 }'
+      ;;
+  esac
 }
 
 wait_for_profile_exit() {
@@ -381,8 +432,28 @@ stop_profile_processes() {
   fi
 
   log_info "Stopping existing Chrome instance for profile ${PROFILE_DIR}."
-  echo "${pids}" | xargs kill 2>/dev/null || true
+  # MSYS `kill` does not signal native Windows processes; taskkill does.
+  # taskkill takes exactly one /PID per invocation, and MSYS_NO_PATHCONV stops
+  # Git Bash from rewriting /PID and /F into paths.
+  kill_profile_pids() {
+    local force="$1" pid
+    while IFS= read -r pid; do
+      [[ -z "${pid}" ]] && continue
+      if [[ "${IS_WINDOWS:-0}" == "1" ]] && command -v taskkill.exe >/dev/null 2>&1; then
+        if [[ "${force}" == "1" ]]; then
+          env MSYS_NO_PATHCONV=1 taskkill.exe /F /PID "${pid}" 2>/dev/null || true
+        else
+          env MSYS_NO_PATHCONV=1 taskkill.exe /PID "${pid}" 2>/dev/null || true
+        fi
+      elif [[ "${force}" == "1" ]]; then
+        kill -9 "${pid}" 2>/dev/null || true
+      else
+        kill "${pid}" 2>/dev/null || true
+      fi
+    done <<< "${pids}"
+  }
 
+  kill_profile_pids 0
   if wait_for_profile_exit 20 0.25; then
     return 0
   fi
@@ -393,7 +464,7 @@ stop_profile_processes() {
   fi
 
   log_info "Chrome did not exit after SIGTERM; sending SIGKILL to profile-specific processes."
-  echo "${pids}" | xargs kill -9 2>/dev/null || true
+  kill_profile_pids 1
   wait_for_profile_exit 20 0.25 || true
 }
 
@@ -974,6 +1045,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 CHROME_BIN="$(detect_chrome || true)"
+# PowerShell's Start-Process cannot resolve an MSYS path such as
+# /c/Program Files/...; hand it the Windows form instead.
+case "${OSTYPE:-}" in
+  msys*|cygwin*|win32*)
+    if [[ -n "${CHROME_BIN}" ]] && command -v cygpath >/dev/null 2>&1; then
+      CHROME_BIN="$(cygpath -w "${CHROME_BIN}")"
+    fi
+    ;;
+esac
 if [[ -z "${CHROME_BIN}" || ! -x "${CHROME_BIN}" ]]; then
   log_error "Chrome/Chromium binary not found."
   log_error "Set CHROME to a valid binary path if it is installed in a custom location."
@@ -1131,7 +1211,33 @@ log_info "Log file: ${LOG_FILE}"
 #   ignores SIGHUP, so Chrome stays in the Bash tool's process group and gets
 #   SIGTERM/SIGKILL when that group is torn down -> crash. A new session
 #   fully detaches Chrome.
-if command -v setsid >/dev/null 2>&1; then
+# - Windows (Git Bash/MSYS): neither setsid nor os.setsid() exists, and a
+#   nohup'd child still dies with the invoking shell's job object. PowerShell's
+#   Start-Process creates a genuinely independent process.
+if [[ "${IS_WINDOWS}" == "1" ]] && command -v powershell.exe >/dev/null 2>&1; then
+  ps_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
+  }
+  # Chrome needs Windows-style paths; MSYS would hand it /c/... paths.
+  to_windows_path() {
+    if command -v cygpath >/dev/null 2>&1; then
+      cygpath -w "$1"
+    else
+      printf '%s' "$1"
+    fi
+  }
+  ps_args=""
+  for _arg in "${CHROME_ARGS[@]}"; do
+    case "${_arg}" in
+      --user-data-dir=*) _arg="--user-data-dir=$(to_windows_path "${_arg#--user-data-dir=}")" ;;
+      --disk-cache-dir=*) _arg="--disk-cache-dir=$(to_windows_path "${_arg#--disk-cache-dir=}")" ;;
+    esac
+    ps_args="${ps_args}$(ps_quote "${_arg}"),"
+  done
+  powershell.exe -NoProfile -NonInteractive -Command \
+    "Start-Process -FilePath $(ps_quote "${CHROME_BIN}") -ArgumentList @(${ps_args%,}) -WindowStyle Normal" \
+    > "${LOG_FILE}" 2>&1 &
+elif command -v setsid >/dev/null 2>&1; then
   setsid nohup "${CHROME_BIN}" "${CHROME_ARGS[@]}" < /dev/null > "${LOG_FILE}" 2>&1 &
 elif command -v python3 >/dev/null 2>&1; then
   CHROME_BIN_DETACH="${CHROME_BIN}" \
