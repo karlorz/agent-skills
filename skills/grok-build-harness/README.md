@@ -12,7 +12,7 @@ one installable plugin for [grok-build](https://x.ai).
 | `assets/agents/scout.md` | Custom disposable read-only scout subagent (`model: sonnet`) |
 | `assets/agentrules.md` | Global subagent routing and workflow rules (frontier/sonnet split, goal-mode routing, delegation discipline, evidence rules) |
 | `assets/AGENTS.md` | Session-start subagent contract, wrapped in a `<!-- grok-build-harness:begin/end -->` marker block so the merge can splice updates without touching user content (or the llm-wiki skillwiki block) |
-| `assets/config.toml.template` | Full sanitized config: BYOK model aliases, `[subagents.models]` pins, plugin enable list, marketplace sources, context7 MCP |
+| `assets/config.toml.template` | Full sanitized config: BYOK model aliases, `[subagents.models]` pins, plugin enable list, marketplace sources, context7 MCP, `[memory]` / `[memory_v2]` enabled=false |
 | `docs/harness-design.md` | The design: model routing, workflow, plugin provenance, security notes |
 
 No secrets are shipped. The template carries `__HUB_API_KEY__` /

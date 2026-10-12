@@ -2,6 +2,11 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.8] - 2026-10-13
+
+- Pin `[memory] enabled = false` and `[memory_v2] enabled = false` in the config template so full host init matches the macOS fleet switch and beats managed remote enablement.
+- Add `memory_v2` to vendored `config-reference-keys.json` so `check-config.py --strict` accepts the top-level table (live docs heading is still `### memory`).
+
 ## [0.5.7] - 2026-09-19
 
 - `--status` prints `context:` always-on token lines: Grok/Claude/Codex/Cursor instruction files, Grok unique skill-description catalog, enabled plugin count, MCP server counts (names only). No secret tokens, URLs, or headers.
