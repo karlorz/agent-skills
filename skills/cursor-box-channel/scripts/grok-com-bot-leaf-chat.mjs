@@ -11,6 +11,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 export const TARGET_URL = "https://grok.com/bot/22b3b80c-f7ba-400d-8ad1-6e686cec4d58";
 export const DEFAULT_ENDPOINT = "http://127.0.0.1:9222";
+const TARGET_PATHNAME = new URL(TARGET_URL).pathname;
 const normalize = (text) => String(text).replace(/\s+/g, " ").trim();
 
 // Caller contract, not a cross-host lock. Receipt/dispatch state takes precedence over chat-now.
@@ -135,7 +136,7 @@ function mapped(url) {
     const u = new URL(url);
     return (
       u.origin === "https://grok.com" &&
-      u.pathname.replace(/\/+$/, "") === new URL(TARGET_URL).pathname
+      u.pathname.replace(/\/+$/, "") === TARGET_PATHNAME
     );
   } catch {
     return false;
@@ -166,6 +167,8 @@ export async function runLeafChat({
   if (writer !== "leaf") return { status: "skipped", reason: writer };
   if (typeof prompt !== "string" || !prompt.trim())
     return { status: "skipped", reason: "empty_prompt" };
+  const normalizedPrompt = normalize(prompt);
+  const inspectExpr = `(${inspectPage.toString()})(${JSON.stringify(prompt)})`;
   // :19222 is the box reverse tunnel. Leaf callers may override only for local test servers.
   try {
     const u = new URL(endpoint);
@@ -218,7 +221,7 @@ export async function runLeafChat({
   const command = (method, params) => cdp.send(method, params, Math.max(1, deadline - Date.now()));
   const inspect = async () => {
     const result = await command("Runtime.evaluate", {
-      expression: `(${inspectPage.toString()})(${JSON.stringify(prompt)})`,
+      expression: inspectExpr,
       returnByValue: true,
     });
     if (result.exceptionDetails || !result.result?.value) throw new Error("inspection failed");
@@ -255,7 +258,7 @@ export async function runLeafChat({
       filled.documentId !== baseline.documentId ||
       filled.generating ||
       !filled.readable ||
-      filled.draft !== normalize(prompt)
+      filled.draft !== normalizedPrompt
     )
       return { status: "skipped", reason: "draft_not_ready" };
     const key = {
@@ -282,7 +285,7 @@ export async function runLeafChat({
       last?.readable &&
       mapped(last.url) &&
       last.documentId === baseline.documentId &&
-      last.draft === normalize(prompt)
+      last.draft === normalizedPrompt
     )
       status = "submit_stuck";
   } catch {
