@@ -73,6 +73,22 @@ assert_contains "with-keys: context7 key injected" \
   "$(cat "$TEST_ROOT/with-keys.toml")" '"test-ctx"'
 assert_contains "with-keys: enabled list substituted" \
   "$(cat "$TEST_ROOT/with-keys.toml")" 'enabled = ["superpowers", "dev-loop", "skillwiki"]'
+assert_contains "with-keys: [memory] table present" \
+  "$(cat "$TEST_ROOT/with-keys.toml")" '[memory]'
+assert_contains "with-keys: [memory_v2] table present" \
+  "$(cat "$TEST_ROOT/with-keys.toml")" '[memory_v2]'
+python3 - "$TEST_ROOT/with-keys.toml" <<'EOF'
+import sys, tomllib
+from pathlib import Path
+cfg = tomllib.loads(Path(sys.argv[1]).read_text())
+assert cfg.get("memory", {}).get("enabled") is False, cfg.get("memory")
+assert cfg.get("memory_v2", {}).get("enabled") is False, cfg.get("memory_v2")
+print("ok")
+EOF
+assert_eq "with-keys: memory and memory_v2 enabled=false" "$?" "0"
+GROK_HOME="$TEST_ROOT/no-docs-for-generated" python3 "$CHECK_CONFIG" \
+  --config "$TEST_ROOT/with-keys.toml" --strict >/dev/null 2>&1
+assert_eq "with-keys: check-config --strict accepts memory_v2" "$?" "0"
 
 # --- regression: harness plugin must be in plugin-specs.json (SSOT) ----------
 # The original bug was dropping grok-build-harness from [plugins].enabled.
@@ -139,6 +155,20 @@ assert_contains "preserve keeps host disabled list" \
   "$(cat "$TEST_ROOT/preserved.toml")" 'disabled = ["host-backup-restore"]'
 assert_eq "preserve: enabled stays template-owned" \
   "$(grep -c 'enabled = \["a"\]' "$TEST_ROOT/preserved.toml")" "1"
+
+printf '[memory]\nenabled = true\n[memory_v2]\nenabled = true\n' \
+  > "$TEST_ROOT/live-memory-on.toml"
+run_generate "$TEST_ROOT/preserved-memory.toml" \
+  --preserve "$TEST_ROOT/live-memory-on.toml" --enabled "a"
+python3 - "$TEST_ROOT/preserved-memory.toml" <<'EOF'
+import sys, tomllib
+from pathlib import Path
+cfg = tomllib.loads(Path(sys.argv[1]).read_text())
+assert cfg["memory"]["enabled"] is False
+assert cfg["memory_v2"]["enabled"] is False
+print("ok")
+EOF
+assert_eq "preserve: template owns memory enabled=false" "$?" "0"
 
 # --- merge-agents.py: splice + migration + idempotency -----------------------
 MERGE_PY="$PLUGIN/scripts/merge-agents.py"
@@ -499,6 +529,16 @@ privacy_banner_acked = "2026-08-29T00:00:00Z"
 EOF
 GROK_HOME="$NO_DOCS_GROK_HOME" python3 "$CHECK_CONFIG" --config "$PRIVACY_CFG" --strict >/dev/null 2>&1
 assert_eq "check-config: vendored fallback knows privacy with --strict" "$?" "0"
+
+MEMORY_V2_CFG="$TEST_ROOT/memory-v2-only.toml"
+cat > "$MEMORY_V2_CFG" <<'EOF'
+[memory]
+enabled = false
+[memory_v2]
+enabled = false
+EOF
+GROK_HOME="$NO_DOCS_GROK_HOME" python3 "$CHECK_CONFIG" --config "$MEMORY_V2_CFG" --strict >/dev/null 2>&1
+assert_eq "check-config: vendored fallback knows memory_v2 with --strict" "$?" "0"
 
 # 6. Live $GROK_HOME/docs/user-guide/26-config-reference.md wins over vendored
 # (e.g. a fixture docs file that omits privacy makes privacy unexpected)

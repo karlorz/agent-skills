@@ -172,6 +172,12 @@ paths; each is now guarded:
   `[model."custom"]`) and `[[marketplace.sources]]` entries are appended,
   top-level scalars precede the first table header. Template-owned keys
   still win by design.
+- **Memory stays off.** The template emits `[memory] enabled = false` and
+  `[memory_v2] enabled = false` so full host init pins both switches. That
+  beats managed remote enablement. A later grokgod suggested-profile merge
+  is fill-if-missing and leaves these keys alone. `memory_v2` is in
+  `assets/config-reference-keys.json` because the live docs heading is
+  still `### memory`.
 - **Keyed configs are never silently downgraded.** A re-run providing no
   keys at all over a config with injected keys now skips the render with a
   specific warning (ADR-4); `--force-render` overrides. A fresh host without

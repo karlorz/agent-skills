@@ -317,6 +317,12 @@ bundled_skill_dirs = []
 [workflows.builtins]
 deep-research = false
 
+[memory]
+enabled = false
+
+[memory_v2]
+enabled = false
+
 [mcp_servers.context7]
 command = "npx"
 args = [
