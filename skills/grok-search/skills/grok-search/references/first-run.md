@@ -18,7 +18,7 @@ Proof on 2026-10-12: after uninstalling the leftover CLI copy, Cue presented the
 
 ## Skill+CLI hosts
 
-Muse, Doubao 工作 / 云电脑, Orca workers, and other hosts with git and Node 22 or 24 can use [install.md](install.md) when connector tools and an in-thread MCP card are unavailable. Reuse an existing nested skill unit; copy into only one host skill directory. No npm install and no host MCP registration.
+Muse, Doubao 工作 / 云电脑, Kimi with a terminal (K3 / agent tools, git + Node), Orca workers, and other hosts with git and Node 22 or 24 can use [install.md](install.md) when connector tools and an in-thread MCP card are unavailable. Reuse an existing nested skill unit; copy into only one host skill directory. No npm install and no host MCP registration. Kimi Instant with no terminal is chat-only. Kimi with git + Node uses `--agent-id kimi`. After `auth_required`, print `approveUrl` only and poll `auth-status` in the same turn until `authenticated`, then one tiny search. Do not stop at sparse-checkout.
 
 From the installed directory, `node scripts/grok-search.cjs` prints usage (exit 2). Init with `node scripts/grok-search.cjs search --query "Node.js official documentation"`. On `auth_required`:
 
@@ -27,7 +27,7 @@ node scripts/grok-search.cjs auth-start --agent-id <short-host-label>
 node scripts/grok-search.cjs auth-status
 ```
 
-Use `muse`, `doubao`, or `cue` as appropriate. Pass `--invite-code <code>` only when the operator supplied one. Reply with `approveUrl` only, then keep polling `auth-status` in the **same turn**, respecting `intervalSeconds` / `nextRetrySeconds`, until `authenticated`. Do not wait for another user message. On expiry, cancellation, or a terminal error, report the status and stop; do not poll forever. Never print a token, poll secret, or pending auth file. Retry the tiny search after authentication. See [auth-contract.md](auth-contract.md).
+Use `kimi`, `muse`, `doubao`, or `cue` as appropriate. Pass `--invite-code <code>` only when the operator supplied one. Reply with `approveUrl` only, then keep polling `auth-status` in the **same turn**, respecting `intervalSeconds` / `nextRetrySeconds`, until `authenticated`. Do not wait for another user message. On expiry, cancellation, or a terminal error, report the status and stop; do not poll forever. Never print a token, poll secret, or pending auth file. Retry the tiny search after authentication. See [auth-contract.md](auth-contract.md).
 
 ## Chat-only and person-outside-chat connector setup
 
