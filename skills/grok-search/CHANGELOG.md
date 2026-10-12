@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Skill+CLI hosts include Kimi when the session has git + Node (K3 / agent tools). Use `--agent-id kimi`, print `approveUrl`, poll `auth-status` in the same turn. Kimi Instant without a terminal stays chat-only.
+- Kimi persist: sandbox Skill+CLI is this-chat only. Account catalog is kimi.com/skills (operator Adds via Create with Kimi / Document to skills / `.skill` upload). Chat cannot write it. New chats may still need `auth-start`.
 
 ## [0.1.25] - 2026-10-12
 

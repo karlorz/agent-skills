@@ -20,6 +20,8 @@ Proof on 2026-10-12: after uninstalling the leftover CLI copy, Cue presented the
 
 Muse, Doubao 工作 / 云电脑, Kimi with a terminal (K3 / agent tools, git + Node), Orca workers, and other hosts with git and Node 22 or 24 can use [install.md](install.md) when connector tools and an in-thread MCP card are unavailable. Reuse an existing nested skill unit; copy into only one host skill directory. No npm install and no host MCP registration. Kimi Instant with no terminal is chat-only. Kimi with git + Node uses `--agent-id kimi`. After `auth_required`, print `approveUrl` only and poll `auth-status` in the same turn until `authenticated`, then one tiny search. Do not stop at sparse-checkout.
 
+Kimi Skill+CLI in a K3 sandbox is **this chat only**. `~/.agents/skills` there is not kimi.com/skills. Chat cannot write the account catalog (no GitHub import). Persist across chats: the operator Adds on kimi.com/skills via Customize → Create with Kimi, Document to skills, or a packaged `.skill` upload. After Add, a new chat may still need `auth-start --agent-id kimi` because the sandbox token is also ephemeral. Do not claim Skills → Added from a sandbox copy.
+
 From the installed directory, `node scripts/grok-search.cjs` prints usage (exit 2). Init with `node scripts/grok-search.cjs search --query "Node.js official documentation"`. On `auth_required`:
 
 ```bash
