@@ -6,6 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROBE="$ROOT/skills/grok-search/scripts/check_readiness.py"
 SKILL="$ROOT/skills/grok-search/skills/grok-search/SKILL.md"
+FIRST_RUN="$ROOT/skills/grok-search/skills/grok-search/references/first-run.md"
 MODE="${1:-}"
 if [[ -z "$MODE" ]]; then
   if [[ "${GROK_SEARCH_ORCA_LIVE:-}" == "1" ]]; then
@@ -19,7 +20,9 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 
 [[ -f "$PROBE" ]] || fail "missing $PROBE"
 [[ -f "$SKILL" ]] || fail "missing $SKILL"
-grep -q "check_readiness.py" "$SKILL" || fail "SKILL.md must instruct running check_readiness.py first"
+[[ -f "$FIRST_RUN" ]] || fail "missing $FIRST_RUN"
+grep -q 'references/first-run.md' "$SKILL" || fail "SKILL.md must link the first-run host details"
+grep -q 'check_readiness.py' "$FIRST_RUN" || fail "first-run.md must instruct running the desktop readiness probe"
 
 ORCA_BIN="${ORCA_CLI_COMMAND:-orca}"
 

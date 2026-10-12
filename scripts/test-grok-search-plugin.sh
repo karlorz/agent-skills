@@ -36,6 +36,7 @@ toqr_lib_path = root / "skills" / "grok-search" / "scripts" / "lib" / "toqr.cjs"
 cli_contract_path = root / "skills" / "grok-search" / "references" / "cli-contract.md"
 auth_contract_path = root / "skills" / "grok-search" / "references" / "auth-contract.md"
 install_contract_path = root / "skills" / "grok-search" / "references" / "install.md"
+first_run_path = root / "skills" / "grok-search" / "references" / "first-run.md"
 
 # 1. Non-existence of removed stdio / legacy files in live plugin tree
 http_example = root / "cursor-cli-http.example.json"
@@ -75,6 +76,7 @@ for path in (
     cli_contract_path,
     auth_contract_path,
     install_contract_path,
+    first_run_path,
 ):
     try:
         texts[path] = path.read_text(encoding="utf-8")
@@ -141,7 +143,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.24"
+expected_version = "0.1.25"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -312,92 +314,131 @@ for tool in (
 if "mcp__plugin_" in body:
     raise SystemExit(f"{skill_path}: must not hard-code mcp__plugin_ prefixes")
 
-if len(skill_text.split()) > 1500:
-    raise SystemExit(f"{skill_path}: too long ({len(skill_text.split())} words > 1500)")
+description = re.search(r"^description:\s*(.+)$", fm, re.M).group(1)
+if len(description) > 220:
+    raise SystemExit(f"{skill_path}: description exceeds the 220-character catalog budget")
+if len(skill_text.split()) > 700:
+    raise SystemExit(f"{skill_path}: too long ({len(skill_text.split())} words > 700)")
 
-if "GROK_SEARCH_MCP_URL" not in body or "GROK_SEARCH_MCP_TOKEN" not in body:
-    raise SystemExit(f"{skill_path}: must mention GROK_SEARCH_MCP_URL and GROK_SEARCH_MCP_TOKEN")
-if "https://search.karldigi.dev/mcp" not in body:
-    raise SystemExit(f"{skill_path}: must mention production URL https://search.karldigi.dev/mcp")
-if "check_readiness.py" not in body:
-    raise SystemExit(f"{skill_path}: must describe check_readiness.py for hosts that expose a plugin root")
-if "GROK_PLUGIN_ROOT" not in body or "CLAUDE_PLUGIN_ROOT" not in body:
-    raise SystemExit(f"{skill_path}: readiness path must support Grok and Claude plugin roots")
-if "Cursor-native" not in body or "does not run the probe" not in body:
-    raise SystemExit(f"{skill_path}: must define Cursor-native readiness without a Claude/Grok probe path")
-if "HTTP" not in body and "http" not in body:
-    raise SystemExit(f"{skill_path}: must mention HTTP MCP")
-if "first-run" not in body.lower() and "first run" not in body.lower():
-    raise SystemExit(f"{skill_path}: must mention first-run setup / OAuth")
-if "grok-search-http" not in body:
-    raise SystemExit(f"{skill_path}: must mention leftover grok-search-http alias note")
-if "Cursor-native" not in body or "pins production" not in body:
-    raise SystemExit(f"{skill_path}: must state Cursor-native pins production")
-if "not configurable in Cursor" not in body:
-    raise SystemExit(f"{skill_path}: must not imply the URL override works in Cursor-native")
-if "not a fallback" not in body.lower():
-    raise SystemExit(f"{skill_path}: must state leftover grok-search-http is not a fallback")
-if "sessionstart cannot" not in body.lower() and "sessionstart does not" not in body.lower():
-    raise SystemExit(f"{skill_path}: must state SessionStart cannot inject Grok parent MCP env")
-if "mcp.env" not in body or "auto-source" not in body.lower():
-    raise SystemExit(f"{skill_path}: must state mcp.env is not auto-sourced")
-if "never dual-call" not in body.lower() and "do not dual-call" not in body.lower():
-    raise SystemExit(f"{skill_path}: must advise never dual-calling grok-search-http alias")
-if "stdio (default)" in body.lower() or "stdio as default" in body.lower() or "via stdio mcp" in body.lower():
-    raise SystemExit(f"{skill_path}: must not present stdio as default")
-if "OAuth" not in body:
-    raise SystemExit(f"{skill_path}: must describe OAuth for installed desktop plugin")
-if "https://chatgpt.com/admin/apps" not in body or "Create App" not in body:
-    raise SystemExit(f"{skill_path}: must mention ChatGPT web route via https://chatgpt.com/admin/apps Create App")
-if "desktop-only" not in body.lower():
-    raise SystemExit(f"{skill_path}: must explain GitHub marketplace import is desktop-only")
-if "a chat cannot finish first-time connector setup" not in body.lower():
-    raise SystemExit(f"{skill_path}: must state a chat cannot finish first-time connector setup")
-if "headless_oauth_loopback" not in body:
-    raise SystemExit(f"{skill_path}: must mention headless_oauth_loopback for SSH sessions")
-if "cursor-cli-mcp.example.json" not in body:
-    raise SystemExit(f"{skill_path}: must name cursor-cli-mcp.example.json for Cursor CLI bearer overlay")
-if "Bearer ${GROK_SEARCH_MCP_TOKEN}" not in body:
-    raise SystemExit(f"{skill_path}: must document installed plugin Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
-if "bearer_token_env_var" not in body:
-    raise SystemExit(f"{skill_path}: must document Codex bearer_token_env_var")
-if grok_overlay_table not in body or grok_overlay_header not in body:
-    raise SystemExit(f"{skill_path}: must document Grok config.toml HTTP url + headers.Authorization overlay")
-if discriminator not in body.lower() or "DISPLAY" not in body:
-    raise SystemExit(f"{skill_path}: must state DISPLAY / headed vs headless is not the discriminator")
-if "operator browser" not in body.lower():
-    raise SystemExit(f"{skill_path}: must frame operator browser vs this-host loopback")
-if "do not tell the operator to click the login link on another machine" not in body.lower():
-    raise SystemExit(f"{skill_path}: must forbid completing OAuth login on another machine")
-if "leftover_stdio_config" not in body:
-    raise SystemExit(f"{skill_path}: must mention leftover_stdio_config for Grok config.toml stdio")
-if "does not use oauth" not in body.lower() and "http/sse only" not in body.lower():
-    raise SystemExit(f"{skill_path}: must state Grok i auth is HTTP/SSE only")
-if "doubao" not in body.lower() or "去授權" not in body:
-    raise SystemExit(f"{skill_path}: must document Doubao Work 去授權 as a person step")
+# Keep first-run routing compact; host-specific contracts belong in references.
+routing = re.search(r"## First-run: detect → install → init\n(.*?)\n## ", body, re.S)
+if not routing:
+    raise SystemExit(f"{skill_path}: missing detect → install → init algorithm")
+routes = re.findall(r"^\d+\. \*\*([^:]+):\*\* (.+)$", routing.group(1), re.M)
+if [name for name, _ in routes] != ["Connector present", "In-thread MCP card", "Skill+CLI", "Chat-only"]:
+    raise SystemExit(f"{skill_path}: first-run must detect connector, card, CLI, chat-only in order")
+for (_, route), required in zip(routes, (
+    ("web_search", "get_sources", "plan_*", "grok-search-http", "Never dual-call", "write host MCP files"),
+    ("Cue / 小Q", production_url, "no custom headers", "Added / authorize", "host UI", "return to step 1"),
+    ("git + Node", "sparse-checkout", "skills/grok-search/skills/grok-search", "one", "reuse", "auth-start --agent-id", "approveUrl", "auth-status", "same turn", "authenticated", "poll secret", "mcp.json", "config.toml"),
+    ("Stop", "ChatGPT web", "Doubao 对话", "WeCom", "outside chat", "Do not ask", "去授權", "operator password"),
+)):
+    for phrase in required:
+        if phrase not in route:
+            raise SystemExit(f"{skill_path}: first-run route missing {phrase!r}")
+for phrase in ("stop at the first", "Init smoke", "one tiny search", "search --query", "usable content and sources", "references/first-run.md"):
+    if phrase not in routing.group(1):
+        raise SystemExit(f"{skill_path}: first-run missing {phrase!r}")
+
+host_body = texts[first_run_path]
+for host_detail in ("check_readiness.py", "headless_oauth_loopback", "[mcp_servers.grok-search.headers]", "https://chatgpt.com/admin/apps"):
+    if host_detail in body:
+        raise SystemExit(f"{skill_path}: move host detail {host_detail!r} to {first_run_path}")
+
+if "GROK_SEARCH_MCP_URL" not in host_body or "GROK_SEARCH_MCP_TOKEN" not in host_body:
+    raise SystemExit(f"{first_run_path}: must mention GROK_SEARCH_MCP_URL and GROK_SEARCH_MCP_TOKEN")
+if "https://search.karldigi.dev/mcp" not in host_body:
+    raise SystemExit(f"{first_run_path}: must mention production URL https://search.karldigi.dev/mcp")
+if "check_readiness.py" not in host_body:
+    raise SystemExit(f"{first_run_path}: must describe check_readiness.py for hosts that expose a plugin root")
+if "GROK_PLUGIN_ROOT" not in host_body or "CLAUDE_PLUGIN_ROOT" not in host_body:
+    raise SystemExit(f"{first_run_path}: readiness path must support Grok and Claude plugin roots")
+if "Cursor-native" not in host_body or "does not run the probe" not in host_body:
+    raise SystemExit(f"{first_run_path}: must define Cursor-native readiness without a Claude/Grok probe path")
+if "HTTP" not in host_body and "http" not in host_body:
+    raise SystemExit(f"{first_run_path}: must mention HTTP MCP")
+if "first-run" not in host_body.lower() and "first run" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must mention first-run setup / OAuth")
+if "grok-search-http" not in host_body:
+    raise SystemExit(f"{first_run_path}: must mention leftover grok-search-http alias note")
+if "Cursor-native" not in host_body or "pins production" not in host_body:
+    raise SystemExit(f"{first_run_path}: must state Cursor-native pins production")
+if "not configurable in Cursor" not in host_body:
+    raise SystemExit(f"{first_run_path}: must not imply the URL override works in Cursor-native")
+if "not a fallback" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must state leftover grok-search-http is not a fallback")
+if "sessionstart cannot" not in host_body.lower() and "sessionstart does not" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must state SessionStart cannot inject Grok parent MCP env")
+if "mcp.env" not in host_body or "auto-source" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must state mcp.env is not auto-sourced")
+if "never dual-call" not in host_body.lower() and "do not dual-call" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must advise never dual-calling grok-search-http alias")
+if "stdio (default)" in host_body.lower() or "stdio as default" in host_body.lower() or "via stdio mcp" in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must not present stdio as default")
+if "OAuth" not in host_body:
+    raise SystemExit(f"{first_run_path}: must describe OAuth for installed desktop plugin")
+if "https://chatgpt.com/admin/apps" not in host_body or "Create App" not in host_body:
+    raise SystemExit(f"{first_run_path}: must mention ChatGPT web route via https://chatgpt.com/admin/apps Create App")
+if "desktop-only" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must explain GitHub marketplace import is desktop-only")
+if "a chat cannot finish first-time connector setup" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must state a chat cannot finish first-time connector setup")
+if "headless_oauth_loopback" not in host_body:
+    raise SystemExit(f"{first_run_path}: must mention headless_oauth_loopback for SSH sessions")
+if "cursor-cli-mcp.example.json" not in host_body:
+    raise SystemExit(f"{first_run_path}: must name cursor-cli-mcp.example.json for Cursor CLI bearer overlay")
+if "Bearer ${GROK_SEARCH_MCP_TOKEN}" not in host_body:
+    raise SystemExit(f"{first_run_path}: must document installed plugin Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
+if "bearer_token_env_var" not in host_body:
+    raise SystemExit(f"{first_run_path}: must document Codex bearer_token_env_var")
+if grok_overlay_table not in host_body or grok_overlay_header not in host_body:
+    raise SystemExit(f"{first_run_path}: must document Grok config.toml HTTP url + headers.Authorization overlay")
+if discriminator not in host_body.lower() or "DISPLAY" not in host_body:
+    raise SystemExit(f"{first_run_path}: must state DISPLAY / headed vs headless is not the discriminator")
+if "operator browser" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must frame operator browser vs this-host loopback")
+if "do not tell the operator to click the login link on another machine" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must forbid completing OAuth login on another machine")
+if "leftover_stdio_config" not in host_body:
+    raise SystemExit(f"{first_run_path}: must mention leftover_stdio_config for Grok config.toml stdio")
+if "does not use oauth" not in host_body.lower() and "http/sse only" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must state Grok i auth is HTTP/SSE only")
+if "doubao" not in host_body.lower() or "去授權" not in host_body:
+    raise SystemExit(f"{first_run_path}: must document Doubao Work 去授權 as a person step")
 if re.search(r"`/grok-search`", body) or re.search(r"start (?:the skill|it) with (?:a )?`/grok-search`", body):
     raise SystemExit(f"{skill_path}: must not instruct users to invoke skill with a leading slash")
 
-# 9. README.md is agent-facing install and usage only.
+# 9. README.md is one paste-to-agent request; host cases live in SKILL + references.
 readme_text = texts[readme_path]
-if "Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills" not in readme_text:
-    raise SystemExit(f"{readme_path}: must include the one-sentence Skill+CLI install")
-if "sparse checkout" not in readme_text.lower() or "skills/grok-search" not in readme_text:
-    raise SystemExit(f"{readme_path}: must describe sparse checkout of skills/grok-search")
-if "without configuring host MCP" not in readme_text:
-    raise SystemExit(f"{readme_path}: must say the Skill+CLI install does not configure host MCP")
+if readme_text.count("## Ask an agent") != 1:
+    raise SystemExit(f"{readme_path}: must have exactly one Ask an agent section")
+if "Enable grok-search on this host" not in readme_text:
+    raise SystemExit(f"{readme_path}: must include the one-sentence enable request")
+if "Discover how this host can connect" not in readme_text:
+    raise SystemExit(f"{readme_path}: enable request must tell the agent to discover the host surface")
+if "one tiny search" not in readme_text:
+    raise SystemExit(f"{readme_path}: enable request must finish with one tiny search")
+if "Do not write host MCP config" not in readme_text:
+    raise SystemExit(f"{readme_path}: must say do not write host MCP config")
+if "Do not paste secrets into chat" not in readme_text:
+    raise SystemExit(f"{readme_path}: must say do not paste secrets into chat")
 if "https://search.karldigi.dev/mcp" not in readme_text:
     raise SystemExit(f"{readme_path}: must document production endpoint https://search.karldigi.dev/mcp")
-if "auth-start" not in readme_text or "auth-status" not in readme_text:
-    raise SystemExit(f"{readme_path}: must document auth-start and auth-status")
-if "search --query" not in readme_text:
-    raise SystemExit(f"{readme_path}: must document CLI search --query")
-if "Bearer ${GROK_SEARCH_MCP_TOKEN}" not in readme_text:
-    raise SystemExit(f"{readme_path}: must document installed plugin Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
-if "skips OAuth" not in readme_text:
-    raise SystemExit(f"{readme_path}: must state Grok skips OAuth when the Authorization header is set")
-if "~/.config/grok-search/http-mcp.token" not in readme_text:
-    raise SystemExit(f"{readme_path}: must mention ~/.config/grok-search/http-mcp.token token path")
+if "https://github.com/karlorz/agent-skills" not in readme_text:
+    raise SystemExit(f"{readme_path}: enable request must name https://github.com/karlorz/agent-skills")
+if "skills/grok-search/skills/grok-search" not in readme_text:
+    raise SystemExit(f"{readme_path}: must name the nested skill unit skills/grok-search/skills/grok-search")
+quoted = "\n".join(line[1:].strip() for line in readme_text.splitlines() if line.startswith(">"))
+if "SKILL.md" not in quoted:
+    raise SystemExit(f"{readme_path}: the copied request must tell the agent to read SKILL.md")
+if "first-run.md" not in readme_text:
+    raise SystemExit(f"{readme_path}: must point host detail at first-run.md")
+if "install.md" not in readme_text:
+    raise SystemExit(f"{readme_path}: must point Skill+CLI copy steps at install.md")
+if "## Cue / 小Q" in readme_text or "## Skill+CLI install" in readme_text:
+    raise SystemExit(f"{readme_path}: must not document Cue vs Skill+CLI as separate operator cases")
+if "auth-start" in readme_text or "auth-status" in readme_text:
+    raise SystemExit(f"{readme_path}: auth-start/auth-status belong in SKILL/references, not README")
 if "claude plugin install grok-search@karlorz-agent-skills" not in readme_text:
     raise SystemExit(f"{readme_path}: must include Claude marketplace install")
 for leaked in (
@@ -446,6 +487,7 @@ blob = "".join(
         cli_contract_path,
         auth_contract_path,
         install_contract_path,
+        first_run_path,
     )
 )
 allowed_env_bearer = "Bearer ${env:GROK_SEARCH_MCP_TOKEN}"

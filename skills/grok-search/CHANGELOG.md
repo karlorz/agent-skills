@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.25] - 2026-10-12
+
+### Changed
+- README is one paste-to-agent request that names the nested `SKILL.md`. The agent discovers connector tools, in-thread MCP card, or Skill+CLI from SKILL.md. Host cases stay in `references/first-run.md` and `references/install.md`. Desktop connector hosts consult first-run.md desktop readiness before the first MCP call.
+- Cue / 小Q defaults to the in-thread Apps HTTP MCP card at the production endpoint with no custom headers.
+- SKILL.md uses a compact detect → install → init algorithm: existing connector tools, in-thread MCP card, Skill+CLI fallback, then chat-only stop. Host exceptions and desktop readiness details live in `references/first-run.md`.
+- Skill+CLI keeps the sparse-checkout install sentence for Muse, Doubao 云电脑, and Orca workers, with same-turn auth polling and one tiny init search. ChatGPT/Doubao connector OAuth remains a person-outside-chat step.
+- Document that leftover Cue CLI installation and local auth state must be uninstalled before an Apps-first test; coordinate plugin manifests and marketplace at 0.1.25.
+
 ## [0.1.24] - 2026-10-06
 
 ### Fixed
