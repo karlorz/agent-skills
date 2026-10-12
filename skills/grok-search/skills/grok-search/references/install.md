@@ -1,5 +1,7 @@
 # Grok Search Standalone Install Contract
 
+Use this fallback only after detecting that grok-search connector tools and an in-thread HTTP MCP card are unavailable. Cue defaults to the Apps card; see [first-run.md](first-run.md). This recipe needs git and Node 22 or 24 on the host.
+
 ## One-Sentence Install Request
 
 > Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills using sparse checkout of skills/grok-search, copy its skills/grok-search skill unit into this host's skill directory, and run that installed unit's scripts/grok-search.cjs without configuring host MCP.
@@ -47,5 +49,6 @@ The installed directory contains strictly:
 - `references/cli-contract.md`
 - `references/auth-contract.md`
 - `references/install.md`
+- `references/first-run.md`
 
 Plugin manifest files (`.claude-plugin`, `.cursor-plugin`, `.codex-plugin`, `.mcp.json`, `mcp.json`) and Claude hooks are not installed into the host skill directory.
