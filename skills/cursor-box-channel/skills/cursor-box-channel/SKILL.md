@@ -1,13 +1,13 @@
 ---
 name: cursor-box-channel
-description: "This skill should be used when an agent needs to ask, list replies, heartbeat, claim, or reply on cursor-box-channel HTTP MCP (attended-only), or open the read-only audit console."
+description: "This skill should be used when an agent needs cursor-box-channel MCP asks or replies, Mac Leaf chat on Chrome :9222, or the read-only audit console."
 ---
 
 # Cursor Box Channel
 
 Use this skill for attended HTTP Streamable MCP at `https://channel.termolo.com/mcp`. Core logic lives on that remote backend.
 
-Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI wrapper. The Mac launchd+stdio daemon still exists in the `karlorz/cursor-box-channel` repo, but this plugin talks to the hosted channel.
+Marketplace MCP is HTTP only. Do not start a local stdio daemon or grok CLI wrapper. Mac Leaf chat uses the standalone CDP helper below when selected before dispatch.
 
 ## First-run
 
@@ -39,7 +39,7 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 - MCP `message_status` `wait_seconds` maximum is **15** (server-enforced). Never pass 300; long MCP waits kill the client session. Short checks may use `return_on=final_reply` with `wait_seconds=0` (at most 15).
 - For the remaining wait, run `cursor-box-close` from `karlorz/cursor-box-channel` (`docs/reply-closer.md`). Pass only the message id (optional `--thread-id`). `GATEWAY_URL` and `GATEWAY_TOKEN` come from the environment; never argv.
 - `cursor-box-close` waits until `final:true` and prints one `DONE` or `FAILED` line. Hold and other non-final replies never count as completion.
-- Treat an ask as gone only after a documented miss (handshake/token failure, or target offline AND a later close still has no final).
+- Handshake failure before dispatch is a route decision. Once an ask is dispatched, reconcile it; target offline or a close without final does not permit a second writer.
 - `ask.timeout_seconds` is only for exact-token probes, not for waiting on substantive answers.
 - Attended-only: substantive answers arrive when the attended Grok Bot routine fires. The :08, :28, and :48 schedule is the fallback wake, and a `*/10` backup cron also runs.
   - **Default first wake: grok.com Chat/Bot CDP.** Peerd and gate-loop enable CDP when `PEERD_GROK_COM_BOT_CDP_ENABLED` is unset or `1`; set it to `0` to disable. Attach to the tab mapped to `ask.to` / consumer id (`newbie`, `wiki-research`, or `social`) and never broadcast. Live cursor-box uses `http://127.0.0.1:19222`, forwarded to signed-in macos-dev Chrome `:9222`; box ports `9223–9478` are reserved for sandbox browsers. If DevTools is down, launch `chrome-debug` on the owning host; do not let box Chrome steal the Mac tunnel. If Chrome is up but the mapped tab is missing, open it with `PUT /json/new`. `newbie` falls back to the known `/bot` URL when TARGETS is unset; `social` and `wiki-research` need explicit TARGETS rows. Never `Browser.close` / `Target.closeTarget`. The helper sends a real Enter and checks the wake left the composer. Wake text is message ID only (`cursor-box-channel substantive_hold messageId=<id>`).
@@ -52,6 +52,29 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 - `claim_lease_expired` on a pending or held receipt is the 1s pulse lease handoff, not a failed send and not gone. Keep closing until `final:true`. Do not treat the ask as gone because of that field.
 - Storage hides `claim_lease_expired` from pending caller receipts unless status is terminal. If a leftover still appears, treat it as handoff too.
 
+## Leaf chat
+
+Two jobs have different owners. **Queue wake** runs peerd/gate-loop on cursor-box after a messageId exists, using `box/routine-helpers/grok-com-bot-cdp.mjs --target <target> --message-id <id>` and messageId-only wake text. **Leaf chat** runs the new sibling `scripts/grok-com-bot-leaf-chat.mjs` on macos-dev, the chrome-debug owner, and sends a full prompt from stdin to newbie.
+
+- **Port map:** Mac Leaf chat attaches `http://127.0.0.1:9222` locally. `http://127.0.0.1:19222` is **box-only**, the reverse tunnel to Mac :9222. Never probe :19222 as the Mac CDP path. Box must not launch Chrome onto or steal Mac :9222.
+- **One writer per turn:** Select the route before dispatch. Operator “chat now” selects Leaf chat before any MCP ask. Otherwise try the MCP handshake once: when connected, ask and CLOSE until `final:true`; handshake HTTP 530 / Cloudflare 1033 / disconnected before ask dispatch permits Leaf chat. A 401 or missing token remains a configuration stop unless the operator explicitly selected chat now.
+- A messageId or pending receipt commits this prompt to MCP. Hold, lease handoff, slow reply, or later disconnect is never a second CDP writer. **Lost ask response:** a dispatched ask with no response has unknown acceptance, even without a messageId. Reconcile before re-posting or falling back. Chat now does not erase an already-dispatched copy.
+- Run readiness first. Its `leaf_chat` field reports local :9222 `OK` independently of MCP credentials; `macos_cdp_port_mismatch` warns about a box-only port expectation. This is a DevTools probe, not an MCP handshake.
+
+Resolve `PLUGIN_ROOT` from `GROK_PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` (Cursor: installed cursor-box-channel plugin directory). Send prompt text through stdin, never argv:
+
+```bash
+node "$PLUGIN_ROOT/scripts/grok-com-bot-leaf-chat.mjs" <<'PROMPT'
+Your full prompt for newbie goes here.
+PROMPT
+```
+
+The helper matches only `https://grok.com/bot/22b3b80c-f7ba-400d-8ad1-6e686cec4d58`, opens it with `PUT /json/new` if missing, and never launches Chrome. If DevTools is down, inspect chrome-debug ownership; only the owner may recover an actually down browser. Stop if not signed in. Generating or composer_busy skips before typing. One real Enter is followed by submit confirmation: a readable empty composer plus a newly observed matching user-message in the same document/tab. `ok` confirms submission, not the answer. Snapshot that same tab for the reply.
+
+`submit_unknown` means timeout, disconnect, navigation, unreadable composer, or missing sent-message proof. `submit_stuck` means the readable draft remains unchanged. Inspect the same tab before deciding on any retry; never auto-resend, refill, press Enter again, or switch writers. `chrome_not_running` means DevTools is down. After an Enter attempt, the helper writes `~/.grok/handoffs/YYYY-MM-DD-leaf-chat-<hash>.md` with timestamp, URL, prompt sha256, and status only; no body or tokens. `ok` with `logStatus: write_failed` still means sent; log failure must not cause a resend. The Mac busy check is not a cross-host lock against peerd.
+
+**Skill origins:** macos Grok loads this marketplace plugin SKILL.md; Cursor uses its plugin copy. Box Grok Bot loads only `/home/box/agent-data/workflows/cursor-box-channel/SKILL.md`, which keeps queue-wake / :19222 instructions. Do not copy this Leaf chat section or the Mac helper into that box workflow. Marketplace injection into Grok Bot Agent chat is unproven. Existing chats do not hot-reload; start a **new macos Grok session** after plugin install/update to load this skill text. Never `Browser.close`, `Target.closeTarget`, or `playwright-cli close`.
+
 ## Tools
 
 - `ask`: post a question and wait for a reply (queue waits if Grok Bot is closed).
@@ -62,4 +85,4 @@ Marketplace install is HTTP only. Do not start a local stdio daemon or grok CLI 
 - `reply`: send a reply to a claimed or asked item.
 - `bridge_status`: gateway health.
 
-If tools are connected, continue. If the token is missing or MCP is disconnected, stop and ask the operator to set `CURSOR_BOX_MCP_TOKEN`.
+If MCP is connected, continue with ask and CLOSE. For a pre-dispatch 530/1033/disconnected handshake or explicit chat now, use the Leaf chat route above. Missing token / 401 requires configuration before MCP use.

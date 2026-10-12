@@ -6,7 +6,7 @@ Optional read-only audit UI: `https://channel.termolo.com/console` (Cloudflare A
 
 SKILL.md is a thin wrap (routing enum + tool names). Runbook, issue guide, and LaunchAgent leftover stay in the wiki.
 
-The tracked `skills/cursor-box-channel/SKILL.md` in this plugin is the maintained source for CDP wake guidance. Grok Bot Agent chats on cursor-box currently load a separate user workflow at `/home/box/agent-data/workflows/cursor-box-channel/SKILL.md`. After a plugin release, copy the source skill to that workflow with a pre-sync backup, then verify the loaded path and guidance in a new attended Agent chat. A plugin cache manifest alone does not prove marketplace skill injection into Grok Bot.
+The tracked `skills/cursor-box-channel/SKILL.md` is the Mac/Cursor source for Queue wake and Leaf chat guidance. Leaf chat runs `scripts/grok-com-bot-leaf-chat.mjs` with prompt stdin on local Mac :9222 and confirms one submission without closing Chrome. Box :19222 is the reverse tunnel for messageId-only peerd Queue wake. Grok Bot Agent chats on cursor-box load only `/home/box/agent-data/workflows/cursor-box-channel/SKILL.md`; keep that workflow queue-wake only and never copy the Leaf chat section there. A plugin cache manifest alone does not prove marketplace skill injection into Grok Bot. Existing chats do not hot-reload; a new macos Grok session loads the installed Leaf chat text.
 
 ## Install
 

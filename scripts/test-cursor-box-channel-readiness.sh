@@ -16,10 +16,29 @@ import os
 import subprocess
 import sys
 import tempfile
+import importlib.util
 from pathlib import Path
 
 probe = Path(sys.argv[1])
 production_url = "https://channel.termolo.com/mcp"
+
+# Mac Leaf chat CDP is independent of MCP token readiness. Never probe box :19222.
+spec = importlib.util.spec_from_file_location("readiness", probe)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+seen = []
+def cdp_ok(endpoint):
+    seen.append(endpoint)
+    return True
+leaf = module.probe({}, platform="darwin", cdp_probe=cdp_ok)
+assert leaf["leaf_chat"] == {"endpoint": "http://127.0.0.1:9222", "status": "OK"}, leaf
+assert seen == ["http://127.0.0.1:9222"], seen
+seen.clear()
+leaf = module.probe({"PEERD_GROK_COM_BOT_CDP_ENDPOINTS": "http://127.0.0.1:19222"}, platform="darwin", cdp_probe=cdp_ok)
+assert any("macos_cdp_port_mismatch" in w and "box-only" in w for w in leaf["warnings"]), leaf
+assert seen == ["http://127.0.0.1:9222"], seen
+leaf = module.probe({}, platform="linux", cdp_probe=cdp_ok)
+assert leaf["leaf_chat"]["status"] == "not_mac_owner", leaf
 
 
 def run(env, extra_args=None):

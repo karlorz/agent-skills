@@ -2,6 +2,15 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.11] - 2026-10-13
+
+### Added
+- Mac Leaf chat sibling `scripts/grok-com-bot-leaf-chat.mjs`: full prompt stdin, local :9222, one real Enter, positive new user-message and empty composer submit proof, and hash-only handoff receipts. Uncertain delivery and receipt-write failure never resend.
+- Readiness reports Mac :9222 independently of MCP credentials and warns if a Mac probe expects box-only :19222.
+
+### Changed
+- Dual-path caller rule selects one writer before dispatch and requires reconciliation for a lost ask response. Leaf chat skill text stays on Mac/Cursor; the box Grok Bot workflow remains queue-wake only. A new Mac Grok session loads installed skill changes.
+
 ## [Unreleased]
 
 ## [0.3.10] - 2026-09-28

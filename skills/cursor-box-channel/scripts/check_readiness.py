@@ -12,6 +12,7 @@ import json
 import os
 import sys
 from typing import Mapping
+from urllib.request import urlopen
 
 PRODUCTION_MCP_URL = "https://channel.termolo.com/mcp"
 TOKEN_ENV = "CURSOR_BOX_MCP_TOKEN"
@@ -33,6 +34,15 @@ LEFTOVER_STDIO_CONFIG_WARNING = (
 )
 GROK_CONFIG_RELATIVE = (".grok", "config.toml")
 STDIO_TABLE = "mcp_servers.cursor-box-channel"
+LEAF_CDP_ENDPOINT = "http://127.0.0.1:9222"
+
+
+def _cdp_reachable(endpoint: str) -> bool:
+    try:
+        with urlopen(endpoint + "/json/list", timeout=1) as response:
+            return isinstance(json.load(response), list)
+    except (OSError, ValueError):
+        return False
 
 
 def _strip(value: str | None) -> str:
@@ -81,12 +91,19 @@ def _leftover_stdio_warning(source: Mapping[str, str]) -> str | None:
     return None
 
 
-def probe(environ: Mapping[str, str] | None = None) -> dict:
+def probe(environ: Mapping[str, str] | None = None, *, platform=None, cdp_probe=None) -> dict:
     source = os.environ if environ is None else environ
     token = _strip(source.get(TOKEN_ENV))
     url = _strip(source.get(URL_ENV))
     warnings: list[str] = []
     reasons: list[str] = []
+    is_mac = (platform or sys.platform) == "darwin"
+    leaf_chat = {"endpoint": LEAF_CDP_ENDPOINT, "status": "not_mac_owner"}
+    if is_mac:
+        leaf_chat["status"] = "OK" if (cdp_probe or _cdp_reachable)(LEAF_CDP_ENDPOINT) else "chrome_not_running"
+        expected = source.get("CURSOR_BOX_LEAF_CHAT_ENDPOINT", "") + source.get("PEERD_GROK_COM_BOT_CDP_ENDPOINTS", "")
+        if ":19222" in expected:
+            warnings.append("macos_cdp_port_mismatch: Mac Leaf chat uses local :9222; :19222 is box-only. This probe only checks :9222.")
 
     leftover = _leftover_stdio_warning(source)
     if leftover:
@@ -101,6 +118,7 @@ def probe(environ: Mapping[str, str] | None = None) -> dict:
             "url": url or None,
             "migrated": False,
             "warnings": warnings,
+            "leaf_chat": leaf_chat,
         }
 
     migrated = False
@@ -115,6 +133,7 @@ def probe(environ: Mapping[str, str] | None = None) -> dict:
         "url": url,
         "migrated": migrated,
         "warnings": warnings,
+        "leaf_chat": leaf_chat,
     }
 
 

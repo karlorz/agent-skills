@@ -110,8 +110,8 @@ claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
 codex_manifest = json.loads(texts[codex_manifest_path])
 expected_version = claude_manifest.get("version")
-if expected_version != "0.3.10":
-    raise SystemExit(f"{manifest_path}: version must be 0.3.10")
+if expected_version != "0.3.11":
+    raise SystemExit(f"{manifest_path}: version must be 0.3.11")
 if cursor_manifest.get("version") != expected_version:
     raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if codex_manifest.get("version") != expected_version:
@@ -161,6 +161,14 @@ for forbidden in ("headers", "http_headers", "env_http_headers", "command", "arg
 
 # 5. CHANGELOG
 changelog_text = texts[changelog_path]
+if "## [0.3.11]" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must contain 0.3.11")
+leaf_helper = root / "scripts" / "grok-com-bot-leaf-chat.mjs"
+if not leaf_helper.is_file():
+    raise SystemExit("missing standalone Leaf chat helper")
+for needle in ("## Leaf chat", "scripts/grok-com-bot-leaf-chat.mjs", "One writer per turn", "box-only", "Lost ask response", "/home/box/agent-data/workflows/cursor-box-channel/SKILL.md", "new macos Grok session"):
+    if needle not in texts[skill_path]:
+        raise SystemExit(f"Leaf chat contract missing: {needle}")
 if "## [0.3.10] - 2026-09-28" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain ## [0.3.10] - 2026-09-28")
 if "## [0.3.9] - 2026-09-27" not in changelog_text:
