@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - kimi.com web is not a persist host: Plugins are presets (`persist_via_plugins: no`). K3 Skill+CLI is a one-chat proof; token wipes. Real persist is Cue Apps, desktop plugin, or Kimi Work/Code.
+- Muse prefer_first: skill-cli. Connectors are presets (`persist_via_connectors: no`). Persist is Skill+CLI `--agent-id muse` on lasting disk.
 
 ## [0.1.25] - 2026-10-12
 

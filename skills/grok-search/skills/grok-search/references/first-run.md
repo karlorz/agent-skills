@@ -20,6 +20,8 @@ Proof on 2026-10-12: after uninstalling the leftover CLI copy, Cue presented the
 
 Muse, Doubao 工作 / 云电脑, Orca workers, and other hosts with git and Node 22 or 24 can use [install.md](install.md) when connector tools and an in-thread MCP card are unavailable. Reuse an existing nested skill unit; copy into only one host skill directory. No npm install and no host MCP registration.
 
+Muse **prefer_first: skill-cli**. Settings → Connectors is presets (Browser, GitHub, Lab Access Id/Jwt/Secret); `persist_via_connectors: no`. grok-search is not a Connectors row. Persist is Skill+CLI on the Muse VM (`--agent-id muse`); the file token lasts. Do not wait for a Cue-style HTTP MCP card. Unlike kimi.com K3, do not re-mint every thread.
+
 kimi.com web is **not** a persist host. Plugins are marketplace presets (`persist_via_plugins: no`); there is no user HTTP MCP add. Custom MCP is Kimi Work desktop Plugin Builder. K3 sandbox Skill+CLI (`--agent-id kimi`) is a one-chat proof; HOME and `http-mcp.token` wipe. kimi.com/skills Add persists SKILL.md only. Instant without a terminal is chat-only. Do not treat Kimi web as Cue.
 
 From the installed directory, `node scripts/grok-search.cjs` prints usage (exit 2). Init with `node scripts/grok-search.cjs search --query "Node.js official documentation"`. On `auth_required`:
