@@ -2,6 +2,12 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.12] - 2026-10-14
+
+### Changed
+- Document immediate default-on queue wakes, bounded two-second safe retries, shared durable submission ownership, read-only uncertain-send reconciliation and ten-second/five-second backup defaults.
+- Final-answer closing uses gateway events with sequence reconnect and a two-second read-only fallback. Wake-only supervision preserves an operator-disabled mechanical worker.
+
 ## [0.3.11] - 2026-10-13
 
 ### Added
