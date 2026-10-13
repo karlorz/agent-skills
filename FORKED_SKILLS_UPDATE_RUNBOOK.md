@@ -769,7 +769,7 @@ them:
 - attach-first use of an existing debugger;
 - default-user global Chrome profile behavior;
 - safe handling of unmanaged launchers and configs;
-- `owned_by_cmux` attach-only behavior and refusal to restart cmux-owned Chrome;
+- `owned_by_cmux` skip-attach `--cdp-*` helper and refusal to restart cmux-owned Chrome;
 - Linux/LXC/headless support;
 - unpacked-extension persistence;
 - one bundled launcher source of truth;

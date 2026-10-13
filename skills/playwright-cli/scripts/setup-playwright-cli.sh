@@ -6,6 +6,7 @@ MIN_CLI_VERSION="0.1.20"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_LAUNCHER="${SCRIPT_DIR}/chrome-debug.sh"
 SOURCE_HELPER="${SCRIPT_DIR}/cdp-load-unpacked.py"
+SOURCE_SESSION_HELPER="${SCRIPT_DIR}/cdp-session.py"
 SOURCE_CONFIG="$(dirname "${SCRIPT_DIR}")/.playwright/cli.config.json"
 
 PROJECT_DIR="${PWD}"
@@ -144,6 +145,10 @@ if [[ ! -f "${SOURCE_HELPER}" ]]; then
   printf 'setup-playwright-cli: bundled load-unpacked helper is missing: %s\n' "${SOURCE_HELPER}" >&2
   exit 1
 fi
+if [[ ! -f "${SOURCE_SESSION_HELPER}" ]]; then
+  printf 'setup-playwright-cli: bundled cdp-session helper is missing: %s\n' "${SOURCE_SESSION_HELPER}" >&2
+  exit 1
+fi
 if [[ ! -f "${SOURCE_CONFIG}" ]]; then
   printf 'setup-playwright-cli: bundled config template is missing: %s\n' "${SOURCE_CONFIG}" >&2
   exit 1
@@ -151,6 +156,7 @@ fi
 
 TARGET_LAUNCHER="${DATA_DIR}/chrome-debug.sh"
 TARGET_HELPER="${DATA_DIR}/cdp-load-unpacked.py"
+TARGET_SESSION_HELPER="${DATA_DIR}/cdp-session.py"
 TARGET_COMMAND="${BIN_DIR}/chrome-debug"
 TARGET_CONFIG="${PROJECT_DIR}/.playwright/cli.config.json"
 MANAGED_MARKER="# playwright-cli-managed-chrome-debug: v1"
@@ -182,12 +188,14 @@ launcher_wrapper_state() {
   printf '%s\n' "unmanaged"
 }
 
-helper_state() {
-  if [[ ! -f "${TARGET_HELPER}" ]]; then
+file_state() {
+  local src="$1"
+  local dst="$2"
+  if [[ ! -f "${dst}" ]]; then
     printf '%s\n' "missing"
     return 0
   fi
-  if cmp -s "${SOURCE_HELPER}" "${TARGET_HELPER}"; then
+  if cmp -s "${src}" "${dst}"; then
     printf '%s\n' "current"
     return 0
   fi
@@ -196,7 +204,8 @@ helper_state() {
 
 payload_matches_bundle() {
   [[ -f "${TARGET_LAUNCHER}" ]] && cmp -s "${SOURCE_LAUNCHER}" "${TARGET_LAUNCHER}" \
-    && [[ -f "${TARGET_HELPER}" ]] && cmp -s "${SOURCE_HELPER}" "${TARGET_HELPER}"
+    && [[ -f "${TARGET_HELPER}" ]] && cmp -s "${SOURCE_HELPER}" "${TARGET_HELPER}" \
+    && [[ -f "${TARGET_SESSION_HELPER}" ]] && cmp -s "${SOURCE_SESSION_HELPER}" "${TARGET_SESSION_HELPER}"
 }
 
 classify_launcher() {
@@ -206,7 +215,7 @@ classify_launcher() {
     printf '%s\n' "unmanaged"
     return 0
   fi
-  if [[ "${wrapper}" == "missing" && ! -e "${TARGET_LAUNCHER}" && ! -f "${TARGET_HELPER}" ]]; then
+  if [[ "${wrapper}" == "missing" && ! -e "${TARGET_LAUNCHER}" && ! -f "${TARGET_HELPER}" && ! -f "${TARGET_SESSION_HELPER}" ]]; then
     printf '%s\n' "missing"
     return 0
   fi
@@ -218,11 +227,12 @@ classify_launcher() {
 }
 
 print_launcher_check() {
-  local status bundled installed helper wrapper next
+  local status bundled installed helper session_helper wrapper next
   status="$(classify_launcher)"
   bundled="$(extract_contract "${SOURCE_LAUNCHER}")"
   installed="$(extract_contract "${TARGET_LAUNCHER}")"
-  helper="$(helper_state)"
+  helper="$(file_state "${SOURCE_HELPER}" "${TARGET_HELPER}")"
+  session_helper="$(file_state "${SOURCE_SESSION_HELPER}" "${TARGET_SESSION_HELPER}")"
   wrapper="$(launcher_wrapper_state)"
   case "${status}" in
     current)
@@ -239,6 +249,7 @@ print_launcher_check() {
   printf '  bundled   : %s (%s)\n' "${bundled}" "${SOURCE_LAUNCHER}"
   printf '  installed : %s (%s)\n' "${installed}" "${TARGET_LAUNCHER}"
   printf '  helper    : %s (%s)\n' "${helper}" "${TARGET_HELPER}"
+  printf '  session   : %s (%s)\n' "${session_helper}" "${TARGET_SESSION_HELPER}"
   printf '  wrapper   : %s (%s)\n' "${wrapper}" "${TARGET_COMMAND}"
   printf '  status    : %s\n' "${status}"
   printf '  next      : %s\n' "${next}"
@@ -400,6 +411,7 @@ install_launcher() {
   printf '[UPGRADE] chrome-debug %s -> %s\n' "$(extract_contract "${TARGET_LAUNCHER}")" "$(extract_contract "${SOURCE_LAUNCHER}")"
   install -m 0755 "${SOURCE_LAUNCHER}" "${TARGET_LAUNCHER}"
   install -m 0755 "${SOURCE_HELPER}" "${TARGET_HELPER}"
+  install -m 0755 "${SOURCE_SESSION_HELPER}" "${TARGET_SESSION_HELPER}"
 
   launcher_quote="$(shell_quote "${TARGET_LAUNCHER}")"
   state_quote="$(shell_quote "${STATE_DIR}")"
@@ -501,6 +513,6 @@ if [[ -n "${resolved_command}" && "${resolved_command}" != "${TARGET_COMMAND}" ]
 fi
 
 printf '\nNext:\n'
-printf '  chrome-debug\n'
-printf '  playwright-cli attach\n'
-printf '  playwright-cli snapshot\n'
+printf '  chrome-debug --json --explain\n'
+printf '  # owned_by_cmux: chrome-debug --cdp-list then --cdp-eval/--cdp-screenshot with a picker\n'
+printf '  # macos-dev / owned_by_profile: chrome-debug ; playwright-cli attach ; playwright-cli snapshot\n'

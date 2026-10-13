@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# chrome-debug-contract: v5
+# chrome-debug-contract: v6
 # Start Chrome with remote debugging in detached mode.
-# Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [--check-port] [--explain] [--launch-and-explain] [--load-unpacked PATH] [URL]
+# Usage: ./scripts/chrome-debug.sh [--dry-run] [--print-config] [--json] [--check-port] [--explain] [--launch-and-explain] [--load-unpacked PATH] [--cdp-list|--cdp-eval|--cdp-screenshot] [URL]
 #
 # Profile default: default-user (global clone of real Chrome). Do not use
 # --repo-local-profile unless isolation was requested explicitly.
@@ -36,6 +36,13 @@ PROFILE_SOURCE_DIR=""
 CHROME_ARGS=()
 LOAD_UNPACKED_CLI=()
 LOAD_UNPACKED_PATHS=()
+CDP_ACTION=""
+CDP_URL_CONTAINS=""
+CDP_TARGET_ID=""
+CDP_EVAL=""
+CDP_OUT=""
+CDP_TIMEOUT_MS="${CHROME_DEBUG_CDP_TIMEOUT_MS:-8000}"
+TRY_CLI_ATTACH=0
 
 get_repo_local_profile_dir() {
   printf '%s\n' "${PROJECT_ROOT}/.chrome-debug-profile"
@@ -99,6 +106,19 @@ Options:
   --load-unpacked PATH
                    CDP Extensions.loadUnpacked PATH (repeatable). Re-applied on later
                    start/restart/reuse via ${PROFILE_DIR}/.chrome-debug-load-unpacked
+  --cdp-list      List CDP targets via bundled cdp-session.py (no Playwright attach)
+  --cdp-eval      Runtime.evaluate on one page (requires --url-contains or --target-id and --eval)
+  --cdp-screenshot
+                   Page.captureScreenshot on one page (requires picker and --out)
+  --url-contains SUBSTR
+                   Select exactly one type=page target whose URL contains SUBSTR
+  --target-id ID  Select exactly one type=page target by CDP target id
+  --eval EXPR     Expression for --cdp-eval
+  --out PATH      PNG path for --cdp-screenshot
+  --port PORT     Debug port (default CHROME_DEBUG_PORT or 9222)
+  --timeout-ms MS Total deadline for --cdp-* / --try-cli-attach (default 8000)
+  --try-cli-attach
+                   Bounded playwright-cli attach probe only. Default off. Do not combine with --cdp-*.
   -h, --help      Show this help message
 
 Environment:
@@ -110,6 +130,8 @@ Environment:
   CHROME_DEBUG_LOG            launcher log path
   CHROME_DEBUG_COMMAND_NAME   command name shown in help and diagnostics
   CHROME_DEBUG_LOAD_UNPACKED  colon-separated extra unpacked extension paths
+  CHROME_DEBUG_CDP_TIMEOUT_MS total deadline in ms for --cdp-* (default 8000)
+  PLAYWRIGHT_CLI_TRY_ATTACH   if 1, same as --try-cli-attach
   CHROME                       Chrome/Chromium binary path
 EOF_USAGE
 }
@@ -556,7 +578,7 @@ emit_explanation() {
       ;;
     owned_by_cmux)
       summary="Port ${DEBUG_PORT} is owned by cmux-cdp-proxy in front of the live cmux-devtools Chrome."
-      next_action="Reuse playwright-cli attach. Do not run chrome-debug --restart."
+      next_action="Run chrome-debug --cdp-list, then --cdp-eval or --cdp-screenshot with --url-contains or --target-id. Skip playwright-cli attach unless --try-cli-attach. Do not run chrome-debug --restart."
       ;;
     owned_by_profile)
       summary="Port ${DEBUG_PORT} is already owned by the configured ${PROFILE_LABEL}."
@@ -626,6 +648,70 @@ load_unpacked_sidecar_path() {
 
 cdp_load_unpacked_helper_path() {
   printf '%s\n' "${SCRIPT_DIR}/cdp-load-unpacked.py"
+}
+
+require_cdp_action_exclusive() {
+  if [[ "${FORCE_RESTART}" == "1" || ${#LOAD_UNPACKED_CLI[@]} -gt 0 || "${DRY_RUN}" == "1" || "${EXPLAIN_ONLY}" == "1" || "${LAUNCH_AND_EXPLAIN}" == "1" || "${CHECK_PORT_ONLY}" == "1" || "${PRINT_CONFIG}" == "1" || "${TARGET_URL_SET}" == "1" ]]; then
+    log_error "--cdp-* / --try-cli-attach cannot combine with launch, restart, explain, dry-run, or --load-unpacked."
+    exit 1
+  fi
+}
+
+take_flag_value() {
+  local spec="$1"
+  if [[ "${spec}" == *=* ]]; then
+    FLAG_VALUE="${spec#*=}"
+    FLAG_CONSUMED=0
+    return 0
+  fi
+  FLAG_CONSUMED=1
+}
+
+run_cdp_session() {
+  local helper="${SCRIPT_DIR}/cdp-session.py"
+  if [[ ! -f "${helper}" ]]; then
+    log_error "cdp-session.py is missing beside chrome-debug.sh."
+    log_error "Re-run playwright-cli setup so cdp-session.py is installed beside chrome-debug.sh."
+    exit 1
+  fi
+  local args=(python3 "${helper}" --port "${DEBUG_PORT}" --timeout-ms "${CDP_TIMEOUT_MS}" --action "${CDP_ACTION}" --json)
+  if [[ -n "${CDP_URL_CONTAINS}" ]]; then
+    args+=(--url-contains "${CDP_URL_CONTAINS}")
+  fi
+  if [[ -n "${CDP_TARGET_ID}" ]]; then
+    args+=(--target-id "${CDP_TARGET_ID}")
+  fi
+  if [[ -n "${CDP_EVAL}" ]]; then
+    args+=(--eval "${CDP_EVAL}")
+  fi
+  if [[ -n "${CDP_OUT}" ]]; then
+    args+=(--out "${CDP_OUT}")
+  fi
+  exec "${args[@]}"
+}
+
+run_try_cli_attach() {
+  python3 - "${DEBUG_PORT}" "${CDP_TIMEOUT_MS}" <<'PY'
+import shutil
+import subprocess
+import sys
+
+port = sys.argv[1]
+timeout_ms = int(sys.argv[2])
+exe = shutil.which("playwright-cli")
+if not exe:
+    print("playwright-cli not found on PATH", file=sys.stderr)
+    raise SystemExit(1)
+try:
+    completed = subprocess.run(
+        [exe, "attach", f"--cdp=http://127.0.0.1:{port}"],
+        timeout=max(timeout_ms, 1) / 1000.0,
+    )
+except subprocess.TimeoutExpired:
+    print("playwright-cli attach timed out", file=sys.stderr)
+    raise SystemExit(1)
+raise SystemExit(completed.returncode)
+PY
 }
 
 path_list_has() {
@@ -861,7 +947,7 @@ print(
             "loadUnpackedPaths": [
                 path for path in os.environ.get("LOAD_UNPACKED_JSON_SOURCE", "").split("\x1f") if path
             ],
-            "chromeDebugContract": "v5",
+            "chromeDebugContract": "v6",
         }
     )
 )
@@ -883,7 +969,7 @@ PROFILE_DIR=${PROFILE_DIR}
 LOG_FILE=${LOG_FILE}
 TARGET_URL=${TARGET_URL}
 LOAD_UNPACKED_PATHS=$(printf '%s ' "${LOAD_UNPACKED_PATHS[@]+"${LOAD_UNPACKED_PATHS[@]}"}")
-CHROME_DEBUG_CONTRACT=v5
+CHROME_DEBUG_CONTRACT=v6
 EOF_CONFIG
 }
 
@@ -938,6 +1024,95 @@ while [[ $# -gt 0 ]]; do
       fi
       LOAD_UNPACKED_CLI+=("$1")
       ;;
+    --cdp-list|--cdp-eval|--cdp-screenshot)
+      new="${1#--cdp-}"
+      if [[ -n "${CDP_ACTION}" && "${CDP_ACTION}" != "${new}" ]]; then
+        log_error "pass only one of --cdp-list, --cdp-eval, --cdp-screenshot"
+        exit 1
+      fi
+      CDP_ACTION="${new}"
+      ;;
+    --url-contains|--url-contains=*)
+      take_flag_value "$1"
+      if [[ "${FLAG_CONSUMED}" == "1" ]]; then
+        shift
+        if [[ $# -eq 0 ]]; then
+          log_error "--url-contains requires a value."
+          exit 1
+        fi
+        CDP_URL_CONTAINS="$1"
+      else
+        CDP_URL_CONTAINS="${FLAG_VALUE}"
+      fi
+      ;;
+    --target-id|--target-id=*)
+      take_flag_value "$1"
+      if [[ "${FLAG_CONSUMED}" == "1" ]]; then
+        shift
+        if [[ $# -eq 0 ]]; then
+          log_error "--target-id requires a value."
+          exit 1
+        fi
+        CDP_TARGET_ID="$1"
+      else
+        CDP_TARGET_ID="${FLAG_VALUE}"
+      fi
+      ;;
+    --eval|--eval=*)
+      take_flag_value "$1"
+      if [[ "${FLAG_CONSUMED}" == "1" ]]; then
+        shift
+        if [[ $# -eq 0 ]]; then
+          log_error "--eval requires a value."
+          exit 1
+        fi
+        CDP_EVAL="$1"
+      else
+        CDP_EVAL="${FLAG_VALUE}"
+      fi
+      ;;
+    --out|--out=*)
+      take_flag_value "$1"
+      if [[ "${FLAG_CONSUMED}" == "1" ]]; then
+        shift
+        if [[ $# -eq 0 ]]; then
+          log_error "--out requires a value."
+          exit 1
+        fi
+        CDP_OUT="$1"
+      else
+        CDP_OUT="${FLAG_VALUE}"
+      fi
+      ;;
+    --port|--port=*)
+      take_flag_value "$1"
+      if [[ "${FLAG_CONSUMED}" == "1" ]]; then
+        shift
+        if [[ $# -eq 0 ]]; then
+          log_error "--port requires a value."
+          exit 1
+        fi
+        DEBUG_PORT="$1"
+      else
+        DEBUG_PORT="${FLAG_VALUE}"
+      fi
+      ;;
+    --timeout-ms|--timeout-ms=*)
+      take_flag_value "$1"
+      if [[ "${FLAG_CONSUMED}" == "1" ]]; then
+        shift
+        if [[ $# -eq 0 ]]; then
+          log_error "--timeout-ms requires a value."
+          exit 1
+        fi
+        CDP_TIMEOUT_MS="$1"
+      else
+        CDP_TIMEOUT_MS="${FLAG_VALUE}"
+      fi
+      ;;
+    --try-cli-attach)
+      TRY_CLI_ATTACH=1
+      ;;
     -h|--help)
       print_usage
       exit 0
@@ -972,6 +1147,26 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+if [[ "${PLAYWRIGHT_CLI_TRY_ATTACH:-}" == "1" ]]; then
+  TRY_CLI_ATTACH=1
+fi
+
+if [[ -n "${CDP_ACTION}" && "${TRY_CLI_ATTACH}" == "1" ]]; then
+  log_error "--cdp-* cannot combine with --try-cli-attach."
+  exit 1
+fi
+
+if [[ -n "${CDP_ACTION}" ]]; then
+  require_cdp_action_exclusive
+  run_cdp_session
+fi
+
+if [[ "${TRY_CLI_ATTACH}" == "1" ]]; then
+  require_cdp_action_exclusive
+  run_try_cli_attach
+  exit $?
+fi
 
 CHROME_BIN="$(detect_chrome || true)"
 if [[ -z "${CHROME_BIN}" || ! -x "${CHROME_BIN}" ]]; then
@@ -1013,7 +1208,7 @@ if [[ "${FORCE_RESTART}" == "1" ]]; then
   port_status="$(resolve_port_status)"
   if [[ "${port_status}" == "owned_by_cmux" ]]; then
     log_error "Port ${DEBUG_PORT} is owned by cmux-cdp-proxy. Refusing --restart."
-    log_error "Reuse playwright-cli attach. Do not kill the cmux Chrome or proxy."
+    log_error "Use chrome-debug --cdp-list/--cdp-eval/--cdp-screenshot. Do not kill the cmux Chrome or proxy."
     exit 1
   fi
   if [[ "${port_status}" != "free" ]]; then
@@ -1055,7 +1250,7 @@ fi
 if port_is_healthy; then
   case "$(resolve_port_status)" in
     owned_by_cmux)
-      log_ok "Port ${DEBUG_PORT} is cmux-cdp-proxy in front of cmux-devtools Chrome; reusing (attach-only)."
+      log_ok "Port ${DEBUG_PORT} is cmux-cdp-proxy in front of cmux-devtools Chrome; reusing (cdp-* helper; skip playwright-cli attach unless --try-cli-attach)."
       exit 0
       ;;
     owned_by_profile)

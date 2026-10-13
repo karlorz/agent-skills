@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TDD coverage for chrome-debug-contract v5 cmux host-class.
+# TDD coverage for chrome-debug-contract v6 cmux host-class.
 # Does not talk to the live collect/cmux Chrome on :9222.
 # macos-dev attach path must keep owned_by_profile when the listener is not cmux-cdp-proxy.
 set -euo pipefail
@@ -128,8 +128,9 @@ import json, sys
 data = json.loads(sys.argv[1])
 assert data["portStatus"] == "owned_by_cmux", data
 action = data["nextAction"].lower()
-assert "attach" in action, data
+assert "cdp-list" in action, data
 assert "do not run chrome-debug --restart" in action, data
+assert "try-cli-attach" in action, data
 PY
 
 cmux_check="$(check_json "${CMUX_PORT}")"

@@ -32,6 +32,7 @@ bash "${SETUP}" \
 [[ -x "${BIN_DIR}/chrome-debug" ]] || fail "launcher command was not installed"
 [[ -x "${DATA_DIR}/chrome-debug.sh" ]] || fail "launcher payload was not installed"
 [[ -f "${DATA_DIR}/cdp-load-unpacked.py" ]] || fail "load-unpacked helper was not installed"
+[[ -f "${DATA_DIR}/cdp-session.py" ]] || fail "cdp-session helper was not installed"
 [[ -f "${PROJECT}/.playwright/cli.config.json" ]] || fail "project config was not initialized"
 grep -Fq 'http://localhost:9222' "${PROJECT}/.playwright/cli.config.json" || fail "project config lacks CDP endpoint"
 
@@ -53,7 +54,7 @@ state = sys.argv[3]
 assert data["projectRoot"] == project, data
 assert data["profileDir"] == os.path.join(project, ".chrome-debug-profile"), data
 assert data["logFile"] == os.path.join(state, "chrome-debug.log"), data
-assert data["chromeDebugContract"] == "v5", data
+assert data["chromeDebugContract"] == "v6", data
 assert data["launchArgs"].count("--enable-unsafe-extension-debugging") == 1, data
 PY
 
@@ -117,7 +118,7 @@ bash "${SETUP}" \
   --data-dir "${DATA_DIR}" \
   --state-dir "${STATE_DIR}" >/tmp/chrome-debug-apply.out
 grep -Fq '[APPLY]' /tmp/chrome-debug-apply.out || grep -Fq '[UPGRADE]' /tmp/chrome-debug-apply.out || fail "apply-if-needed did not upgrade stale payload"
-grep -E '^# chrome-debug-contract: v5' "${DATA_DIR}/chrome-debug.sh" >/dev/null || fail "apply-if-needed did not restore bundled launcher"
+grep -E '^# chrome-debug-contract: v6' "${DATA_DIR}/chrome-debug.sh" >/dev/null || fail "apply-if-needed did not restore bundled launcher"
 
 bash "${SETUP}" \
   --skip-cli \
@@ -157,5 +158,6 @@ PY
 
 bash "${SCRIPT_DIR}/test-chrome-debug-load-unpacked.sh"
 bash "${SCRIPT_DIR}/test-chrome-debug-cmux-host.sh"
+bash "${SCRIPT_DIR}/test-chrome-debug-cdp-session.sh"
 
 printf 'test-setup-playwright-cli: PASS\n'

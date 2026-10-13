@@ -2,9 +2,11 @@
 
 Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
-Contract stamp: **`chrome-debug-contract: v5`** (see `scripts/chrome-debug.sh` header).
+Contract stamp: **`chrome-debug-contract: v6`** (see `scripts/chrome-debug.sh` header).
 
-v5 adds `owned_by_cmux` when the debug-port listener is `cmux-cdp-proxy`. That path is attach-only and **refuses `--restart`**. macos-dev default-user chrome-debug attach (`owned_by_profile` / free → launch) is unchanged.
+v5 added `owned_by_cmux` when the debug-port listener is `cmux-cdp-proxy` and **refuses `--restart`**. macos-dev default-user chrome-debug attach (`owned_by_profile` / free → launch) is unchanged.
+
+v6 skips `playwright-cli attach` on `owned_by_cmux` after healthy `/json/version`. Recover with `chrome-debug --cdp-list` / `--cdp-eval` / `--cdp-screenshot` (bundled `cdp-session.py`). Optional `--try-cli-attach` is a bounded attach probe only. Do not globally pin `@playwright/cli` below 0.1.20.
 
 The bundled `scripts/chrome-debug.sh` handles Chrome detection, profile management, port health checks, detached launch, and CDP `Extensions.loadUnpacked`. The one-time setup script installs it as a stable user-level `chrome-debug` command. **Do not vendor a second copy in consumer repos.**
 
@@ -166,7 +168,7 @@ chrome-debug --json --explain
 ```
 
 - **`owned_by_profile` (macos-dev / normal chrome-debug):** `playwright-cli kill-all` then `chrome-debug --restart` then `playwright-cli attach`. This path stays on.
-- **`owned_by_cmux`:** do **not** `--restart` and do **not** recycle cmux-devtools Chrome. Re-attach once. If it still times out, `curl` `/json/version` and `/json/list`, print the diagnosis, and stop.
+- **`owned_by_cmux`:** do **not** `--restart` and do **not** recycle cmux-devtools Chrome. Skip `playwright-cli attach` (it can hang on a silent tab). Use `chrome-debug --cdp-list`, then `--cdp-eval` / `--cdp-screenshot` with `--url-contains` or `--target-id`. `--try-cli-attach` is opt-in for upstream regression only.
 
 ## Cloudflare human check on a long-lived debug Chrome
 
@@ -180,7 +182,7 @@ Recognize it when the target tab shows any of these:
 Do not click the checkbox or reload the tab; the Chrome process has to be replaced. Run `chrome-debug --json --explain` and use the host split from [Stale attach sessions](#stale-attach-sessions):
 
 - **`owned_by_profile`:** run the stale-attach restart sequence once. It keeps the same profile and reloads every debug tab, and the new process can pass Cloudflare. A checkbox that appears right after the restart is a fresh check: the user completes it. Do not restart again for it.
-- **`owned_by_cmux`:** leave the browser up and attach only; `--restart` is refused. Report the challenge and stop.
+- **`owned_by_cmux`:** leave the browser up and use `--cdp-*`; `--restart` is refused. Report the challenge and stop.
 
 ## Unpacked extension debugging (Chrome 137+)
 

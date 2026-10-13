@@ -4,6 +4,10 @@ All notable changes to this skill are documented in this file.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-13
+
+- chrome-debug-contract v6: skip `playwright-cli attach` on `owned_by_cmux` after healthy `/json/version`. Recover with bundled `cdp-session.py` via `chrome-debug --cdp-list` / `--cdp-eval` / `--cdp-screenshot`. Optional `--try-cli-attach` is a bounded attach probe only. Do not pin `@playwright/cli` below 0.1.20. `--cdp-screenshot` calls `Target.activateTarget` before `Page.captureScreenshot` so a background tab does not eat the 8s deadline.
+
 ## [1.4.1] - 2026-09-27
 
 - Document the long-lived chrome-debug Cloudflare human-check failure in `references/chrome-debug.md`. On `owned_by_profile`, run the stale-attach restart sequence once instead of clicking or reloading Turnstile; the user completes any checkbox shown after the restart. On `owned_by_cmux`, stay attach-only.
