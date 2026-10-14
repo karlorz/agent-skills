@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.27] - 2026-10-14
+
+### Fixed
+- Keep hosted credentials private and fail closed after an interrupted save, with token and metadata generation binding.
+- Retry hidden MCP calls only for the tested pre-execution session rejection; ambiguous failures never replay a search.
+- Validate pinned approval URLs, private state, finite JSON/SSE responses, source retrieval and standalone installation without changing host MCP configuration.
+
+### Changed
+- Test the bundled CLI on Node 22 and 24, including crash and concurrent-reader regressions, QR decoding and packaged installation.
+
 ## [0.1.26] - 2026-10-13
 
 ### Changed
