@@ -91,8 +91,13 @@ tool capabilities, applies the session header, accepts notification HTTP 202 and
 finite JSON/SSE responses, and prefers structured tool content. Search and
 `get_sources` share the same transport session; `sources_missing` explicitly flags
 an empty source list. Session cleanup is best effort and bounded to one second.
-Only an explicit expired-session HTTP 404 permits one reinitialization; ambiguous
-transport failures and failed source retrieval never replay a paid search.
+Only a pinned MCP 1.29.0 pre-dispatch HTTP 404 permits one reinitialization:
+JSON content type, JSON-RPC `2.0`, `id: "server-error"`, error code `-32600`,
+and exactly `Session not found`, `Not Found: Session has been terminated`, or
+`Not Found: Invalid or expired session ID`, with no additional envelope/error
+fields. Plain/body 404s, application 404s and request-correlated RPC errors are
+terminal ambiguous failures. Dependency upgrades must retest these wire forms.
+Ambiguous transport failures and failed source retrieval never replay a paid search.
 
 Each network request is capped at 30 seconds and 10 MiB; a command aborts active
 requests after 60 seconds or on SIGINT/SIGTERM. Native HTTPS requests never follow

@@ -21,6 +21,22 @@ If no token is found, read commands return `auth_required` instructing the user 
 - Symbolic links (including dangling links and config parents) and unsafe ownership are rejected. Existing modes can only be tightened.
 - Hosted file persistence requires POSIX storage. On Windows use an environment token; the CLI does not claim Unix modes enforce Windows ACLs.
 - Files are updated using exclusive temporary files and atomic replacement.
+- Generated credentials use `token-meta.json` as a durable transaction record:
+  `schemaVersion: 1`, a random `generation`, `tokenSha256`, `status`, origin and
+  expiry. The digest binds the trimmed token; metadata never contains the bearer.
+  The CLI first replaces metadata with `status: "pending"`, then replaces the
+  token, then replaces metadata with `status: "committed"`. Each step syncs file
+  contents and the containing directory before continuing. Readers require a
+  committed record, matching digest and unchanged metadata across the token
+  read. Pending, mismatched and concurrently changing pairs fail closed, including
+  after process termination at either commit boundary.
+- Manually provisioned `http-mcp.token` remains supported without metadata, or
+  with legacy origin/expiry metadata that has no generated transaction fields.
+  An interrupted generated save retains its transaction record and cannot become
+  a manual token by cleanup. Recovery requires a new hosted approval after
+  verifying/removing a dead auth lock and resetting pending auth state. Deliberate
+  manual provisioning may remove generated metadata before supplying a token;
+  removing only the lock does not unblock an incomplete credential pair.
 
 ## Auth Lifecycle
 
@@ -48,6 +64,6 @@ The CLI rejects approval URLs outside the pinned HTTPS origin, invalid or expire
 start responses, private state bound to a different origin, and expired pending
 runs before polling. A live pending approval cannot be overwritten by another
 start. Token metadata derives expiry from the actual `expires_in` response;
-metadata and token must both save before success. Partial save failures return an
-error and discard a partial credential pair. A rejected environment token still
+metadata and token must both commit before success. Partial save failures return an
+error and retain fail-closed pending metadata. A rejected environment token still
 requires updating or unsetting that override; a saved file cannot supersede it.

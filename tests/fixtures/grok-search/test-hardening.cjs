@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync, execFileSync } = require('node:child_process');
+const { spawn, spawnSync, execFileSync } = require('node:child_process');
+const crypto = require('node:crypto');
 const cliPath = path.resolve(__dirname, '../../../skills/grok-search/skills/grok-search/scripts/grok-search.cjs');
 const cli = require(cliPath);
 const origin = 'https://search.karldigi.dev';
@@ -94,7 +95,7 @@ test('status uses actual expires_in and removes pending state only after private
   assert(!result.stdout.includes('dummy-new-access') && !result.stdout.includes(privateSecret));
 });
 
-test('partial credential write fails without leftover temp or usable token', async () => {
+test('partial credential write retains a pending transaction without leftover temp', async () => {
   const result = await fixture(['auth-status'], async () => json({ status: 'success', token: 'dummy-new-access', expires_in: 123 }), ({ home, dir }) => {
     pending(dir);
     fs.symlinkSync(path.join(home, 'missing'), path.join(dir, 'http-mcp.token'));
@@ -102,7 +103,7 @@ test('partial credential write fails without leftover temp or usable token', asy
   assert.equal(result.json.error.code, 'token_save_failed');
   assert.equal(result.pending, true);
   assert(!result.files.some(name => name.startsWith('.tmp-')));
-  assert(!result.files.includes('token-meta.json'));
+  assert.equal(result.meta.status, 'pending');
   assert.equal(result.lock, false);
 });
 
@@ -298,7 +299,7 @@ test('explicit expired-session 404 reinitializes once; a second expiry stops', a
       }
       if (request.method === 'notifications/initialized') return {status:202, headers:{}, body:''};
       tools++;
-      return {status:404, headers:{}, body:'Session not found'};
+      return json({jsonrpc:'2.0',id:'server-error',error:{code:-32600,message:'Session not found'}}, 404);
     });
     const client = new cli.HiddenMcpClient(origin, 'dummy-access', 'env');
     await client.initialize();
@@ -306,4 +307,220 @@ test('explicit expired-session 404 reinitializes once; a second expiry stops', a
     assert.equal(initialized, 2);
     assert.equal(tools, 2, 'one explicit rejection permits only one safe retry');
   } finally { cli.setTransport(null); }
+});
+
+// Exact wire forms asserted against the real MCP 1.29.0 in GrokSearch tests.
+for (const message of ['Session not found', 'Not Found: Session has been terminated', 'Not Found: Invalid or expired session ID']) {
+  test('pinned pre-dispatch rejection permits one retry: ' + message, async () => {
+    let initialized = 0, searches = 0, sources = 0;
+    const result = await fixture(['search', '--query', 'dummy'], async (url, opts, body) => {
+      if (url.includes('/api/v1/')) return {status:404,headers:{},body:'Not Found'};
+      if (opts.method === 'DELETE') return json({});
+      const req = JSON.parse(body);
+      if (req.method === 'initialize') return json({jsonrpc:'2.0',id:req.id,result:{protocolVersion:'2025-03-26',capabilities:{tools:{}}}}, 200, {'mcp-session-id':'session-' + ++initialized});
+      if (req.method === 'notifications/initialized') return {status:202,headers:{},body:''};
+      if (req.params.name === 'web_search') {
+        searches++;
+        if (searches === 1) return json({jsonrpc:'2.0',id:'server-error',error:{code:-32600,message}}, 404);
+        return json({jsonrpc:'2.0',id:req.id,result:{structuredContent:{content:'Dummy answer',session_id:'source-id'}}});
+      }
+      sources++;
+      assert.equal(req.params.name, 'get_sources');
+      assert.equal(req.params.arguments.session_id, 'source-id');
+      return json({jsonrpc:'2.0',id:req.id,result:{structuredContent:{sources:[],sources_count:0}}});
+    });
+    assert.equal(result.json.ok, true);
+    assert.equal(initialized, 2);
+    assert.equal(searches, 2, 'first tool attempt was explicitly rejected before dispatch');
+    assert.equal(sources, 1);
+  });
+}
+
+for (const target of ['web_search', 'get_sources']) {
+  for (const response of [
+    {status:404,headers:{},body:'Session not found'},
+    json({ok:false,error:{code:'upstream_not_found'}},404),
+    json({jsonrpc:'2.0',id:3,error:{code:-32600,message:'Session not found'}},404),
+    json({jsonrpc:'2.0',id:'server-error',error:{code:-32603,message:'Session not found'}},404),
+    json({jsonrpc:'2.0',id:'server-error',error:{code:-32600,message:'Application not found'}},404),
+    json({jsonrpc:'2.0',id:'server-error',error:{code:-32600,message:'Session not found'},result:{}},404),
+  ]) {
+    test('ambiguous MCP 404 never replays ' + target + ': ' + response.body, async () => {
+      let initialized = 0, searches = 0, sources = 0;
+      const result = await fixture(['search','--query','dummy'], async (url,opts,body) => {
+        if (url.includes('/api/v1/')) return {status:404,headers:{},body:'Not Found'};
+        if (opts.method === 'DELETE') return json({});
+        const req = JSON.parse(body);
+        if (req.method === 'initialize') return json({jsonrpc:'2.0',id:req.id,result:{protocolVersion:'2025-03-26',capabilities:{tools:{}}}},200,{'mcp-session-id':'session-' + ++initialized});
+        if (req.method === 'notifications/initialized') return {status:202,headers:{},body:''};
+        if (req.params.name === 'web_search') searches++; else sources++;
+        if (req.params.name === target) return response;
+        return json({jsonrpc:'2.0',id:req.id,result:{structuredContent:{content:'Dummy answer',session_id:'original-source-id'}}});
+      });
+      assert.equal(result.json.error.code, 'transport_error');
+      assert.equal(initialized,1);
+      assert.equal(searches,1);
+      assert.equal(sources,target === 'get_sources' ? 1 : 0);
+    });
+  }
+}
+
+const readerSource = `
+  const cli = require(${JSON.stringify(cliPath)});
+  try {
+    const result = cli.getTokenResolution();
+    process.stdout.write(JSON.stringify({source:result.source,oldTokenAccepted:result.token === 'dummy-old-token',newTokenAccepted:result.token === 'dummy-new-token'}));
+  } catch (err) { process.stdout.write(JSON.stringify({error:err.message})); }
+`;
+function readInChild(home) {
+  const env = {...process.env,HOME:home}; delete env.GROK_SEARCH_MCP_TOKEN;
+  const r = spawnSync(process.execPath, ['-e', readerSource], {env,encoding:'utf8',timeout:5000});
+  assert.equal(r.status,0,r.stderr);
+  return JSON.parse(r.stdout);
+}
+function concurrentReadInChild(home) {
+  const env = {...process.env,HOME:home}; delete env.GROK_SEARCH_MCP_TOKEN;
+  return new Promise((resolve,reject) => {
+    const child = spawn(process.execPath,['-e',readerSource],{env});
+    let stdout = '',stderr = '';
+    child.stdout.on('data',c => stdout += c); child.stderr.on('data',c => stderr += c);
+    child.on('error',reject);
+    child.on('exit',code => {
+      try { assert.equal(code,0,stderr); resolve(JSON.parse(stdout)); } catch (err) { reject(err); }
+    });
+  });
+}
+function seedCrashFixture(root) {
+  const dir = path.join(root,'.config/grok-search');
+  fs.mkdirSync(dir,{recursive:true,mode:0o700});
+  pending(dir);
+  fs.writeFileSync(path.join(dir,'http-mcp.token'),'dummy-old-token\n',{mode:0o600});
+  fs.writeFileSync(path.join(dir,'token-meta.json'),JSON.stringify({origin,expiresAt:'2000-01-01T00:00:00Z'}),{mode:0o600});
+  return dir;
+}
+async function pausedWriter(root,boundary) {
+  const ready = path.join(root,'ready'), release = path.join(root,'release');
+  const script = path.join(root,'writer.cjs');
+  fs.writeFileSync(script, `
+    const fs = require('node:fs');
+    const cli = require(${JSON.stringify(cliPath)});
+    const sync = fs.fsyncSync;
+    let commits = 0;
+    fs.fsyncSync = fd => {
+      sync(fd);
+      if (fs.fstatSync(fd).isDirectory() && ++commits === ${boundary}) {
+        fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
+        const sleeper = new Int32Array(new SharedArrayBuffer(4));
+        while (!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(sleeper,0,0,10);
+      }
+    };
+    cli.setTransport(async () => ({status:200,headers:{},body:JSON.stringify({status:'success',token:'dummy-new-token',expires_in:123})}));
+    cli.run();
+  `);
+  const env = {...process.env,HOME:root}; delete env.GROK_SEARCH_MCP_TOKEN;
+  const child = spawn(process.execPath,[script,'auth-status'],{env,stdio:['ignore','pipe','pipe']});
+  let stdout = '',stderr = '';
+  child.stdout.on('data',c => stdout += c); child.stderr.on('data',c => stderr += c);
+  const exited = new Promise(resolve => child.on('exit',(code,signal) => resolve({code,signal,stdout,stderr})));
+  const deadline = Date.now() + 5000;
+  while (!fs.existsSync(ready) && Date.now() < deadline && child.exitCode === null) await new Promise(resolve => setTimeout(resolve,10));
+  if (!fs.existsSync(ready)) { child.kill('SIGKILL'); await exited; assert.fail('writer did not reach durable commit boundary'); }
+  return {child,exited,release};
+}
+for (const boundary of [1,2]) {
+  test('SIGKILL after durable credential commit ' + boundary + ' fails closed on cold and concurrent reads', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(),'grok-crash-'));
+    let writer;
+    try {
+      const dir = seedCrashFixture(root);
+      assert.equal(readInChild(root).source,'expired');
+      writer = await pausedWriter(root,boundary);
+      const meta = JSON.parse(fs.readFileSync(path.join(dir,'token-meta.json'),'utf8'));
+      assert.equal(meta.status,'pending');
+      assert.match(meta.generation,/^[a-f0-9]{32}$/);
+      assert.equal(meta.tokenSha256,crypto.createHash('sha256').update('dummy-new-token').digest('hex'));
+      assert(!JSON.stringify(meta).includes('dummy-new-token'));
+      const readers = await Promise.all(Array.from({length:8},() => concurrentReadInChild(root)));
+      for (const reader of readers) assert.equal(reader.error,'credential_save_incomplete','concurrent readers while writer is live');
+      writer.child.kill('SIGKILL');
+      const result = await writer.exited;
+      assert.equal(result.signal,'SIGKILL');
+      assert.equal(result.stdout,''); assert.equal(result.stderr,'');
+      assert(fs.existsSync(path.join(dir,'cli-auth.lock')));
+      assert(fs.existsSync(path.join(dir,'cli-auth.json')));
+      assert.equal(readInChild(root).error,'credential_save_incomplete');
+      // Clearing only a verified-dead auth lock cannot resurrect this pair.
+      fs.unlinkSync(path.join(dir,'cli-auth.lock'));
+      assert.equal(readInChild(root).error,'credential_save_incomplete');
+      for (const file of ['http-mcp.token','token-meta.json']) assert.equal(fs.statSync(path.join(dir,file)).mode & 0o777,0o600);
+    } finally { if (writer && writer.child.exitCode === null) writer.child.kill('SIGKILL'); fs.rmSync(root,{recursive:true,force:true}); }
+  });
+}
+
+test('completed generated pair resolves only matching bearer; manual token compatibility remains explicit', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(),'grok-bound-pair-'));
+  let writer;
+  try {
+    const dir = seedCrashFixture(root);
+    writer = await pausedWriter(root,2);
+    assert.equal(readInChild(root).error,'credential_save_incomplete');
+    fs.writeFileSync(writer.release,'release');
+    const result = await writer.exited;
+    assert.equal(result.code,0,result.stderr);
+    assert.equal(JSON.parse(result.stdout).data.status,'authenticated');
+    assert(!result.stdout.includes('dummy-new-token'));
+    assert.equal(readInChild(root).newTokenAccepted,true);
+    fs.writeFileSync(path.join(dir,'http-mcp.token'),'dummy-old-token\n');
+    assert.equal(readInChild(root).error,'credential_pair_mismatch');
+    fs.unlinkSync(path.join(dir,'http-mcp.token'));
+    assert.equal(readInChild(root).error,'credential_pair_mismatch');
+    // Manual provisioning intentionally removes generated metadata, then writes
+    // its own token; a crashed writer never removes the transaction record.
+    fs.unlinkSync(path.join(dir,'token-meta.json'));
+    fs.writeFileSync(path.join(dir,'http-mcp.token'),'dummy-manual-token\n',{mode:0o600});
+    assert.equal(readInChild(root).source,'file');
+  } finally { if (writer && writer.child.exitCode === null) writer.child.kill('SIGKILL'); fs.rmSync(root,{recursive:true,force:true}); }
+});
+
+test('reader spanning a completed credential transaction cannot combine old bearer with new expiry', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(),'grok-reader-race-'));
+  let reader;
+  try {
+    seedCrashFixture(root);
+    const ready = path.join(root,'reader-ready'),release = path.join(root,'reader-release');
+    const script = path.join(root,'reader.cjs');
+    fs.writeFileSync(script, `
+      const fs = require('node:fs');
+      const original = fs.readFileSync;
+      let paused = false;
+      fs.readFileSync = (...args) => {
+        const result = original(...args);
+        if (!paused && result === 'dummy-old-token\\n') {
+          paused = true;
+          fs.writeFileSync(${JSON.stringify(ready)},'ready');
+          const sleeper = new Int32Array(new SharedArrayBuffer(4));
+          while (!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(sleeper,0,0,10);
+        }
+        return result;
+      };
+      ${readerSource}
+    `);
+    const env = {...process.env,HOME:root}; delete env.GROK_SEARCH_MCP_TOKEN;
+    reader = spawn(process.execPath,[script],{env});
+    let stdout = '',stderr = '';
+    reader.stdout.on('data',c => stdout += c); reader.stderr.on('data',c => stderr += c);
+    const exited = new Promise(resolve => reader.on('exit',code => resolve(code)));
+    const deadline = Date.now() + 5000;
+    while (!fs.existsSync(ready) && Date.now() < deadline && reader.exitCode === null) await new Promise(resolve => setTimeout(resolve,10));
+    assert(fs.existsSync(ready),'reader did not pause at token snapshot');
+    const writer = await pausedWriter(root,2);
+    fs.writeFileSync(writer.release,'release');
+    const written = await writer.exited;
+    assert.equal(written.code,0,written.stderr);
+    assert.equal(readInChild(root).newTokenAccepted,true);
+    fs.writeFileSync(release,'release');
+    assert.equal(await exited,0,stderr);
+    assert.equal(JSON.parse(stdout).error,'credential_save_incomplete');
+    assert(!stdout.includes('dummy-old-token') && !stdout.includes('dummy-new-token'));
+  } finally { if (reader && reader.exitCode === null) reader.kill('SIGKILL'); fs.rmSync(root,{recursive:true,force:true}); }
 });

@@ -79,13 +79,16 @@ function atomicWriteFile(targetPath, content, mode = 0o600) {
   const tmpPath = path.join(path.dirname(targetPath), `.tmp-${crypto.randomBytes(16).toString('hex')}`);
   let fd;
   try {
-    fd = fs.openSync(tmpPath, 'wx', mode);
+    fd = fs.openSync(tmpPath, 'wx', old ? mode & old.mode : mode);
     fs.writeFileSync(fd, content, { encoding: 'utf8' });
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = undefined;
     checkSafePath(targetPath);
     fs.renameSync(tmpPath, targetPath);
+    // Persist the directory entry before the next credential transaction step.
+    const dirFd = fs.openSync(path.dirname(targetPath), fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+    try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
     try { fs.unlinkSync(tmpPath); } catch (err) { if (err.code !== 'ENOENT') throw err; }
@@ -143,13 +146,32 @@ function getTokenResolution() {
   }
   const configDir = resolveConfigDir();
   const tokenFile = path.join(configDir, 'http-mcp.token');
+  const metaFile = path.join(configDir, 'token-meta.json');
+  const metaRaw = readPrivateFile(metaFile);
+  let meta;
+  if (metaRaw !== null) {
+    try { meta = JSON.parse(metaRaw); } catch (_) { throw new Error('invalid_token_metadata'); }
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('invalid_token_metadata');
+    if (meta.origin !== DEFAULT_ORIGIN) throw new Error('invalid_token_origin');
+    // Generated metadata is also the durable transaction record. Legacy manual
+    // metadata has none of these fields; a partial generated record is invalid.
+    if (['schemaVersion', 'generation', 'tokenSha256', 'status'].some(key => Object.hasOwn(meta, key))) {
+      if (meta.schemaVersion !== 1 || !/^[a-f0-9]{32}$/.test(meta.generation || '') ||
+          !/^[a-f0-9]{64}$/.test(meta.tokenSha256 || '') || !Number.isFinite(Date.parse(meta.expiresAt))) {
+        throw new Error('invalid_token_metadata');
+      }
+      if (meta.status !== 'committed') throw new Error('credential_save_incomplete');
+    }
+  }
   const raw = readPrivateFile(tokenFile);
+  // A reader racing any of the writer's commits must fail closed, including a
+  // manually provisioned token transitioning into its first generated pair.
+  if (metaRaw !== readPrivateFile(metaFile)) throw new Error('credential_save_incomplete');
+  if (meta?.tokenSha256 && (!raw || crypto.createHash('sha256').update(raw.trim()).digest('hex') !== meta.tokenSha256)) {
+    throw new Error('credential_pair_mismatch');
+  }
   if (raw && raw.trim()) {
-    const metaRaw = readPrivateFile(path.join(configDir, 'token-meta.json'));
-    if (metaRaw) {
-      let meta;
-      try { meta = JSON.parse(metaRaw); } catch (_) { throw new Error('invalid_token_metadata'); }
-      if (meta.origin !== DEFAULT_ORIGIN) throw new Error('invalid_token_origin');
+    if (meta) {
       if (meta.expiresAt && (!Number.isFinite(Date.parse(meta.expiresAt)) || Date.parse(meta.expiresAt) <= Date.now())) {
         return { token: null, source: 'expired' };
       }
@@ -432,6 +454,19 @@ function decodeMcpResponse(contentType, text, expectedId) {
   return payload;
 }
 
+function isPinnedSessionRejection(res) {
+  // MCP 1.29.0 manager/transport reject these envelopes before tool dispatch.
+  // A plain body, application 404, or request-correlated RPC error is ambiguous.
+  if (res.headers['content-type']?.split(';')[0].trim() !== 'application/json') return false;
+  let rpc;
+  try { rpc = JSON.parse(res.body); } catch (_) { return false; }
+  return rpc?.jsonrpc === '2.0' && rpc.id === 'server-error' &&
+    Object.keys(rpc).sort().join(',') === 'error,id,jsonrpc' &&
+    rpc.error?.code === -32600 && Object.keys(rpc.error).sort().join(',') === 'code,message' &&
+    ['Session not found', 'Not Found: Session has been terminated',
+      'Not Found: Invalid or expired session ID'].includes(rpc.error.message);
+}
+
 class HiddenMcpClient {
   constructor(origin, token, tokenSource) {
     this.origin = origin.replace(/\/+$/, '');
@@ -460,7 +495,8 @@ class HiddenMcpClient {
 
     if (res.status === 401) handleUnauthorizedToken(this.tokenSource);
 
-    if (res.status === 404 && this.sessionId && bodyObj.method === 'tools/call') throw new Error('mcp_session_expired');
+    if (res.status === 404 && this.sessionId && bodyObj.method === 'tools/call' &&
+        isPinnedSessionRejection(res)) throw new Error('mcp_session_expired');
 
     if (res.status === 202 && bodyObj.id === undefined) {
       return { status: 202, payload: null };
@@ -764,19 +800,22 @@ function persistClaimedToken(configDir, pendingFile, origin, data) {
     if (!expiresAt || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now()) throw new Error('invalid_token_expiry');
 
     const meta = {
+      schemaVersion: 1,
+      generation: crypto.randomBytes(16).toString('hex'),
+      tokenSha256: crypto.createHash('sha256').update(token.trim()).digest('hex'),
+      status: 'pending',
       origin: origin || DEFAULT_ORIGIN,
       expiresAt,
       updatedAt: new Date().toISOString(),
     };
     atomicWriteFile(metaFile, JSON.stringify(meta, null, 2), 0o600);
     atomicWriteFile(tokenFile, token.trim() + '\n', 0o600);
+    atomicWriteFile(metaFile, JSON.stringify({ ...meta, status: 'committed' }, null, 2), 0o600);
 
     try { fs.unlinkSync(pendingFile); } catch (_) {}
   } catch (writeErr) {
-    // A partial pair must not be accepted as a successful credential save.
-    for (const file of [tokenFile, metaFile]) {
-      try { if (checkSafePath(file)?.isFile()) fs.unlinkSync(file); } catch (_) {}
-    }
+    // Keep the durable pending record on failure/crash. Deleting metadata could
+    // make an old or partially replaced token look manually provisioned.
     outputError('token_save_failed', 'Failed to save token and metadata. Run auth-start again if collection was consumed.', { exitCode: 1 });
   }
 
@@ -1140,7 +1179,7 @@ async function executeCommand(clients) {
 async function run() {
   try { await main(); } catch (err) {
     if (err instanceof CliExit) { process.exitCode = err.exitCode; return; }
-    const code = /^(symlink_rejected|unsafe_owner|unsafe_path|unsafe_file|secure_storage_unavailable|invalid_token_origin|invalid_token_metadata)/.exec(err.message || '');
+    const code = /^(symlink_rejected|unsafe_owner|unsafe_path|unsafe_file|secure_storage_unavailable|invalid_token_origin|invalid_token_metadata|credential_save_incomplete|credential_pair_mismatch)/.exec(err.message || '');
     process.stdout.write(JSON.stringify({ ok: false, error: { code: code ? code[1] : 'transport_error', message: 'Command failed. Verify private state or service availability; an ambiguous search must not be replayed automatically.', retryable: false } }) + '\n');
     process.exitCode = 1;
   }
