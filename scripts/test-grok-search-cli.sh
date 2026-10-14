@@ -10,5 +10,5 @@ if [[ ! -f "$FIXTURE" ]]; then
   exit 1
 fi
 
-node --test "$FIXTURE"
+node --test "$FIXTURE" "$ROOT/tests/fixtures/grok-search/test-hardening.cjs"
 printf 'test-grok-search-cli: all checks passed\n'

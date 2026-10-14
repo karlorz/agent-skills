@@ -6,7 +6,8 @@ const path = require('path');
 const os = require('os');
 const https = require('https');
 const http = require('http');
-const tty = require('tty');
+const crypto = require('crypto');
+const net = require('net');
 
 const DEFAULT_ORIGIN = 'https://search.karldigi.dev';
 const MCP_PATH = '/mcp';
@@ -19,6 +20,7 @@ const OVERALL_TIMEOUT_MS = 60000;
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10MB limit
 
 let activeTransport = null;
+const activeRequests = new Set();
 
 function setTransport(fn) {
   activeTransport = fn;
@@ -30,45 +32,93 @@ function resolveConfigDir() {
 }
 
 function checkSafePath(targetPath) {
-  if (fs.existsSync(targetPath)) {
-    const stat = fs.lstatSync(targetPath);
-    if (stat.isSymbolicLink()) {
-      throw new Error(`symlink_rejected: ${targetPath} must not be a symbolic link`);
-    }
+  let stat;
+  try { stat = fs.lstatSync(targetPath); } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
   }
+  if (stat.isSymbolicLink()) throw new Error('symlink_rejected: Credential paths must not be symbolic links');
+  if (process.platform !== 'win32' && stat.uid !== process.getuid()) {
+    throw new Error('unsafe_owner: Credential paths must be owned by the current user');
+  }
+  return stat;
 }
 
 function ensureConfigDir() {
+  if (process.platform === 'win32') throw new Error('secure_storage_unavailable: Use an environment token; POSIX storage is required for hosted auth');
   const dir = resolveConfigDir();
-  checkSafePath(dir);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  } else {
-    const stat = fs.statSync(dir);
-    if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) {
-      fs.chmodSync(dir, 0o700);
-    }
+  const parent = path.dirname(dir);
+  for (const target of [parent, dir]) {
+    const stat = checkSafePath(target);
+    if (stat && !stat.isDirectory()) throw new Error('unsafe_path: Expected a credential directory');
+    if (!stat) fs.mkdirSync(target, { mode: 0o700 });
   }
+  const stat = fs.statSync(dir);
+  if (stat.mode & 0o077) fs.chmodSync(dir, 0o700);
   return dir;
 }
 
-function atomicWriteFile(targetPath, content, mode = 0o600) {
-  checkSafePath(targetPath);
-  const dir = path.dirname(targetPath);
+function readPrivateFile(targetPath) {
   ensureConfigDir();
-  const tmpName = `.tmp-${path.basename(targetPath)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const tmpPath = path.join(dir, tmpName);
-
-  const fd = fs.openSync(tmpPath, 'wx', mode);
+  const stat = checkSafePath(targetPath);
+  if (!stat) return null;
+  if (!stat.isFile() || stat.size > 65536) throw new Error('unsafe_file: Invalid credential file');
+  const fd = fs.openSync(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   try {
+    const actual = fs.fstatSync(fd);
+    if (actual.uid !== process.getuid() || !actual.isFile() || actual.size > 65536) throw new Error('unsafe_file');
+    if (actual.mode & 0o077) fs.fchmodSync(fd, 0o600);
+    return fs.readFileSync(fd, 'utf8');
+  } finally { fs.closeSync(fd); }
+}
+
+function atomicWriteFile(targetPath, content, mode = 0o600) {
+  ensureConfigDir();
+  const old = checkSafePath(targetPath);
+  if (old && !old.isFile()) throw new Error('unsafe_file');
+  const tmpPath = path.join(path.dirname(targetPath), `.tmp-${crypto.randomBytes(16).toString('hex')}`);
+  let fd;
+  try {
+    fd = fs.openSync(tmpPath, 'wx', mode);
     fs.writeFileSync(fd, content, { encoding: 'utf8' });
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    checkSafePath(targetPath);
+    fs.renameSync(tmpPath, targetPath);
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+    try { fs.unlinkSync(tmpPath); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+  }
+}
+
+async function withAuthLock(action) {
+  const dir = ensureConfigDir();
+  const lockPath = path.join(dir, 'cli-auth.lock');
+  checkSafePath(lockPath);
+  let fd;
+  try { fd = fs.openSync(lockPath, 'wx', 0o600); } catch (err) {
+    outputError('concurrent_auth_start', 'Another auth command holds the lock. Retry after it exits; remove a stale lock only after verifying that process has stopped.');
+  }
+  try {
+    fs.writeFileSync(fd, String(process.pid));
+    return await action();
   } finally {
     fs.closeSync(fd);
+    fs.unlinkSync(lockPath);
   }
-  if (process.platform !== 'win32') {
-    fs.chmodSync(tmpPath, mode);
+}
+
+function readPendingState() {
+  const raw = readPrivateFile(path.join(resolveConfigDir(), 'cli-auth.json'));
+  if (raw === null) return null;
+  let state;
+  try { state = JSON.parse(raw); } catch (_) { outputError('corrupted_auth_state', 'Invalid private auth state; start a new approval after removing this file.'); }
+  if (state.origin !== DEFAULT_ORIGIN || typeof state.authRunId !== 'string' || !state.authRunId || state.authRunId.length > 256 ||
+      typeof state.pollSecret !== 'string' || !state.pollSecret || state.pollSecret.length > 512 || !Number.isFinite(Date.parse(state.expiresAt))) {
+    outputError('corrupted_auth_state', 'Private auth state has invalid fields or origin.');
   }
-  fs.renameSync(tmpPath, targetPath);
+  return state;
 }
 
 function withInviteQuery(approveUrl, inviteCode) {
@@ -93,23 +143,30 @@ function getTokenResolution() {
   }
   const configDir = resolveConfigDir();
   const tokenFile = path.join(configDir, 'http-mcp.token');
-  if (fs.existsSync(tokenFile)) {
-    checkSafePath(tokenFile);
-    const stat = fs.statSync(tokenFile);
-    if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) {
-      fs.chmodSync(tokenFile, 0o600);
+  const raw = readPrivateFile(tokenFile);
+  if (raw && raw.trim()) {
+    const metaRaw = readPrivateFile(path.join(configDir, 'token-meta.json'));
+    if (metaRaw) {
+      let meta;
+      try { meta = JSON.parse(metaRaw); } catch (_) { throw new Error('invalid_token_metadata'); }
+      if (meta.origin !== DEFAULT_ORIGIN) throw new Error('invalid_token_origin');
+      if (meta.expiresAt && (!Number.isFinite(Date.parse(meta.expiresAt)) || Date.parse(meta.expiresAt) <= Date.now())) {
+        return { token: null, source: 'expired' };
+      }
     }
-    const token = fs.readFileSync(tokenFile, 'utf8').trim();
-    if (token) {
-      return { token, source: 'file' };
-    }
+    return { token: raw.trim(), source: 'file' };
   }
   return { token: null, source: 'none' };
 }
 
+class CliExit extends Error {
+  constructor(exitCode) { super('EXIT_' + exitCode); this.exitCode = exitCode; }
+}
+
 function outputJson(obj, exitCode = 0) {
   process.stdout.write(JSON.stringify(obj) + '\n');
-  process.exit(exitCode);
+  // Unwind finally blocks before the executable exits (locks/session cleanup).
+  throw new CliExit(exitCode);
 }
 
 function outputError(code, message, options = {}) {
@@ -170,7 +227,7 @@ function validateUserUrl(rawUrl) {
   try {
     parsed = new URL(rawUrl);
   } catch (_) {
-    throw new Error(`invalid_url: Target URL '${rawUrl}' is not a valid URL`);
+    throw new Error('invalid_url: Target URL is not a valid URL');
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error(`invalid_url: Target URL protocol must be http: or https:, got '${parsed.protocol}'`);
@@ -178,18 +235,27 @@ function validateUserUrl(rawUrl) {
   if (parsed.username || parsed.password) {
     throw new Error('invalid_url: Target URL must not contain embedded credentials');
   }
-  const hostname = parsed.hostname.toLowerCase();
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
     hostname === '::1' ||
     hostname === '0.0.0.0' ||
     hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local')
+    hostname.endsWith('.local') ||
+    (net.isIP(hostname) === 4 && /^(0|10|127|169\.254|172\.(1[6-9]|2\d|3[01])|192\.168)(\.|$)/.test(hostname)) ||
+    (net.isIP(hostname) === 6 && (/^(::|f[cd]|fe[89ab])/.test(hostname)))
   ) {
     throw new Error(`invalid_url: Target URL hostname '${parsed.hostname}' is not permitted`);
   }
   return rawUrl;
+}
+
+function handleUnauthorizedToken(tokenSource) {
+  if (tokenSource === 'env') {
+    outputError('env_token_rejected', 'GROK_SEARCH_MCP_TOKEN environment variable was rejected (401). Update or unset the environment override; a file token cannot supersede it.');
+  }
+  outputError('auth_required', 'GrokSearch authentication token is invalid or expired. Run auth-start to authenticate.');
 }
 
 async function requestRestEndpoint(origin, endpoint, token, tokenSource, bodyObj) {
@@ -208,13 +274,13 @@ async function requestRestEndpoint(origin, endpoint, token, tokenSource, bodyObj
     try {
       parsed = JSON.parse(res.body);
     } catch (err) {
-      outputError('invalid_rest_response', 'REST response returned invalid JSON: ' + err.message, { exitCode: 1 });
+      outputError('invalid_rest_response', 'REST response returned invalid JSON', { exitCode: 1 });
     }
     if (parsed && typeof parsed === 'object' && parsed.ok === true) {
       return { success: true, data: parsed.data };
     }
     if (parsed && typeof parsed === 'object' && parsed.ok === false && parsed.error) {
-      outputError(parsed.error.code || 'api_error', parsed.error.message || 'REST API returned error', {
+      outputError('api_error', 'REST API returned an application error', {
         exitCode: 1,
         retryable: !!parsed.error.retryable,
       });
@@ -222,21 +288,7 @@ async function requestRestEndpoint(origin, endpoint, token, tokenSource, bodyObj
     outputError('invalid_rest_response', 'REST response did not match expected envelope', { exitCode: 1 });
   }
 
-  if (res.status === 401) {
-    if (tokenSource === 'env') {
-      outputError(
-        'env_token_rejected',
-        'GROK_SEARCH_MCP_TOKEN environment variable was rejected (401). Update or unset the environment override; a file token cannot supersede it.',
-        { exitCode: 1, retryable: false }
-      );
-    } else {
-      outputError(
-        'auth_required',
-        'GrokSearch authentication token is invalid or expired. Run auth-start to authenticate.',
-        { exitCode: 1, retryable: false }
-      );
-    }
-  }
+  if (res.status === 401) handleUnauthorizedToken(tokenSource);
 
   if (res.status === 403) {
     outputError('forbidden', 'Access to REST endpoint was forbidden (403)', { exitCode: 1 });
@@ -258,9 +310,9 @@ async function requestRestEndpoint(origin, endpoint, token, tokenSource, bodyObj
 
     if (parsedBody && typeof parsedBody === 'object') {
       if (parsedBody.ok === false && parsedBody.error) {
-        outputError(parsedBody.error.code || 'not_found', parsedBody.error.message || 'Resource not found', { exitCode: 1 });
+        outputError('not_found', 'REST API returned an application error', { exitCode: 1 });
       }
-      if (parsedBody.code === 'not_found' || parsedBody.error === 'not_found') {
+      if (parsedBody.error || parsedBody.code) {
         outputError('not_found', 'Resource not found', { exitCode: 1 });
       }
     }
@@ -282,6 +334,7 @@ function parseCliArgs(argv) {
     const arg = args[i];
     if (arg.startsWith('--')) {
       const key = arg.slice(2);
+      if (Object.hasOwn(options, key)) throw new Error('duplicate_option: Each option may appear once');
       if (i + 1 < args.length && !args[i + 1].startsWith('--')) {
         options[key] = args[i + 1];
         i++;
@@ -292,10 +345,15 @@ function parseCliArgs(argv) {
       throw new Error(`unknown_argument: unexpected positional argument ${arg}`);
     }
   }
+  for (const value of Object.values(options)) {
+    if (typeof value !== 'string' || !value.trim()) throw new Error('invalid_option: Options require non-empty values');
+  }
   return { command, options };
 }
 
 function performHttpRequest(reqUrl, reqOptions, body) {
+  const serviceUrl = new URL(reqUrl);
+  if (serviceUrl.origin !== DEFAULT_ORIGIN || serviceUrl.username || serviceUrl.password) throw new Error('service_origin_rejected');
   if (activeTransport) {
     return activeTransport(reqUrl, reqOptions, body);
   }
@@ -314,6 +372,7 @@ function performHttpRequest(reqUrl, reqOptions, body) {
       timeout: reqOptions.timeout || REQUEST_TIMEOUT_MS,
     };
 
+    const deadline = setTimeout(() => req.destroy(new Error('request_timeout')), reqOptions.timeout || REQUEST_TIMEOUT_MS);
     const req = lib.request(opts, (res) => {
       let rawData = '';
       let bytesCount = 0;
@@ -326,7 +385,11 @@ function performHttpRequest(reqUrl, reqOptions, body) {
         }
         rawData += chunk;
       });
+      res.on('aborted', () => req.destroy(new Error('response_aborted')));
+      res.on('error', () => req.destroy(new Error('response_error')));
       res.on('end', () => {
+        clearTimeout(deadline);
+        activeRequests.delete(req);
         resolve({
           status: res.statusCode,
           headers: res.headers,
@@ -335,11 +398,14 @@ function performHttpRequest(reqUrl, reqOptions, body) {
       });
     });
 
+    activeRequests.add(req);
     req.on('timeout', () => {
       req.destroy();
       reject(new Error('request_timeout'));
     });
     req.on('error', (err) => {
+      clearTimeout(deadline);
+      activeRequests.delete(req);
       reject(err);
     });
 
@@ -350,21 +416,20 @@ function performHttpRequest(reqUrl, reqOptions, body) {
   });
 }
 
-function decodeMcpResponse(contentType, text) {
+function decodeMcpResponse(contentType, text, expectedId) {
+  let messages;
   if (contentType && contentType.includes('text/event-stream')) {
-    const lines = text.split(/\r?\n/);
-    const dataLines = [];
-    for (const line of lines) {
-      if (line.startsWith('data:')) {
-        dataLines.push(line.slice(5).trim());
-      }
-    }
-    if (dataLines.length === 0) {
-      throw new Error('empty_event_stream');
-    }
-    return JSON.parse(dataLines[dataLines.length - 1]);
+    messages = text.split(/\r?\n\r?\n/).map(event => {
+      const data = event.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+      if (!data) return null;
+      return JSON.parse(data);
+    }).filter(Boolean);
+  } else {
+    messages = [JSON.parse(text)];
   }
-  return JSON.parse(text);
+  const payload = expectedId === undefined ? messages.find(m => m.id !== undefined) : messages.find(m => m.id === expectedId);
+  if (!payload || payload.jsonrpc !== '2.0' || (!payload.result && !payload.error)) throw new Error('mcp_response_mismatch');
+  return payload;
 }
 
 class HiddenMcpClient {
@@ -375,13 +440,14 @@ class HiddenMcpClient {
     this.mcpUrl = `${this.origin}${MCP_PATH}`;
     this.sessionId = null;
     this.nextRequestId = 1;
+    this.protocolVersion = MCP_PROTOCOL_VERSION;
   }
 
   async postMcp(bodyObj, headers = {}) {
     const reqHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/event-stream',
-      'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
+      'MCP-Protocol-Version': this.protocolVersion,
       'Authorization': `Bearer ${this.token}`,
       ...headers,
     };
@@ -392,23 +458,11 @@ class HiddenMcpClient {
     const payload = JSON.stringify(bodyObj);
     const res = await performHttpRequest(this.mcpUrl, { method: 'POST', headers: reqHeaders }, payload);
 
-    if (res.status === 401) {
-      if (this.tokenSource === 'env') {
-        outputError(
-          'env_token_rejected',
-          'GROK_SEARCH_MCP_TOKEN environment variable was rejected (401). Update or unset the environment override; a file token cannot supersede it.',
-          { exitCode: 1, retryable: false }
-        );
-      } else {
-        outputError(
-          'auth_required',
-          'GrokSearch authentication token is invalid or expired. Run auth-start to authenticate.',
-          { exitCode: 1, retryable: false }
-        );
-      }
-    }
+    if (res.status === 401) handleUnauthorizedToken(this.tokenSource);
 
-    if (res.status === 202) {
+    if (res.status === 404 && this.sessionId && bodyObj.method === 'tools/call') throw new Error('mcp_session_expired');
+
+    if (res.status === 202 && bodyObj.id === undefined) {
       return { status: 202, payload: null };
     }
 
@@ -426,10 +480,10 @@ class HiddenMcpClient {
     }
 
     try {
-      const decoded = decodeMcpResponse(res.headers['content-type'], res.body);
+      const decoded = decodeMcpResponse(res.headers['content-type'], res.body, bodyObj.id);
       return { status: res.status, payload: decoded };
     } catch (err) {
-      outputError('invalid_mcp_response', 'Failed to decode MCP JSON/SSE response: ' + err.message, { exitCode: 1 });
+      outputError('invalid_mcp_response', 'Invalid or mismatched MCP JSON/SSE response', { exitCode: 1 });
     }
   }
 
@@ -448,11 +502,17 @@ class HiddenMcpClient {
     const res = await this.postMcp(initBody);
     const payload = res.payload;
     if (payload.error) {
-      outputError('mcp_initialize_failed', payload.error.message || 'Initialize failed', {
+      outputError('mcp_initialize_failed', 'MCP initialize failed', {
         exitCode: 1,
-        code: payload.error.code,
+        rpcCode: payload.error.code,
       });
     }
+
+    if (!payload || !payload.result || payload.result.protocolVersion !== MCP_PROTOCOL_VERSION ||
+        !payload.result.capabilities || !payload.result.capabilities.tools || typeof payload.result.capabilities.tools !== 'object' || Array.isArray(payload.result.capabilities.tools)) {
+      outputError('unsupported_mcp_protocol', 'Server did not negotiate the supported MCP tool protocol.');
+    }
+    this.protocolVersion = payload.result.protocolVersion;
 
     const notifBody = {
       jsonrpc: '2.0',
@@ -462,7 +522,18 @@ class HiddenMcpClient {
     await this.postMcp(notifBody);
   }
 
-  async callTool(name, args) {
+  async close() {
+    if (!this.sessionId) return;
+    try {
+      await performHttpRequest(this.mcpUrl, { method: 'DELETE', timeout: 1000, headers: {
+        Authorization: `Bearer ${this.token}`, 'Mcp-Session-Id': this.sessionId, 'MCP-Protocol-Version': this.protocolVersion,
+      }});
+    } catch (_) { /* Cleanup never replays a tool or changes its outcome. */ }
+    this.sessionId = null;
+  }
+
+  async callTool(name, args, reinitialized = false) {
+    if (!['web_search', 'get_sources', 'web_fetch', 'web_map'].includes(name)) throw new Error('unsupported_tool');
     const reqBody = {
       jsonrpc: '2.0',
       id: this.nextRequestId++,
@@ -473,23 +544,34 @@ class HiddenMcpClient {
       },
     };
 
-    const res = await this.postMcp(reqBody);
+    let res;
+    try { res = await this.postMcp(reqBody); } catch (err) {
+      if (err.message !== 'mcp_session_expired' || reinitialized) throw err;
+      this.sessionId = null;
+      await this.initialize();
+      return this.callTool(name, args, true);
+    }
     const payload = res.payload;
     if (payload.error) {
-      outputError('tool_call_error', payload.error.message || 'Tool call error', {
+      outputError('tool_call_error', 'MCP tool call failed', {
         exitCode: 1,
         tool: name,
-        code: payload.error.code,
+        rpcCode: payload.error.code,
       });
     }
 
     const result = payload.result || {};
     if (result.isError) {
-      let msg = 'Tool returned error';
-      if (Array.isArray(result.content) && result.content[0] && result.content[0].text) {
-        msg = result.content[0].text;
+      outputError('tool_error', 'MCP tool reported failure', { exitCode: 1, tool: name });
+    }
+    if (result.structuredContent !== undefined) {
+      const structured = result.structuredContent;
+      if (name === 'web_fetch' || name === 'web_map') {
+        const text = typeof structured === 'string' ? structured : structured?.result ?? structured?.content;
+        if (typeof text !== 'string') outputError('invalid_tool_result', 'Expected text from the requested tool.');
+        return text;
       }
-      outputError('tool_error', msg, { exitCode: 1, tool: name });
+      return structured;
     }
 
     let parsed = null;
@@ -513,32 +595,12 @@ class HiddenMcpClient {
 async function handleAuthStart(authOptions = {}) {
   const origin = DEFAULT_ORIGIN;
   const configDir = resolveConfigDir();
-  ensureConfigDir();
 
-  const lockPath = path.join(configDir, 'cli-auth.lock');
-  checkSafePath(lockPath);
-  let lockFd = null;
-  try {
-    lockFd = fs.openSync(lockPath, 'wx', 0o600);
-  } catch (err) {
-    if (err.code === 'EEXIST') {
-      try {
-        const stat = fs.statSync(lockPath);
-        if (Date.now() - stat.mtimeMs < 60000) {
-          outputError('concurrent_auth_start', 'Another authentication session is currently in progress.', { exitCode: 1 });
-        } else {
-          fs.unlinkSync(lockPath);
-          lockFd = fs.openSync(lockPath, 'wx', 0o600);
-        }
-      } catch (_) {
-        outputError('concurrent_auth_start', 'Another authentication session is currently in progress.', { exitCode: 1 });
-      }
-    } else {
-      outputError('lock_failed', 'Failed to acquire auth lock: ' + err.message, { exitCode: 1 });
+  return withAuthLock(async () => {
+    const existing = readPendingState();
+    if (existing && Date.parse(existing.expiresAt) > Date.now()) {
+      outputError('concurrent_auth_start', 'A live approval is pending. Run auth-status or wait for expiry.');
     }
-  }
-
-  try {
     const startUrl = `${origin}/auth/cli/start`;
     const startPayload = {};
     if (authOptions.agentId) {
@@ -553,20 +615,27 @@ async function handleAuthStart(authOptions = {}) {
     }, JSON.stringify(startPayload));
 
     if (res.status < 200 || res.status >= 300) {
-      outputError('auth_start_failed', `Failed to start auth flow (HTTP ${res.status}): ${res.body}`, { exitCode: 1 });
+      outputError('auth_start_failed', `Failed to start auth flow (HTTP ${res.status})`, { exitCode: 1 });
     }
 
     let startData;
     try {
       startData = JSON.parse(res.body);
     } catch (e) {
-      outputError('invalid_auth_start_response', 'Invalid JSON from auth start: ' + e.message, { exitCode: 1 });
+      outputError('invalid_auth_start_response', 'Invalid JSON from auth start', { exitCode: 1 });
     }
 
     const { authRunId, pollSecret, pairingCode, expiresAt, intervalSeconds } = startData;
     let approveUrl = startData.approveUrl;
-    if (!approveUrl || !authRunId || !pollSecret) {
-      outputError('invalid_auth_start_response', 'Auth start response missing required fields', { exitCode: 1 });
+    let approval;
+    try { approval = new URL(approveUrl); } catch (_) {}
+    if (!approval || approval.origin !== DEFAULT_ORIGIN || approval.username || approval.password ||
+        approval.pathname !== '/auth/cli/approve' || approveUrl.includes(pollSecret) ||
+        typeof authRunId !== 'string' || !authRunId || authRunId.length > 256 ||
+        typeof pollSecret !== 'string' || !pollSecret || pollSecret.length > 512 ||
+        !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now() ||
+        Date.parse(expiresAt) > Date.now() + 600000 || !Number.isInteger(intervalSeconds) || intervalSeconds < 1 || intervalSeconds > 60) {
+      outputError('invalid_auth_start_response', 'Auth start response contains invalid fields, origin, expiry or poll interval', { exitCode: 1 });
     }
     approveUrl = withInviteQuery(approveUrl, authOptions.inviteCode);
 
@@ -575,8 +644,8 @@ async function handleAuthStart(authOptions = {}) {
       pollSecret,
       origin,
       approveUrl,
-      expiresAt: expiresAt || new Date(Date.now() + 600000).toISOString(),
-      intervalSeconds: intervalSeconds || 5,
+      expiresAt,
+      intervalSeconds,
       createdAt: new Date().toISOString(),
     };
 
@@ -598,157 +667,149 @@ async function handleAuthStart(authOptions = {}) {
       expiresAt: pendingState.expiresAt,
       intervalSeconds: pendingState.intervalSeconds,
     };
-    if (pairingCode) {
+    if (typeof pairingCode === 'string' && /^[A-Z0-9]{6}$/.test(pairingCode)) {
       stdoutData.pairingCode = pairingCode;
     }
     outputJson({
       ok: true,
       data: stdoutData,
     }, 0);
-  } finally {
-    if (lockFd !== null) {
-      try {
-        fs.closeSync(lockFd);
-        fs.unlinkSync(lockPath);
-      } catch (_) {}
-    }
-  }
+  });
 }
 
 async function handleAuthStatus() {
-  const configDir = resolveConfigDir();
-  const pendingFile = path.join(configDir, 'cli-auth.json');
-  if (!fs.existsSync(pendingFile)) {
-    outputError('no_pending_auth', 'No pending authentication session found. Run auth-start first.', { exitCode: 1 });
-  }
-  checkSafePath(pendingFile);
+  return withAuthLock(async () => {
+    const configDir = resolveConfigDir();
+    const pendingFile = path.join(configDir, 'cli-auth.json');
+    const pendingState = readPendingState();
+    if (!pendingState) outputError('no_pending_auth', 'No pending authentication session found. Run auth-start first.');
+    if (Date.parse(pendingState.expiresAt) <= Date.now()) {
+      fs.unlinkSync(pendingFile);
+      outputError('auth_expired', 'Authentication session expired. Run auth-start again.');
+    }
+    const { authRunId, pollSecret, origin } = pendingState;
+    if (!authRunId || !pollSecret) {
+      outputError('corrupted_auth_state', 'Pending auth state missing authRunId or pollSecret', { exitCode: 1 });
+    }
 
-  let pendingState;
-  try {
-    pendingState = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
-  } catch (err) {
-    outputError('corrupted_auth_state', 'Failed to read pending auth state: ' + err.message, { exitCode: 1 });
-  }
-
-  const { authRunId, pollSecret, origin } = pendingState;
-  if (!authRunId || !pollSecret) {
-    outputError('corrupted_auth_state', 'Pending auth state missing authRunId or pollSecret', { exitCode: 1 });
-  }
-
-  const checkUrl = `${origin || DEFAULT_ORIGIN}/auth/cli/check?authRunId=${encodeURIComponent(authRunId)}`;
-  const res = await performHttpRequest(checkUrl, {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-      'X-CLI-Poll-Secret': pollSecret,
-    },
-  });
-
-  if (res.status === 404 || res.status === 401) {
-    try { fs.unlinkSync(pendingFile); } catch (_) {}
-    outputError('auth_run_invalid', 'Authentication run was rejected, expired, or not found.', { exitCode: 1 });
-  }
-
-  if (res.status !== 200) {
-    outputError('auth_check_failed', `Check request failed with HTTP ${res.status}`, { exitCode: 1 });
-  }
-
-  let data;
-  try {
-    data = JSON.parse(res.body);
-  } catch (err) {
-    outputError('invalid_check_response', 'Invalid JSON from auth check: ' + err.message, { exitCode: 1 });
-  }
-
-  const status = data.status;
-  const pendingLike = status === 'pending' || status === 'awaiting_gateway' || status === 'claiming';
-  const tokenBearing = status === 'success' || status === 'ready' || status === 'authenticated';
-
-  if (pendingLike) {
-    outputJson({
-      ok: true,
-      data: {
-        status: 'pending',
-        authRunId,
-        nextRetrySeconds: pendingState.intervalSeconds || 5,
-        expiresAt: pendingState.expiresAt,
+    const checkUrl = `${DEFAULT_ORIGIN}/auth/cli/check?authRunId=${encodeURIComponent(authRunId)}`;
+    const res = await performHttpRequest(checkUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-CLI-Poll-Secret': pollSecret,
       },
-    }, 0);
-  } else if (tokenBearing) {
-    persistClaimedToken(configDir, pendingFile, origin, data);
-  } else if (status === 'consumed') {
-    const tokenFile = path.join(configDir, 'http-mcp.token');
-    if (fs.existsSync(tokenFile)) {
+    });
+
+    if (res.status === 404 || res.status === 401) {
       try { fs.unlinkSync(pendingFile); } catch (_) {}
-      let expiresAt = null;
-      const metaFile = path.join(configDir, 'token-meta.json');
-      if (fs.existsSync(metaFile)) {
-        try {
-          const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-          expiresAt = meta.expiresAt || null;
-        } catch (_) {}
-      }
+      outputError('auth_run_invalid', 'Authentication run unavailable, possibly after a service restart. Run auth-start for a new approval.', { exitCode: 1 });
+    }
+
+    if (res.status !== 200) {
+      outputError('auth_check_failed', `Check request failed with HTTP ${res.status}`, { exitCode: 1 });
+    }
+
+    let data;
+    try {
+      data = JSON.parse(res.body);
+    } catch (err) {
+      outputError('invalid_check_response', 'Invalid JSON from auth check', { exitCode: 1 });
+    }
+
+    const status = data.status;
+    const pendingLike = status === 'pending' || status === 'awaiting_gateway' || status === 'claiming';
+    const tokenBearing = status === 'success' || status === 'ready' || status === 'authenticated';
+
+    if (pendingLike) {
       outputJson({
         ok: true,
         data: {
-          status: 'authenticated',
-          expiresAt,
+          status: 'pending',
+          authRunId,
+          nextRetrySeconds: pendingState.intervalSeconds || 5,
+          expiresAt: pendingState.expiresAt,
         },
       }, 0);
+    } else if (tokenBearing) {
+      persistClaimedToken(configDir, pendingFile, origin, data);
+    } else if (status === 'consumed') {
+      fs.unlinkSync(pendingFile);
+      outputError('auth_exchange_failed', 'Approval was already collected. A lost collection response requires a new auth-start approval.');
+    } else if (status === 'cancelled') {
+      try { fs.unlinkSync(pendingFile); } catch (_) {}
+      outputError('auth_cancelled', 'Authentication was cancelled or denied by user.', { exitCode: 1 });
+    } else if (status === 'expired') {
+      try { fs.unlinkSync(pendingFile); } catch (_) {}
+      outputError('auth_expired', 'Authentication session has expired.', { exitCode: 1 });
+    } else if (status === 'failed') {
+      try { fs.unlinkSync(pendingFile); } catch (_) {}
+      outputError('auth_failed', 'Token exchange failed', { exitCode: 1 });
+    } else {
+      outputError('auth_failed', 'Authentication session returned an unsupported status', { exitCode: 1, retryable: true });
     }
-    outputError('auth_exchange_failed', 'Authentication already consumed and no local token file is present.', { exitCode: 1 });
-  } else if (status === 'cancelled') {
-    try { fs.unlinkSync(pendingFile); } catch (_) {}
-    outputError('auth_cancelled', 'Authentication was cancelled or denied by user.', { exitCode: 1 });
-  } else if (status === 'expired') {
-    try { fs.unlinkSync(pendingFile); } catch (_) {}
-    outputError('auth_expired', 'Authentication session has expired.', { exitCode: 1 });
-  } else if (status === 'failed') {
-    try { fs.unlinkSync(pendingFile); } catch (_) {}
-    outputError('auth_failed', data.error || 'Authentication exchange failed', { exitCode: 1 });
-  } else {
-    outputError('auth_failed', `Authentication session ended with status: ${status}`, { exitCode: 1, retryable: true });
-  }
+  });
 }
 
 function persistClaimedToken(configDir, pendingFile, origin, data) {
   const token = data.token || data.accessToken || data.bearer;
-  if (!token) {
+  if (typeof token !== 'string' || !token.trim() || token.length > 16384 || /[\r\n]/.test(token.trim())) {
     outputError('auth_exchange_failed', 'Approval indicated success but server returned no token.', { exitCode: 1 });
   }
 
+  const expiresAt = data.expiresAt || (Number.isFinite(data.expires_in) && data.expires_in > 0 ? new Date(Date.now() + data.expires_in * 1000).toISOString() : null);
+  const tokenFile = path.join(configDir, 'http-mcp.token');
+  const metaFile = path.join(configDir, 'token-meta.json');
   try {
-    const tokenFile = path.join(configDir, 'http-mcp.token');
-    atomicWriteFile(tokenFile, token.trim() + '\n', 0o600);
+    if (!expiresAt || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now()) throw new Error('invalid_token_expiry');
 
-    const metaFile = path.join(configDir, 'token-meta.json');
     const meta = {
       origin: origin || DEFAULT_ORIGIN,
-      expiresAt: data.expiresAt || null,
+      expiresAt,
       updatedAt: new Date().toISOString(),
     };
     atomicWriteFile(metaFile, JSON.stringify(meta, null, 2), 0o600);
+    atomicWriteFile(tokenFile, token.trim() + '\n', 0o600);
 
     try { fs.unlinkSync(pendingFile); } catch (_) {}
   } catch (writeErr) {
-    outputError('token_save_failed', 'Failed to atomically save token to disk: ' + writeErr.message, { exitCode: 1 });
+    // A partial pair must not be accepted as a successful credential save.
+    for (const file of [tokenFile, metaFile]) {
+      try { if (checkSafePath(file)?.isFile()) fs.unlinkSync(file); } catch (_) {}
+    }
+    outputError('token_save_failed', 'Failed to save token and metadata. Run auth-start again if collection was consumed.', { exitCode: 1 });
   }
 
   outputJson({
     ok: true,
     data: {
       status: 'authenticated',
-      expiresAt: data.expiresAt || null,
+      expiresAt,
     },
   }, 0);
 }
 
 async function main() {
-  const timer = setTimeout(() => {
-    outputError('command_timeout', 'Command exceeded overall deadline', { exitCode: 1 });
-  }, OVERALL_TIMEOUT_MS);
+  const clients = [];
+  const abortRequests = () => {
+    for (const req of activeRequests) req.destroy(new Error('command_aborted'));
+  };
+  const timer = setTimeout(abortRequests, OVERALL_TIMEOUT_MS);
   timer.unref();
+  process.once('SIGINT', abortRequests);
+  process.once('SIGTERM', abortRequests);
 
+  try {
+    await executeCommand(clients);
+  } finally {
+    clearTimeout(timer);
+    process.removeListener('SIGINT', abortRequests);
+    process.removeListener('SIGTERM', abortRequests);
+    for (const client of clients) await client.close();
+  }
+}
+
+async function executeCommand(clients) {
   let parsed;
   try {
     parsed = parseCliArgs(process.argv);
@@ -803,9 +864,9 @@ async function main() {
 
     let extraSources = 0;
     if (options['extra-sources'] !== undefined) {
-      extraSources = parseInt(options['extra-sources'], 10);
-      if (isNaN(extraSources) || extraSources < 0) {
-        outputError('invalid_option', '--extra-sources must be a non-negative integer', { exitCode: 2 });
+      extraSources = Number(options['extra-sources']);
+      if (!Number.isSafeInteger(extraSources) || extraSources < 0) {
+        outputError('invalid_option', '--extra-sources must be a non-negative safe integer', { exitCode: 2 });
       }
     }
 
@@ -821,15 +882,14 @@ async function main() {
     if (restRes && restRes.success) {
       const restData = restRes.data || {};
       const content = restData.content || '';
-      if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:')) {
-        outputError('search_upstream_error', `Search failed upstream: ${content || 'empty content'}`, {
+      if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:') || /^(提取失败:|映射超时:|HTTP错误:|映射错误:)/.test(content)) {
+        outputError('search_upstream_error', 'Search failed upstream', {
           exitCode: 1,
-          content,
-          retryable: true,
+          retryable: false,
         });
       }
       if (content.startsWith('配置错误:') || content.startsWith('无效模型:')) {
-        outputError('search_configuration_error', content, { exitCode: 1 });
+        outputError('search_configuration_error', 'Search configuration error', { exitCode: 1 });
       }
 
       outputJson({
@@ -839,6 +899,7 @@ async function main() {
           session_id: restData.session_id,
           sources: restData.sources || [],
           sources_count: restData.sources_count !== undefined ? restData.sources_count : (restData.sources ? restData.sources.length : 0),
+          sources_missing: !Array.isArray(restData.sources) || restData.sources.length === 0,
         },
       }, 0);
       return;
@@ -846,6 +907,7 @@ async function main() {
 
     // 2. Fall back to exactly one hidden MCP execution if REST was classified 404 (endpoint unavailable)
     const client = new HiddenMcpClient(DEFAULT_ORIGIN, token, source);
+    clients.push(client);
     await client.initialize();
 
     const searchArgs = {
@@ -861,16 +923,15 @@ async function main() {
     }
 
     const content = searchResult.content || '';
-    if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:')) {
-      outputError('search_upstream_error', `Search failed upstream: ${content || 'empty content'}`, {
+    if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:') || /^(提取失败:|映射超时:|HTTP错误:|映射错误:)/.test(content)) {
+      outputError('search_upstream_error', 'Search failed upstream', {
         exitCode: 1,
-        content,
-        retryable: true,
+        retryable: false,
       });
     }
 
     if (content.startsWith('配置错误:') || content.startsWith('无效模型:')) {
-      outputError('search_configuration_error', content, { exitCode: 1 });
+      outputError('search_configuration_error', 'Search configuration error', { exitCode: 1 });
     }
 
     const searchSessionId = searchResult.session_id;
@@ -891,6 +952,7 @@ async function main() {
         session_id: searchSessionId,
         sources,
         sources_count: sourcesCount,
+        sources_missing: sources.length === 0,
       },
     }, 0);
     return;
@@ -927,11 +989,11 @@ async function main() {
       const restData = restRes.data || {};
       const content = typeof restData === 'string' ? restData : (restData && restData.content !== undefined ? restData.content : String(restData || ''));
 
-      if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:')) {
-        outputError('fetch_upstream_error', `Fetch failed: ${content || 'empty content'}`, { exitCode: 1, retryable: true });
+      if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:') || /^(提取失败:|映射超时:|HTTP错误:|映射错误:)/.test(content)) {
+        outputError('fetch_upstream_error', 'Fetch failed upstream', { exitCode: 1, retryable: true });
       }
       if (content.startsWith('配置错误:')) {
-        outputError('fetch_configuration_error', content, { exitCode: 1 });
+        outputError('fetch_configuration_error', 'Fetch configuration error', { exitCode: 1 });
       }
 
       outputJson({
@@ -946,16 +1008,17 @@ async function main() {
 
     // 2. Fall back to exactly one hidden MCP execution if REST was classified 404 (endpoint unavailable)
     const client = new HiddenMcpClient(DEFAULT_ORIGIN, token, source);
+    clients.push(client);
     await client.initialize();
 
     const result = await client.callTool('web_fetch', { url: validUrl });
     const content = typeof result === 'string' ? result : (result && result.content ? result.content : String(result || ''));
 
-    if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:')) {
-      outputError('fetch_upstream_error', `Fetch failed: ${content || 'empty content'}`, { exitCode: 1, retryable: true });
+    if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:') || /^(提取失败:|映射超时:|HTTP错误:|映射错误:)/.test(content)) {
+      outputError('fetch_upstream_error', 'Fetch failed upstream', { exitCode: 1, retryable: true });
     }
     if (content.startsWith('配置错误:')) {
-      outputError('fetch_configuration_error', content, { exitCode: 1 });
+      outputError('fetch_configuration_error', 'Fetch configuration error', { exitCode: 1 });
     }
 
     outputJson({
@@ -989,29 +1052,29 @@ async function main() {
     const mapPayload = { url: validUrl };
     if (options.instructions) mapPayload.instructions = String(options.instructions);
     if (options.depth !== undefined) {
-      const v = parseInt(options.depth, 10);
-      if (isNaN(v) || v < 1 || v > 5) {
+      const v = Number(options.depth);
+      if (!Number.isInteger(v) || v < 1 || v > 5) {
         outputError('invalid_option', '--depth must be an integer between 1 and 5', { exitCode: 2 });
       }
       mapPayload.max_depth = v;
     }
     if (options.breadth !== undefined) {
-      const v = parseInt(options.breadth, 10);
-      if (isNaN(v) || v < 1 || v > 500) {
+      const v = Number(options.breadth);
+      if (!Number.isInteger(v) || v < 1 || v > 500) {
         outputError('invalid_option', '--breadth must be an integer between 1 and 500', { exitCode: 2 });
       }
       mapPayload.max_breadth = v;
     }
     if (options.limit !== undefined) {
-      const v = parseInt(options.limit, 10);
-      if (isNaN(v) || v < 1 || v > 500) {
+      const v = Number(options.limit);
+      if (!Number.isInteger(v) || v < 1 || v > 500) {
         outputError('invalid_option', '--limit must be an integer between 1 and 500', { exitCode: 2 });
       }
       mapPayload.limit = v;
     }
     if (options.timeout !== undefined) {
-      const v = parseInt(options.timeout, 10);
-      if (isNaN(v) || v < 10 || v > 150) {
+      const v = Number(options.timeout);
+      if (!Number.isInteger(v) || v < 10 || v > 150) {
         outputError('invalid_option', '--timeout must be an integer between 10 and 150', { exitCode: 2 });
       }
       mapPayload.timeout = v;
@@ -1028,11 +1091,11 @@ async function main() {
       const restData = restRes.data || {};
       const content = typeof restData === 'string' ? restData : (restData && restData.content !== undefined ? restData.content : String(restData || ''));
 
-      if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:')) {
-        outputError('map_upstream_error', `Map failed: ${content || 'empty content'}`, { exitCode: 1, retryable: true });
+      if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:') || /^(提取失败:|映射超时:|HTTP错误:|映射错误:)/.test(content)) {
+        outputError('map_upstream_error', 'Map failed upstream', { exitCode: 1, retryable: true });
       }
       if (content.startsWith('配置错误:')) {
-        outputError('map_configuration_error', content, { exitCode: 1 });
+        outputError('map_configuration_error', 'Map configuration error', { exitCode: 1 });
       }
 
       outputJson({
@@ -1047,16 +1110,17 @@ async function main() {
 
     // 2. Fall back to exactly one hidden MCP execution if REST was classified 404 (endpoint unavailable)
     const client = new HiddenMcpClient(DEFAULT_ORIGIN, token, source);
+    clients.push(client);
     await client.initialize();
 
     const result = await client.callTool('web_map', mapPayload);
     const content = typeof result === 'string' ? result : (result && result.content ? result.content : String(result || ''));
 
-    if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:')) {
-      outputError('map_upstream_error', `Map failed: ${content || 'empty content'}`, { exitCode: 1, retryable: true });
+    if (content === '' || content.startsWith('upstream_error:') || content.startsWith('upstream_empty:') || /^(提取失败:|映射超时:|HTTP错误:|映射错误:)/.test(content)) {
+      outputError('map_upstream_error', 'Map failed upstream', { exitCode: 1, retryable: true });
     }
     if (content.startsWith('配置错误:')) {
-      outputError('map_configuration_error', content, { exitCode: 1 });
+      outputError('map_configuration_error', 'Map configuration error', { exitCode: 1 });
     }
 
     outputJson({
@@ -1070,15 +1134,22 @@ async function main() {
   }
 
   outputError('unknown_command', `Unknown command: ${command}`, { exitCode: 2 });
+
 }
 
-if (require.main === module) {
-  main().catch((err) => {
-    outputError('unhandled_error', err.message || 'Unhandled error', { exitCode: 1 });
-  });
+async function run() {
+  try { await main(); } catch (err) {
+    if (err instanceof CliExit) { process.exitCode = err.exitCode; return; }
+    const code = /^(symlink_rejected|unsafe_owner|unsafe_path|unsafe_file|secure_storage_unavailable|invalid_token_origin|invalid_token_metadata)/.exec(err.message || '');
+    process.stdout.write(JSON.stringify({ ok: false, error: { code: code ? code[1] : 'transport_error', message: 'Command failed. Verify private state or service availability; an ambiguous search must not be replayed automatically.', retryable: false } }) + '\n');
+    process.exitCode = 1;
+  }
 }
+
+if (require.main === module) run();
 
 module.exports = {
+  run,
   HiddenMcpClient,
   requestRestEndpoint,
   validateUserUrl,

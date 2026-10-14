@@ -151,7 +151,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
   it('CLI option parsing and unknown argument rejection', () => {
     const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-cli-test-'));
     try {
-      const res = runCli(nestedCliPath, ['search', '--invalid-opt'], {
+      const res = runCli(nestedCliPath, ['search', '--invalid-opt', 'value'], {
         env: { HOME: tmpHome, PATH: process.env.PATH },
       });
       assert.strictEqual(res.status, 2);
@@ -222,13 +222,17 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
             approveUrl: 'https://search.karldigi.dev/auth/cli/approve?code=testapprove123',
             authRunId: 'auth-run-test-id',
             pollSecret: 'poll-secret-collector-keep-private',
-            expiresAt: '2026-10-05T12:00:00Z',
+            expiresAt: new Date(Date.now() + 300000).toISOString(),
             intervalSeconds: 5,
           }),
         };
       });
 
-      let stdoutData = '';
+      let stdoutData = '', stderrData = '';
+      const oldTty = process.stderr.isTTY;
+      const oldStderrWrite = process.stderr.write;
+      process.stderr.isTTY = true;
+      process.stderr.write = chunk => { stderrData += chunk; return true; };
       const origWrite = process.stdout.write;
       process.stdout.write = (chunk) => { stdoutData += chunk; return true; };
       const origExit = process.exit;
@@ -240,6 +244,8 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
         }, /EXIT_0/);
       } finally {
         process.stdout.write = origWrite;
+        process.stderr.write = oldStderrWrite;
+        process.stderr.isTTY = oldTty;
         process.exit = origExit;
         cliMod.setTransport(null);
       }
@@ -267,7 +273,22 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
         }
         matrix.push(row);
       }
-      const decodedUrl = decodeQRMatrix(matrix);
+      const rows = stderrData.split('\n').filter(line => line && /^[█▄▀ ]+$/.test(line));
+      assert(rows.length > 1, 'auth-start must emit a terminal QR');
+      const terminalMatrix = [];
+      const modules = { '█': [false, false], '▀': [false, true], '▄': [true, false], ' ': [true, true] };
+      for (const row of rows.slice(1)) {
+        if (terminalMatrix.length >= extent) break;
+        const top = [], bottom = [];
+        for (const char of row.slice(1, -1)) {
+          const values = modules[char]; top.push(values[0]); bottom.push(values[1]);
+        }
+        terminalMatrix.push(top);
+        if (terminalMatrix.length < extent) terminalMatrix.push(bottom);
+      }
+      assert.deepStrictEqual(terminalMatrix, matrix);
+      assert(!stderrData.includes('poll-secret-collector-keep-private'));
+      const decodedUrl = decodeQRMatrix(terminalMatrix);
       assert.strictEqual(decodedUrl, res.data.approveUrl);
       assert.strictEqual(decodedUrl.includes('poll-secret'), false);
     } finally {
@@ -297,7 +318,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
             approveUrl: 'https://search.karldigi.dev/auth/cli/approve?ref=abc123ref&invite=inv-xyz',
             authRunId: 'auth-run-test-id-2',
             pollSecret: 'poll-secret-collector-keep-private-2',
-            expiresAt: '2026-10-05T12:00:00Z',
+            expiresAt: new Date(Date.now() + 300000).toISOString(),
             intervalSeconds: 5,
           }),
         };
@@ -348,7 +369,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
           approveUrl: 'https://search.karldigi.dev/auth/cli/approve?ref=abc123ref',
           authRunId: 'auth-run-test-id-3',
           pollSecret: 'poll-secret-collector-keep-private-3',
-          expiresAt: '2026-10-05T12:00:00Z',
+          expiresAt: new Date(Date.now() + 300000).toISOString(),
           intervalSeconds: 5,
         }),
       }));
@@ -397,7 +418,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
         authRunId: 'run-check-1',
         pollSecret: 'secret-check-1',
         origin: 'https://search.karldigi.dev',
-        expiresAt: '2026-10-05T12:00:00Z',
+        expiresAt: new Date(Date.now() + 300000).toISOString(),
         intervalSeconds: 5,
       }), { mode: 0o600 });
 
@@ -411,7 +432,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
           body: JSON.stringify({
             status: 'ready',
             token: 'saved-bearer-token-123',
-            expiresAt: '2026-10-05T14:00:00Z',
+            expiresAt: '2099-10-05T14:00:00Z',
           }),
         };
       });
@@ -458,7 +479,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
       authRunId: 'run-check-1',
       pollSecret: 'secret-check-1',
       origin: 'https://search.karldigi.dev',
-      expiresAt: '2026-10-05T12:00:00Z',
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
       intervalSeconds: 5,
     }), { mode: 0o600 });
     if (options.seedToken) {
@@ -544,25 +565,19 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
     assert.strictEqual(snapshot.tokenExists, false);
   });
 
-  it('auth-status consumed with existing token reports authenticated', async () => {
-    const snapshot = await runAuthStatusCheck(
-      { status: 'consumed', authRunId: 'run-check-1' },
-      { seedToken: 'already-saved-token', seedMeta: { expiresAt: '2026-10-05T14:00:00Z' } },
-    );
-    assert.strictEqual(snapshot.exitCode, 0);
-    assert.strictEqual(snapshot.json.ok, true);
-    assert.strictEqual(snapshot.json.data.status, 'authenticated');
-    assert.strictEqual(snapshot.json.data.expiresAt, '2026-10-05T14:00:00Z');
-    assert.strictEqual(snapshot.token, 'already-saved-token');
+  it('auth-status consumed never mistakes an old token for a successful collection', async () => {
+    const snapshot = await runAuthStatusCheck({ status: 'consumed' }, { seedToken: 'old-token' });
+    assert.strictEqual(snapshot.exitCode, 1);
+    assert.strictEqual(snapshot.json.error.code, 'auth_exchange_failed');
     assert.strictEqual(snapshot.pendingExists, false);
   });
 
-  it('auth-status consumed without token file fails and keeps pending', async () => {
+  it('auth-status consumed without token file requires a new approval', async () => {
     const snapshot = await runAuthStatusCheck({ status: 'consumed', authRunId: 'run-check-1' });
     assert.strictEqual(snapshot.exitCode, 1);
     assert.strictEqual(snapshot.json.ok, false);
     assert.strictEqual(snapshot.json.error.code, 'auth_exchange_failed');
-    assert.strictEqual(snapshot.pendingExists, true);
+    assert.strictEqual(snapshot.pendingExists, false);
     assert.strictEqual(snapshot.tokenExists, false);
   });
 
@@ -612,8 +627,10 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
         if (url === 'https://search.karldigi.dev/api/v1/search') {
           return { status: 404, headers: { 'content-type': 'text/plain' }, body: '404 Not Found' };
         }
+        if (opts.method === 'DELETE') return { status: 200, headers: {}, body: '' };
         assert.strictEqual(url, 'https://search.karldigi.dev/mcp');
         assert.strictEqual(opts.headers.Authorization, 'Bearer mock-bearer');
+        if (opts.method === 'DELETE') return { status: 200, headers: {}, body: '' };
         const req = JSON.parse(body);
         trace.push(req.method + (req.params && req.params.name ? ':' + req.params.name : ''));
 
@@ -624,7 +641,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
             body: JSON.stringify({
               jsonrpc: '2.0',
               id: req.id,
-              result: { protocolVersion: '2025-03-26', serverInfo: { name: 'grok-search' } },
+              result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'grok-search' } },
             }),
           };
         }
@@ -849,7 +866,8 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
           };
         }
         if (url === 'https://search.karldigi.dev/mcp') {
-          const req = JSON.parse(body);
+          if (opts.method === 'DELETE') return { status: 200, headers: {}, body: '' };
+        const req = JSON.parse(body);
           if (req.method === 'initialize') {
             return {
               status: 200,
@@ -857,7 +875,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
               body: JSON.stringify({
                 jsonrpc: '2.0',
                 id: req.id,
-                result: { protocolVersion: '2025-03-26', serverInfo: { name: 'grok-search' } },
+                result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'grok-search' } },
               }),
             };
           }
@@ -1114,7 +1132,7 @@ describe('Grok Search CLI sequential test suite', { concurrency: 1 }, () => {
       const res = JSON.parse(stdoutData.trim());
       assert.strictEqual(res.ok, false);
       assert.strictEqual(res.error.code, 'not_found');
-      assert.strictEqual(res.error.message, 'Application item not found');
+      assert.strictEqual(res.error.message, 'REST API returned an application error');
     } finally {
       process.env.HOME = origHome;
       fs.rmSync(tmpHome, { recursive: true, force: true });

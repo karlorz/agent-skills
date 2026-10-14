@@ -8,10 +8,7 @@ const nestedScript = path.join(__dirname, '..', 'skills', 'grok-search', 'script
 const cli = require(nestedScript);
 
 if (require.main === module) {
-  cli.main().catch((err) => {
-    process.stderr.write(`Fatal error: ${err && err.message ? err.message : String(err)}\n`);
-    process.exit(1);
-  });
+  cli.run();
 }
 
 module.exports = cli;

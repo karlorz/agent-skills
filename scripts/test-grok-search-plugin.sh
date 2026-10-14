@@ -520,3 +520,17 @@ if "search.karldigi.dev" in scanned:
 PY
 
 printf 'test-grok-search-plugin: all checks passed\n'
+
+# Every bundled executable/helper belongs to the secret and package inventory.
+python3 - "$PLUGIN_ROOT/skills/grok-search/scripts" <<'PYSCAN'
+from pathlib import Path
+import re, sys
+root = Path(sys.argv[1])
+expected = {"grok-search.cjs", "lib/toqr.cjs"}
+actual = {str(p.relative_to(root)) for p in root.rglob("*.cjs")}
+if actual != expected:
+    raise SystemExit(f"Update the reviewed bundled source inventory: {actual ^ expected}")
+for p in root.rglob("*.cjs"):
+    if re.search(r"(?:gsk_|sk-)[A-Za-z0-9_-]{20,}", p.read_text()):
+        raise SystemExit(f"Apparent embedded credential in {p}")
+PYSCAN

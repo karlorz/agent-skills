@@ -17,7 +17,7 @@ Refuse to overwrite an existing installation without explicit operator intent. I
 STAGING_DIR="$(mktemp -d)"
 TARGET_SKILL_DIR="${HOME}/.claude/skills/grok-search"
 
-if [ -e "$TARGET_SKILL_DIR" ]; then
+if [ -e "$TARGET_SKILL_DIR" ] || [ -L "$TARGET_SKILL_DIR" ]; then
   echo "Target directory already exists: $TARGET_SKILL_DIR" >&2
   echo "Aborting to avoid accidental overwrite. Remove or backup existing directory first." >&2
   exit 1
@@ -27,7 +27,14 @@ fi
 git clone --filter=blob:none --no-checkout --depth 1 https://github.com/karlorz/agent-skills.git "$STAGING_DIR/repo"
 cd "$STAGING_DIR/repo"
 git sparse-checkout set skills/grok-search
-git checkout
+# Select a reviewed immutable release SHA; obtain it from the trusted release record.
+: "${GROK_SEARCH_INSTALL_SHA:?Set a reviewed 40-character release commit SHA}"
+case "$GROK_SEARCH_INSTALL_SHA" in
+  *[!0-9a-f]*) echo "Invalid release SHA" >&2; exit 1 ;;
+esac
+[ "${#GROK_SEARCH_INSTALL_SHA}" -eq 40 ] || exit 1
+git fetch --depth 1 origin "$GROK_SEARCH_INSTALL_SHA"
+git checkout --detach "$GROK_SEARCH_INSTALL_SHA"
 
 # 3. Copy the canonical nested skill unit into the target host directory
 mkdir -p "$(dirname "$TARGET_SKILL_DIR")"

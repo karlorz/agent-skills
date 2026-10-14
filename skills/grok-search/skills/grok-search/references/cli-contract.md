@@ -23,7 +23,7 @@ node scripts/grok-search.cjs auth-status
   - `--query` (string, required): Self-contained natural-language query.
   - `--platform` (string, optional): Target platform focus (e.g. `Twitter`, `GitHub`, `Reddit`).
   - `--model` (string, optional): Specific model override.
-  - `--extra-sources` (integer >= 0, optional): Additional reference hits from auxiliary providers.
+  - `--extra-sources` (non-negative safe integer, optional): Additional reference hits from auxiliary providers.
 - `fetch`:
   - `--url` (string, required): Full HTTP/HTTPS web address.
 - `map`:
@@ -85,3 +85,17 @@ For read operations (`search`, `fetch`, and `map`), the CLI follows a REST-first
 5. **Stateless discovery**: No persistent fallback flag is saved; subsequent commands always attempt REST first to allow instant adaptation when the server upgrades.
 6. **Bearer isolation**: The Grok bearer token is strictly sent only to the pinned service origin (`https://search.karldigi.dev`) and never attached to user-provided fetch or map URLs. Target URLs with credentials or localhost/private network destinations are rejected.
 
+
+MCP fallback negotiates protocol `2025-03-26`, validates JSON-RPC response IDs and
+tool capabilities, applies the session header, accepts notification HTTP 202 and
+finite JSON/SSE responses, and prefers structured tool content. Search and
+`get_sources` share the same transport session; `sources_missing` explicitly flags
+an empty source list. Session cleanup is best effort and bounded to one second.
+Only an explicit expired-session HTTP 404 permits one reinitialization; ambiguous
+transport failures and failed source retrieval never replay a paid search.
+
+Each network request is capped at 30 seconds and 10 MiB; a command aborts active
+requests after 60 seconds or on SIGINT/SIGTERM. Native HTTPS requests never follow
+credential-bearing redirects. Errors expose safe codes and messages rather than
+raw upstream diagnostics. CLI auth does not block for approval: invoke
+`auth-status` once per server interval, stopping at expiry or a terminal result.
