@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "harness-doctor" / "scripts" / "harness-doctor.py"
@@ -74,10 +75,18 @@ def stub_bin(home: Path, name: str, script: str) -> Path:
     return path
 
 
-def run_doctor(home: Path, args: list[str], path_dir: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run_doctor(
+    home: Path,
+    args: list[str],
+    path_dir: Path | None = None,
+    env_extra: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
     env["HARNESS_DOCTOR_SKIP_DETAILS"] = env.get("HARNESS_DOCTOR_SKIP_DETAILS", "0")
+    env.pop("GROK_HOME", None)
+    if env_extra:
+        env.update(env_extra)
     if path_dir is not None:
         env["PATH"] = str(path_dir)
     else:
@@ -483,6 +492,276 @@ def test_insufficient_window() -> None:
         fail("thin window limitation", str(report["harnesses"]["claude"]["limitations"]))
 
 
+def grok_inspect_stub(body: str) -> str:
+    return (
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo grok 1.2.3; exit 0; fi\n'
+        'if [ "$1" = "inspect" ]; then\n'
+        f"{body}\n"
+        "fi\n"
+        "exit 0\n"
+    )
+
+
+def inspect_payload() -> dict:
+    return {
+        "grokVersion": "1.0.45",
+        "plugins": [
+            {"name": "live-plugin", "enabled": True},
+            {"name": "off-plugin", "enabled": False},
+        ],
+        "skills": [
+            {
+                "name": "collide",
+                "description": "plugin copy of a collided name",
+                "source": {"type": "plugin", "plugin_name": "live-plugin", "path": "/secret/live/SKILL.md"},
+                "userInvocable": True,
+            },
+            {
+                "name": "collide",
+                "description": "user copy of a collided name",
+                "source": {"type": "user", "path": "/secret/user/SKILL.md"},
+                "userInvocable": True,
+            },
+            {
+                "name": "folded",
+                "description": f"folded description with {SECRET_KEY} and {SECRET_EMAIL}",
+                "source": {"type": "bundled", "path": f"/secret/{SECRET_BEARER}/SKILL.md"},
+                "userInvocable": False,
+            },
+            {
+                "name": "off-skill",
+                "description": "defined by a disabled plugin",
+                "source": {"type": "plugin", "plugin_name": "off-plugin", "path": "/secret/off/SKILL.md"},
+                "userInvocable": True,
+            },
+        ],
+        "mcpServers": [{"name": "skillwiki"}],
+        "hooks": [],
+        "permissions": {"loaded": True},
+        "cwd": "/secret/workspace",
+        "configSources": {"layers": [{"role": "user", "path": "/secret/config.toml"}]},
+    }
+
+
+def make_grok_inspect_home(root: Path, payload: dict, *, behavior: str = "ok") -> None:
+    write(
+        root / ".grok" / "config.toml",
+        """
+[plugins]
+enabled = ["live-plugin"]
+""",
+    )
+    write(root / ".grok" / "AGENTS.md", "agent rules\n")
+    write(
+        root / ".grok" / "installed-plugins" / "live-plugin" / "skills" / "collide" / "SKILL.md",
+        "---\nname: collide\ndescription: installed copy\n---\n",
+    )
+    write_json(root / ".grok" / "inspect-fixture.json", payload)
+    if behavior == "timeout":
+        body = "sleep 5"
+    elif behavior == "malformed":
+        body = "printf '%s' '{not-json'"
+    elif behavior == "failed":
+        body = "printf '%s' 'boom' >&2; exit 3"
+    else:
+        body = 'cat "${HOME}/.grok/inspect-fixture.json"'
+    record = root / ".grok" / "inspect-probe.txt"
+    stub_bin(
+        root,
+        "grok",
+        grok_inspect_stub(
+            'printf "%s|%s|%s\\n" "$HOME" "$PWD" "${GROK_HOME:-unset}" >> '
+            f'"{record}"\n' + body
+        ),
+    )
+
+
+def test_grok_inspect_metrics() -> None:
+    home = Path(tempfile.mkdtemp(prefix="hd-inspect-"))
+    payload = inspect_payload()
+    make_grok_inspect_home(home, payload)
+    proc = run_doctor(home, ["--harness", "grok", "--json"])
+    if proc.returncode != 0:
+        fail("inspect metrics exit", f"{proc.returncode} {proc.stderr}")
+        return
+    report = json.loads(proc.stdout)
+    grok = report["harnesses"]["grok"]
+    context = grok["context"]
+    discovered = context["discovered"]
+    if discovered["status"] == "OK" and discovered["basis"].startswith("grok inspect"):
+        ok("inspect metrics discovered basis")
+    else:
+        fail("inspect metrics discovered basis", str(discovered))
+    if discovered["discovered_rows"] == 4 and discovered["unique_names"] == 3:
+        ok("inspect metrics row and unique counts")
+    else:
+        fail("inspect metrics row and unique counts", str(discovered))
+    if discovered["duplicate_rows"] == 1 and discovered["duplicate_name_groups"]:
+        group = discovered["duplicate_name_groups"][0]
+        if group["name"] == "collide" and sorted(group["sources"]) == ["plugin:live-plugin", "user"]:
+            ok("inspect metrics duplicate group sources")
+        else:
+            fail("inspect metrics duplicate group sources", str(group))
+    else:
+        fail("inspect metrics duplicate group", str(discovered))
+    breakdown = discovered["source_breakdown"]
+    if breakdown == {"bundled": 1, "plugin": 2, "user": 1}:
+        ok("inspect metrics source breakdown")
+    else:
+        fail("inspect metrics source breakdown", str(breakdown))
+    total = discovered["description_tokens"]
+    unique = discovered["unique_description_tokens"]
+    if total > unique > 0:
+        ok("inspect metrics keep duplicate rows in estimate")
+    else:
+        fail("inspect metrics keep duplicate rows in estimate", f"{total} vs {unique}")
+    if discovered["model_visible"] == "UNKNOWN" and grok["extensions"]["skills_source"].startswith(
+        "grok inspect"
+    ):
+        ok("inspect metrics model visibility unknown")
+    else:
+        fail("inspect metrics model visibility unknown", str(discovered))
+    if findings_by_code(report, "grok", "duplicate_skill_name"):
+        ok("inspect metrics duplicate finding")
+    else:
+        fail("inspect metrics duplicate finding", str(grok["findings"]))
+    codes = {item["code"] for item in grok["findings"]}
+    if "context_discovered_ok" in codes and "context_ok" in codes:
+        ok("inspect metrics separate static and discovered findings")
+    else:
+        fail("inspect metrics separate static and discovered findings", str(codes))
+    blob = proc.stdout + proc.stderr
+    if "/secret/" not in blob and "inspect-fixture" not in blob:
+        ok("inspect metrics redact sources")
+    else:
+        fail("inspect metrics redact sources", blob[:400])
+    assert_no_secrets(blob, "inspect metrics redact secrets")
+    # Disabled plugins are inspect-authoritative: the off-plugin row still appears.
+    if any(row.get("name") == "off-plugin" for row in grok["extensions"]["plugins"]):
+        ok("inspect metrics keep disabled plugin rows")
+    else:
+        fail("inspect metrics keep disabled plugin rows", str(grok["extensions"]["plugins"]))
+    probe = (home / ".grok" / "inspect-probe.txt").read_text(encoding="utf-8").strip().split("|")
+    if (
+        len(probe) == 3
+        and Path(probe[0]).resolve() == home.resolve()
+        and Path(probe[1]).resolve() == home.resolve()
+        and Path(probe[2]).resolve() == (home / ".grok").resolve()
+    ):
+        ok("inspect probe bound to fixture home")
+    else:
+        fail("inspect probe bound to fixture home", str(probe))
+
+
+def test_grok_inspect_unavailable() -> None:
+    for bad_rows in (42, {"name": "wrong shape"}, ["invalid row"]):
+        home = Path(tempfile.mkdtemp(prefix="hd-inspect-shape-"))
+        payload = inspect_payload()
+        payload["skills"] = bad_rows
+        make_grok_inspect_home(home, payload)
+        proc = run_doctor(home, ["--harness", "grok", "--json"])
+        if proc.returncode == 0:
+            discovered = json.loads(proc.stdout)["harnesses"]["grok"]["context"]["discovered"]
+            if discovered["status"] == "UNKNOWN" and discovered.get("reason") == "malformed":
+                ok("inspect invalid row shape is UNKNOWN")
+                continue
+        fail("inspect invalid row shape is UNKNOWN", "invalid inspect shape was accepted or crashed")
+    for behavior, label in (("malformed", "malformed"), ("failed", "failed")):
+        home = Path(tempfile.mkdtemp(prefix=f"hd-inspect-{behavior}-"))
+        make_grok_inspect_home(home, inspect_payload(), behavior=behavior)
+        proc = run_doctor(home, ["--harness", "grok", "--json"])
+        if proc.returncode != 0:
+            fail(f"inspect {label} exit", f"{proc.returncode} {proc.stderr}")
+            continue
+        report = json.loads(proc.stdout)
+        discovered = report["harnesses"]["grok"]["context"]["discovered"]
+        if discovered["status"] == "UNKNOWN" and discovered.get("reason") == behavior:
+            ok(f"inspect {label} is UNKNOWN")
+        else:
+            fail(f"inspect {label} is UNKNOWN", str(discovered))
+        codes = {item["code"] for item in report["harnesses"]["grok"]["findings"]}
+        if "context_discovered_unknown" in codes and "duplicate_skill_names_unknown" in codes:
+            ok(f"inspect {label} findings unknown")
+        else:
+            fail(f"inspect {label} findings unknown", str(codes))
+
+    home = Path(tempfile.mkdtemp(prefix="hd-inspect-timeout-"))
+    make_grok_inspect_home(home, inspect_payload(), behavior="timeout")
+    proc = run_doctor(home, ["--harness", "grok", "--json"], env_extra={"HARNESS_DOCTOR_INSPECT_TIMEOUT": "0.3"})
+    report = json.loads(proc.stdout)
+    discovered = report["harnesses"]["grok"]["context"]["discovered"]
+    if discovered["status"] == "UNKNOWN" and discovered.get("reason") == "timeout":
+        ok("inspect timeout is UNKNOWN")
+    else:
+        fail("inspect timeout is UNKNOWN", str(discovered))
+
+    empty = home / "empty-bin"
+    empty.mkdir(exist_ok=True)
+    proc = run_doctor(home, ["--harness", "grok", "--json"], path_dir=empty)
+    report = json.loads(proc.stdout)
+    discovered = report["harnesses"]["grok"]["context"]["discovered"]
+    if discovered["status"] == "UNKNOWN" and discovered.get("reason") == "missing_cli":
+        ok("inspect missing CLI is UNKNOWN")
+    else:
+        fail("inspect missing CLI is UNKNOWN", str(discovered))
+
+
+def test_grok_static_labels() -> None:
+    home = Path(tempfile.mkdtemp(prefix="hd-static-"))
+    make_grok_inspect_home(home, inspect_payload())
+    proc = run_doctor(home, ["--harness", "grok", "--json"])
+    report = json.loads(proc.stdout)
+    context = report["harnesses"]["grok"]["context"]
+    if context.get("kind") == "static installed-file catalog" and "ignores enable/ignore" in context.get(
+        "static_note", ""
+    ):
+        ok("static context labelled")
+    else:
+        fail("static context labelled", str(context))
+    if "UTF-8 bytes / 4" in str(context.get("token_estimate")):
+        ok("static context estimate named")
+    else:
+        fail("static context estimate named", str(context.get("token_estimate")))
+    human = run_doctor(home, ["--harness", "grok"])
+    if "local heuristic threshold" in human.stdout or "discovered" in human.stdout:
+        ok("human report explains context basis")
+    else:
+        fail("human report explains context basis", human.stdout[:600])
+
+
+def test_grok_inspect_authoritative() -> None:
+    """Ignored/disabled definitions: inspect decides, static disk does not."""
+    home = Path(tempfile.mkdtemp(prefix="hd-inspect-auth-"))
+    payload = inspect_payload()
+    make_grok_inspect_home(home, payload)
+    write(
+        home / ".grok" / "config.toml",
+        '[plugins]\nenabled = ["live-plugin"]\n\n[skills]\nignore = ["ignored-skill"]\n',
+    )
+    write(
+        home / ".grok" / "installed-plugins" / "off-plugin" / "skills" / "ignored-skill" / "SKILL.md",
+        "---\nname: ignored-skill\ndescription: ignored on disk\n---\n",
+    )
+    proc = run_doctor(home, ["--harness", "grok", "--json"])
+    report = json.loads(proc.stdout)
+    grok = report["harnesses"]["grok"]
+    names = {row["name"] for row in grok["extensions"]["skills"]}
+    if "ignored-skill" not in names:
+        ok("ignored skill absent from inspect rows")
+    else:
+        fail("ignored skill absent from inspect rows", str(names))
+    discovered = grok["context"]["discovered"]
+    if discovered["status"] == "OK" and discovered["unique_names"] == 3:
+        ok("discovered count stays inspect-authoritative")
+    else:
+        fail("discovered count stays inspect-authoritative", str(discovered))
+    if grok["context"]["plugin_catalog_skills"] == 2:
+        ok("static count still includes ignored installed file")
+    else:
+        fail("static count still includes ignored installed file", str(grok["context"]))
+
+
 def test_grok() -> None:
     home = Path(tempfile.mkdtemp(prefix="hd-grok-"))
     make_grok_home(home, sessions=22, span_days=10)
@@ -569,6 +848,22 @@ def test_windows_style_home() -> None:
 
 def test_module_helpers() -> None:
     mod = load_mod()
+    fixture_home = Path("/tmp/doctor-isolated-user")
+    with patch.dict(os.environ, {
+        "USERPROFILE": "/operator",
+        "GROK_HOME": "/operator/.grok",
+        "GROK_CONFIG": '{"agent":"operator"}',
+        "GROK_CONFIG_PATH": "/operator/overlay.toml",
+    }):
+        env = mod.bound_env(fixture_home)
+    if all(env[key] == str(fixture_home) for key in ("HOME", "USERPROFILE")) and env["GROK_HOME"] == str(fixture_home / ".grok"):
+        ok("probe binds Unix and Windows home paths")
+    else:
+        fail("probe binds Unix and Windows home paths", str(env.get("USERPROFILE")))
+    if "GROK_CONFIG" not in env and "GROK_CONFIG_PATH" not in env and env.get("GROK_DISABLE_AUTOUPDATER") == "1":
+        ok("probe removes inherited overlays and disables updates")
+    else:
+        fail("probe removes inherited overlays and disables updates", "unexpected probe environment")
     if mod.permission_class("git status") == "read" and mod.permission_class("git push") == "write":
         ok("permission_class")
     else:
@@ -583,6 +878,48 @@ def test_module_helpers() -> None:
         ok("dump_json redacts secret keys and prompts")
     else:
         fail("dump_json redacts secret keys and prompts", dumped)
+
+
+def test_standalone_frontmatter_parity() -> None:
+    mod = load_mod()
+    spec = importlib.util.spec_from_file_location(
+        "inventory_test_fixtures", ROOT / "scripts" / "test-context-budget-inventory.py"
+    )
+    assert spec and spec.loader
+    fixtures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixtures)
+    budget = mod.try_load_context_budget()
+    assert budget is not None
+    cases = fixtures.frontmatter_cases() + [
+        ("BOM+CRLF", "\ufeff---\r\nname: zeta\r\ndescription: >-\r\n  first\r\n  second\r\n---\r\n", ("zeta", "first second")),
+        ("plain continuation", "---\nname: eta\ndescription: first\n  second\n---\n", ("eta", "first second")),
+        ("quoted continuation", '---\nname: theta\ndescription: "first\n  second"\n---\n', ("theta", "first second")),
+    ]
+    for label, text, (name, desc) in cases:
+        actual = mod._fallback_parse_frontmatter(text)
+        if actual == budget.parse_skill_frontmatter(text) == {"name": name, "description": desc}:
+            ok(f"standalone frontmatter parity: {label}")
+        else:
+            fail(f"standalone frontmatter parity: {label}", str(actual))
+
+
+def test_grok_version_probe_fallback() -> None:
+    mod = load_mod()
+    home = Path(tempfile.mkdtemp(prefix="hd-version-"))
+    (home / ".grok").mkdir()
+    for label, state, payload, expected, calls in (
+        ("inspect version", "ok", {"grokVersion": "1.0.45", "skills": []}, "1.0.45", 0),
+        ("missing inspect version", "ok", {"skills": []}, "fallback-version", 1),
+        ("unavailable inspect", "failed", None, "fallback-version", 1),
+    ):
+        with patch.object(mod, "grok_inspect", return_value={"state": state, "data": payload}), patch.object(
+            mod, "cli_version", return_value="fallback-version"
+        ) as version:
+            result = mod.audit_grok(home, 30, 50)
+        if result["version"]["value"] == expected and version.call_count == calls:
+            ok(f"grok version probe: {label}")
+        else:
+            fail(f"grok version probe: {label}", str(result["version"]))
 
 
 def test_human_and_schema() -> None:
@@ -607,14 +944,22 @@ def main() -> int:
     test_claude_full()
     test_insufficient_window()
     test_grok()
+    test_grok_inspect_authoritative()
+    test_grok_inspect_metrics()
+    test_grok_inspect_unavailable()
+    test_grok_static_labels()
     test_codex_and_cursor()
     test_missing_cli_unknown()
     test_windows_style_home()
     test_module_helpers()
+    test_standalone_frontmatter_parity()
+    test_grok_version_probe_fallback()
     test_human_and_schema()
     print(f"\n=== Results: {PASS} passed, {FAIL} failed ===")
     return 1 if FAIL else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    with tempfile.TemporaryDirectory(prefix="harness-doctor-tests-", dir="/tmp") as test_root:
+        with patch.object(tempfile, "tempdir", test_root):
+            raise SystemExit(main())

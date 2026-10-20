@@ -317,7 +317,7 @@
       "name": "grok-build-harness",
       "source": "./skills/grok-build-harness",
       "description": "Fresh-host bootstrap for the karlorz subagent harness \u2014 installs custom agents, agentrules, BYOK config, and the companion plugin set. Idempotent, backup-first, GROK_HOME-aware.",
-      "version": "0.5.8",
+      "version": "0.5.9",
       "category": "operations",
       "keywords": [
         "grok",
@@ -380,7 +380,7 @@
       "name": "harness-doctor",
       "source": "./skills/harness-doctor",
       "description": "Read-only audit of Claude, Grok, Codex, and Cursor harnesses: unused skills, cold plugins, duplicate memory, hook cost, and context budget. Never mutates host config.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "productivity",
       "keywords": [
         "doctor",

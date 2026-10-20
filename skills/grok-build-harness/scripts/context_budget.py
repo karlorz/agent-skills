@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Always-on context budget lines for --status. No secrets.
 
-Token estimate is UTF-8 bytes/4 (same coarse measure as a chars/4 census).
-Does not print API keys, URLs, headers, or env_key values.
+Skill counts here are a static installed-file inventory, not the live
+discovered set and not the model-visible prompt. Description tokens are a
+coarse UTF-8 bytes/4 estimate, not a tokenizer count.
+
+Does not run the grok CLI and does not print API keys, URLs, headers,
+env_key values, or skill description text.
 """
 
 from __future__ import annotations
@@ -17,6 +21,11 @@ GROK_ALWAYS_ON = (
     ("grok/skillwiki.md", "skillwiki.md"),
     ("grok/rules/reply-in-english.md", "rules/reply-in-english.md"),
 )
+
+STATIC_TOKEN_ESTIMATE = "description tokens = UTF-8 bytes / 4 (coarse estimate)"
+SKIP_PARTS = {"node_modules", ".git", "archive", "dist"}
+FRONTMATTER_KEYS = ("name", "description")
+BLOCK_SCALARS = (">", ">-", ">+", "|", "|-", "|+")
 
 
 def tok_of(text: str) -> int:
@@ -34,37 +43,163 @@ def file_tok(path: Path) -> int | None:
         return None
 
 
-def _skill_name_desc(text: str, fallback: str) -> tuple[str, str]:
-    name, desc = fallback, ""
-    if not text.startswith("---"):
-        return name, desc
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return name, desc
-    for line in parts[1].splitlines():
-        raw = line.strip()
-        if raw.startswith("name:"):
-            name = raw.split(":", 1)[1].strip().strip('"').strip("'") or name
-        elif raw.startswith("description:"):
-            desc = raw.split(":", 1)[1].strip().strip('"').strip("'")
-    return name, desc
+def _strip_bom(text: str) -> str:
+    return text[1:] if text.startswith("\ufeff") else text
 
 
-def skill_catalog(root: Path) -> tuple[int, int]:
-    """Unique SKILL.md count and summed description tokens under root."""
+def _unquote(raw: str) -> str:
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        return raw[1:-1]
+    return raw
+
+
+def parse_skill_frontmatter(text: str) -> dict[str, str]:
+    """Top-level name/description from SKILL.md frontmatter.
+
+    Handles BOM, CRLF, quoted and plain same-line values, plain scalar
+    continuations, and folded/literal block scalars. Returns {} when no
+    closed frontmatter block is present.
+    """
+    lines = _strip_bom(text).splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    end = None
+    for index in range(1, len(lines)):
+        if lines[index].strip() in ("---", "..."):
+            end = index
+            break
+    if end is None:
+        return {}
+    block = lines[1:end]
+    data: dict[str, str] = {}
+    index = 0
+    while index < len(block):
+        line = block[index]
+        if not line.strip() or line.lstrip().startswith("#"):
+            index += 1
+            continue
+        if line[:1].isspace() or ":" not in line:
+            index += 1
+            continue
+        key, raw = line.split(":", 1)
+        key = key.strip()
+        if key not in FRONTMATTER_KEYS:
+            index += 1
+            continue
+        raw = raw.strip()
+        if raw in BLOCK_SCALARS:
+            folded = raw.startswith(">")
+            parts: list[str] = []
+            index += 1
+            while index < len(block):
+                follow = block[index]
+                if not follow.strip():
+                    parts.append("")
+                    index += 1
+                    continue
+                if not follow[:1].isspace():
+                    break
+                parts.append(follow.strip())
+                index += 1
+            while parts and not parts[-1]:
+                parts.pop()
+            while parts and not parts[0]:
+                parts.pop(0)
+            if folded:
+                value = re.sub(r"[ \t]+", " ", " ".join(part for part in parts if part)).strip()
+            else:
+                value = "\n".join(parts).strip()
+            data[key] = value
+            continue
+        if raw[:1] in ("'", '"'):
+            quote = raw[0]
+            if len(raw) >= 2 and raw[-1] == quote:
+                data[key] = raw[1:-1]
+                index += 1
+                continue
+            parts = [raw[1:]]
+            index += 1
+            while index < len(block):
+                follow = block[index].strip()
+                if follow.endswith(quote):
+                    parts.append(follow[:-1])
+                    index += 1
+                    break
+                parts.append(follow)
+                index += 1
+            data[key] = " ".join(part for part in parts if part)
+            continue
+        parts = [raw]
+        index += 1
+        while index < len(block):
+            follow = block[index]
+            if not follow.strip() or not follow[:1].isspace():
+                break
+            parts.append(follow.strip())
+            index += 1
+        data[key] = re.sub(r"[ \t]+", " ", " ".join(part for part in parts if part)).strip()
+    return data
+
+
+def skill_records(root: Path) -> list[dict[str, object]]:
+    """One record per SKILL.md under root, in deterministic path order.
+
+    Names and description sizes only; paths and text never leave this module.
+    """
     if not root.is_dir():
-        return 0, 0
-    by: dict[str, int] = {}
-    for skill in root.rglob("SKILL.md"):
-        if any(p in skill.parts for p in ("node_modules", ".git")):
+        return []
+    records: list[dict[str, object]] = []
+    for skill in sorted(root.rglob("SKILL.md"), key=lambda path: path.as_posix()):
+        if any(part in SKIP_PARTS for part in skill.parts):
             continue
         try:
             text = skill.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        name, desc = _skill_name_desc(text, skill.parent.name)
-        by[name] = tok_of(desc)
-    return len(by), sum(by.values())
+        meta = parse_skill_frontmatter(text)
+        name = _unquote(meta.get("name", "")) or skill.parent.name
+        desc = meta.get("description", "")
+        records.append(
+            {
+                "name": name,
+                "description_chars": len(desc),
+                "description_tokens": tok_of(desc),
+            }
+        )
+    return records
+
+
+def catalog_summary(root: Path) -> dict[str, object]:
+    """Static installed-file totals. Every file row contributes to the estimate."""
+    records = skill_records(root)
+    by_name: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        by_name.setdefault(str(record["name"]), []).append(record)
+    duplicates = [
+        {"name": name, "count": len(rows)}
+        for name, rows in sorted(by_name.items())
+        if len(rows) > 1
+    ]
+    unique_chars = sum(int(rows[0]["description_chars"]) for _, rows in sorted(by_name.items()))
+    unique_tokens = sum(int(rows[0]["description_tokens"]) for _, rows in sorted(by_name.items()))
+    return {
+        "skill_files": len(records),
+        "unique_names": len(by_name),
+        "duplicate_rows": len(records) - len(by_name),
+        "duplicate_name_groups": duplicates,
+        "description_chars": sum(int(record["description_chars"]) for record in records),
+        "description_tokens": sum(int(record["description_tokens"]) for record in records),
+        "unique_description_chars": unique_chars,
+        "unique_description_tokens": unique_tokens,
+        "token_estimate": STATIC_TOKEN_ESTIMATE,
+    }
+
+
+def skill_catalog(root: Path) -> tuple[int, int]:
+    """Installed SKILL.md file count and summed description tokens."""
+    summary = catalog_summary(root)
+    return int(summary["skill_files"]), int(summary["description_tokens"])
 
 
 def grok_mcp_servers(config: Path) -> list[str]:
@@ -76,8 +211,8 @@ def grok_mcp_servers(config: Path) -> list[str]:
         return []
     names: list[str] = []
     seen: set[str] = set()
-    for m in re.finditer(r"^\[mcp_servers\.([^\]]+)\]", text, re.M):
-        raw = m.group(1)
+    for match in re.finditer(r"^\[mcp_servers\.([^\]]+)\]", text, re.M):
+        raw = match.group(1)
         name = raw.split(".", 1)[0]
         if name in seen:
             continue
@@ -108,16 +243,27 @@ def inventory_lines(
     grok_sum = 0
     grok_files = 0
     for label, rel in GROK_ALWAYS_ON:
-        n = file_tok(grok_home / rel)
-        if n is None:
+        count = file_tok(grok_home / rel)
+        if count is None:
             lines.append(f"context: {label} missing")
             continue
-        grok_sum += n
+        grok_sum += count
         grok_files += 1
-        lines.append(f"context: {label} {n} tok")
+        lines.append(f"context: {label} {count} tok")
     lines.append(f"context: grok-files {grok_files} {grok_sum} tok")
-    skills, cat = skill_catalog(grok_home / "installed-plugins")
-    lines.append(f"context: grok-catalog {skills} skills {cat} tok")
+    summary = catalog_summary(grok_home / "installed-plugins")
+    lines.append(
+        f"context: grok-catalog {summary['skill_files']} skills "
+        f"{summary['description_tokens']} tok "
+        f"(static installed-plugin inventory; enable/ignore state and non-plugin "
+        f"discovery roots are not applied; {summary['unique_names']} unique names; "
+        f"{summary['duplicate_rows']} duplicate-name rows; {STATIC_TOKEN_ESTIMATE})"
+    )
+    lines.append(
+        "context: grok-discovered UNKNOWN "
+        "(status never runs the live CLI; discovered and model-visible sets "
+        "require harness-doctor and rendered-prompt evidence)"
+    )
     if enabled_count is not None:
         lines.append(f"context: grok-plugins-enabled {enabled_count}")
     mcp = grok_mcp_servers(grok_home / "config.toml")
@@ -129,34 +275,34 @@ def inventory_lines(
     )
     c_sum, c_n = 0, 0
     for label, path in claude_paths:
-        n = file_tok(path)
-        if n is None:
+        count = file_tok(path)
+        if count is None:
             lines.append(f"context: {label} missing")
             continue
-        c_sum += n
+        c_sum += count
         c_n += 1
-        lines.append(f"context: {label} {n} tok")
+        lines.append(f"context: {label} {count} tok")
     lines.append(f"context: claude-files {c_n} {c_sum} tok")
     claude_mcp = json_mcp_servers(user_home / ".claude.json")
     if not claude_mcp:
         claude_mcp = json_mcp_servers(user_home / ".claude" / "settings.json")
     lines.append(f"context: claude-mcp {len(claude_mcp)} servers")
 
-    n = file_tok(user_home / ".codex" / "AGENTS.md")
-    if n is None:
+    count = file_tok(user_home / ".codex" / "AGENTS.md")
+    if count is None:
         lines.append("context: codex/AGENTS.md missing")
         lines.append("context: codex-files 0 0 tok")
     else:
-        lines.append(f"context: codex/AGENTS.md {n} tok")
-        lines.append(f"context: codex-files 1 {n} tok")
+        lines.append(f"context: codex/AGENTS.md {count} tok")
+        lines.append(f"context: codex-files 1 {count} tok")
 
-    n = file_tok(user_home / ".cursor" / "rules" / "reply-in-english.mdc")
-    if n is None:
+    count = file_tok(user_home / ".cursor" / "rules" / "reply-in-english.mdc")
+    if count is None:
         lines.append("context: cursor/rules/reply-in-english.mdc missing")
         lines.append("context: cursor-files 0 0 tok")
     else:
-        lines.append(f"context: cursor/rules/reply-in-english.mdc {n} tok")
-        lines.append(f"context: cursor-files 1 {n} tok")
+        lines.append(f"context: cursor/rules/reply-in-english.mdc {count} tok")
+        lines.append(f"context: cursor-files 1 {count} tok")
     cursor_mcp = json_mcp_servers(user_home / ".cursor" / "mcp.json")
     lines.append(f"context: cursor-mcp {len(cursor_mcp)} servers")
     return lines

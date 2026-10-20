@@ -678,5 +678,208 @@ assert_contains "context: cursor-mcp 1" "$CTX_INV" "context: cursor-mcp 1 server
 assert_not_contains "context: no bearer secret" "$CTX_INV" "secret-token-do-not-print"
 assert_not_contains "context: no mcp url leak" "$CTX_INV" "example.invalid"
 
+# --- config preservation + install: targeted python regressions ---------------
+if python3 "$ROOT/scripts/test-grok-build-harness-config.py" > "$TEST_ROOT/config-tests.log" 2>&1; then
+  ok "config preservation/install regressions ($(tail -1 "$TEST_ROOT/config-tests.log"))"
+else
+  fail "config preservation/install regressions: $(grep '^FAIL' "$TEST_ROOT/config-tests.log" | tr '\n' ';')"
+fi
+
+# --- installer: plugin-spec boundary (CRLF, malformed, producer failure) -----
+# Copy the plugin so a fixture status.py can stand in for the real one without
+# touching the repo. Each fixture exercises one boundary failure mode.
+make_spec_plugin() {
+  local name="$1" body="$2" dir="$TEST_ROOT/plugin-$1"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  cp -R "$PLUGIN/." "$dir/"
+  printf '%s\n' "$body" > "$dir/scripts/status.py"
+}
+spec_run() {
+  local home="$1" tag="$2"
+  env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+    "$TEST_ROOT/plugin-$tag/scripts/install.sh" --grok-home "$home" \
+    --no-config --skip-plugins -y 2>&1
+}
+
+make_spec_plugin crlf '#!/usr/bin/env python3
+import sys
+if "--as-bash" not in sys.argv:
+    sys.exit(0)
+sys.stdout.write("grok-build-harness|grok-build-harness|SKIP_NONE\r\n")
+sys.stdout.write("codex|openai/codex-plugin-cc#plugins/codex|SKIP_CODEX\r\n")
+'
+CRLF_HOME="$TEST_ROOT/crlf-spec-home"
+CRLF_OUT="$(spec_run "$CRLF_HOME" crlf)" ; CRLF_RC=$?
+assert_eq "CRLF plugin spec: install exits 0" "$CRLF_RC" "0"
+assert_not_contains "CRLF plugin spec: no invalid variable name" \
+  "$CRLF_OUT" "invalid variable name"
+assert_contains "CRLF plugin spec: plugin list parsed" \
+  "$CRLF_OUT" "plugins: grok-build-harness"
+
+make_spec_plugin malformed '#!/usr/bin/env python3
+import sys
+if "--as-bash" not in sys.argv:
+    sys.exit(0)
+sys.stdout.write("grok-build-harness|grok-build-harness\n")
+'
+MALFORMED_HOME="$TEST_ROOT/malformed-spec-home"
+MALFORMED_OUT="$(spec_run "$MALFORMED_HOME" malformed)" ; MALFORMED_RC=$?
+assert_eq "malformed plugin spec: install exits 1" "$MALFORMED_RC" "1"
+assert_contains "malformed plugin spec: names the shape" \
+  "$MALFORMED_OUT" "malformed plugin spec"
+
+make_spec_plugin unknown-flag '#!/usr/bin/env python3
+import sys
+if "--as-bash" not in sys.argv:
+    sys.exit(0)
+sys.stdout.write("grok-build-harness|grok-build-harness|SKIP_BOGUS\n")
+'
+UNKNOWN_HOME="$TEST_ROOT/unknown-flag-home"
+UNKNOWN_OUT="$(spec_run "$UNKNOWN_HOME" unknown-flag)" ; UNKNOWN_RC=$?
+assert_eq "unknown skip flag: install exits 1" "$UNKNOWN_RC" "1"
+assert_contains "unknown skip flag: names the flag" \
+  "$UNKNOWN_OUT" "unknown plugin skip flag 'SKIP_BOGUS'"
+
+make_spec_plugin empty-flag '#!/usr/bin/env python3
+import sys
+if "--as-bash" not in sys.argv:
+    sys.exit(0)
+sys.stdout.write("grok-build-harness|grok-build-harness|SKIP_NONE\r\n")
+sys.stdout.write("|empty-name|SKIP_NONE\r\n")
+'
+EMPTY_HOME="$TEST_ROOT/empty-field-home"
+EMPTY_OUT="$(spec_run "$EMPTY_HOME" empty-flag)" ; EMPTY_RC=$?
+assert_eq "empty spec field: install exits 1" "$EMPTY_RC" "1"
+assert_contains "empty spec field: names the shape" \
+  "$EMPTY_OUT" "malformed plugin spec"
+
+make_spec_plugin producer-fail '#!/usr/bin/env python3
+import sys
+sys.stderr.write("fixture: cannot read plugin-specs.json\n")
+sys.exit(2)
+'
+FAILED_HOME="$TEST_ROOT/producer-fail-home"
+FAILED_OUT="$(spec_run "$FAILED_HOME" producer-fail)" ; FAILED_RC=$?
+assert_eq "producer failure: install exits non-zero" "$FAILED_RC" "1"
+assert_contains "producer failure: status.py failure surfaced" \
+  "$FAILED_OUT" "status.py --as-bash failed"
+assert_not_contains "producer failure: no silent empty spec list" \
+  "$FAILED_OUT" "produced no plugin specs"
+
+# --- installer: temp-home run leaves the operator's live config byte-identical
+# The "live" home here stands in for the operator's real grok home. Only the
+# explicit --grok-home/--user-home targets may change; the live config and an
+# unrelated settings file must hash identically before and after.
+SENTINEL_HOME="$TEST_ROOT/sentinel-home"
+SENTINEL_USER="$TEST_ROOT/sentinel-user"
+mkdir -p "$SENTINEL_HOME" "$SENTINEL_USER/.grok" "$SENTINEL_USER/.claude"
+printf 'sentinel live config\n' > "$SENTINEL_USER/.grok/config.toml"
+printf '{"sentinel": true}\n' > "$SENTINEL_USER/.claude/settings.json"
+SENTINEL_FILES=(".grok/config.toml" ".claude/settings.json")
+sentinel_hashes() {
+  python3 - "$SENTINEL_USER" "${SENTINEL_FILES[@]}" <<'EOF'
+import hashlib, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+for rel in sys.argv[2:]:
+    print(rel, hashlib.sha256((root / rel).read_bytes()).hexdigest())
+EOF
+}
+SENTINEL_BEFORE="$(sentinel_hashes)"
+HARNESS_HUB_KEY=sentinel HARNESS_NEW_KEY=sentinel2 HARNESS_CONTEXT7_KEY=sentinel3 \
+  "$INSTALL" --grok-home "$SENTINEL_HOME" --user-home "$SENTINEL_USER" \
+  --skip-plugins --skip-grokgod -y >/dev/null 2>&1
+SENTINEL_AFTER="$(sentinel_hashes)"
+assert_eq "sentinel: live config byte-identical after install" \
+  "$SENTINEL_AFTER" "$SENTINEL_BEFORE"
+
+# --- installer: --no-config --skip-plugins with an explicit interpreter ------
+# Windows smoke shape: only the named interpreter (plus core utils) on PATH.
+EXPLICIT_BIN="$TEST_ROOT/explicit-bin"
+mkdir -p "$EXPLICIT_BIN"
+ln -s "$(command -v python3)" "$EXPLICIT_BIN/python3"
+EXP_HOME="$TEST_ROOT/explicit-home"
+EXP_OUT="$(env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+  PATH="$EXPLICIT_BIN:/usr/bin:/bin" HOME="$TEST_ROOT/empty-home" \
+  "$INSTALL" --grok-home "$EXP_HOME" --user-home "$TEST_ROOT/explicit-user" \
+  --no-config --skip-plugins --skip-grokgod -y 2>&1)" ; EXP_RC=$?
+assert_eq "--no-config --skip-plugins -y exits 0 with a bare interpreter PATH" "$EXP_RC" "0"
+assert_eq "--no-config wrote no config.toml" \
+  "$([ -f "$EXP_HOME/config.toml" ] && echo present || echo absent)" "absent"
+assert_not_contains "--no-config run printed no config install line" \
+  "$EXP_OUT" "config.toml: installed"
+
+# --- installer: host skill exclusions survive a re-render --------------------
+HOST_SKILLS_HOME="$TEST_ROOT/host-skills-home"
+mkdir -p "$HOST_SKILLS_HOME"
+run_generate "$HOST_SKILLS_HOME/config.toml" --hub-key h1 --new-key h2 --context7-key h3 --enabled "a"
+python3 - "$HOST_SKILLS_HOME/config.toml" <<'EOF'
+import sys, tomllib
+from pathlib import Path
+path = Path(sys.argv[1])
+cfg = tomllib.loads(path.read_text())
+cfg["skills"]["ignore"] = cfg["skills"]["ignore"] + [f"~/.agents/skills/host-{i}" for i in range(22)]
+cfg["skills"]["host_note"] = "keep"
+path.write_text("\n".join([
+    "[skills]",
+    "ignore = [\n" + "".join(f'    "{item}",\n' for item in cfg["skills"]["ignore"]) + "]",
+    'disabled = ["frontend-design", "host-disabled"]',
+    'paths = ["~/host-skills"]',
+    'server_skill_dirs = []',
+    'bundled_skill_dirs = []',
+    'host_note = "keep"',
+]) + "\n")
+EOF
+"$INSTALL" --grok-home "$HOST_SKILLS_HOME" --skip-plugins --skip-grokgod --force -y >/dev/null 2>&1
+python3 - "$HOST_SKILLS_HOME/config.toml" "$PLUGIN/assets/config.toml.template" <<'EOF'
+import sys, tomllib
+from pathlib import Path
+cfg = tomllib.loads(Path(sys.argv[1]).read_text())
+ignore = cfg["skills"]["ignore"]
+missing = [f"~/.agents/skills/host-{i}" for i in range(22) if f"~/.agents/skills/host-{i}" not in ignore]
+assert not missing, f"lost host exclusions: {missing}"
+defaults = tomllib.loads(Path(sys.argv[2]).read_text())["skills"]
+assert ignore[:len(defaults["ignore"])] == defaults["ignore"], ignore
+assert len(ignore) == len(set(ignore)) == len(defaults["ignore"]) + 22, len(ignore)
+assert cfg["skills"]["host_note"] == "keep", cfg["skills"]
+assert cfg["skills"]["disabled"] == list(dict.fromkeys(defaults["disabled"] + ["frontend-design", "host-disabled"])), cfg["skills"]["disabled"]
+assert cfg["skills"]["paths"] == ["~/host-skills"], cfg["skills"]["paths"]
+EOF
+assert_eq "re-render keeps 22 host exclusions + defaults + shared scalar" "$?" "0"
+HOST_RUN2="$("$INSTALL" --grok-home "$HOST_SKILLS_HOME" --skip-plugins --skip-grokgod --force -y 2>&1)"
+assert_eq "host-exclusion re-render stays idempotent" \
+  "$(grep -c 'identical, skipping' <<<"$HOST_RUN2")" "5"
+
+# An identical render still needs a backup when plan_mode changes afterward.
+PLAN_BACKUP_HOME="$TEST_ROOT/plan-backup-home"
+mkdir -p "$PLAN_BACKUP_HOME"
+PLAN_ENABLED="$(python3 "$PLUGIN/scripts/status.py" --as-bash | cut -d'|' -f1 | paste -sd, -)"
+run_generate "$PLAN_BACKUP_HOME/config.toml" --enabled "$PLAN_ENABLED"
+cp "$PLAN_BACKUP_HOME/config.toml" "$TEST_ROOT/plan-original.toml"
+env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+  "$INSTALL" --grok-home "$PLAN_BACKUP_HOME" --user-home "$TEST_ROOT/plan-user" \
+  --skip-plugins --with-grokgod -y >/dev/null 2>&1
+PLAN_BACKUP="$(find "$PLAN_BACKUP_HOME/backups" -name config.toml -type f | head -1)"
+assert_eq "plan_mode backs up a pre-existing identical render" \
+  "$([ -n "$PLAN_BACKUP" ] && cmp -s "$PLAN_BACKUP" "$TEST_ROOT/plan-original.toml" && echo match || echo missing)" "match"
+assert_eq "plan_mode staging files cleaned" \
+  "$(find "$PLAN_BACKUP_HOME" -name 'config.toml.plan-mode.*' | wc -l | tr -d ' ')" "0"
+
+CLEANUP_TMP="$TEST_ROOT/cleanup-tmp"
+mkdir -p "$CLEANUP_TMP"
+env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+  TMPDIR="$CLEANUP_TMP" "$INSTALL" --grok-home "$TEST_ROOT/cleanup-home" \
+  --user-home "$TEST_ROOT/cleanup-user" --skip-plugins --skip-grokgod -y >/dev/null 2>&1
+assert_eq "installer clears staging files on success" \
+  "$(find "$CLEANUP_TMP" -type f | wc -l | tr -d ' ')" "0"
+printf '[skills\n' > "$TEST_ROOT/cleanup-home/config.toml"
+env -u HARNESS_HUB_KEY -u HARNESS_NEW_KEY -u HARNESS_CONTEXT7_KEY \
+  TMPDIR="$CLEANUP_TMP" "$INSTALL" --grok-home "$TEST_ROOT/cleanup-home" \
+  --user-home "$TEST_ROOT/cleanup-user" --skip-plugins --skip-grokgod -y >/dev/null 2>&1
+assert_eq "installer malformed render exits 1" "$?" "1"
+assert_eq "installer clears staging files after render failure" \
+  "$(find "$CLEANUP_TMP" -type f | wc -l | tr -d ' ')" "0"
+
 printf '\n=== Results: %d passed, %d failed ===\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

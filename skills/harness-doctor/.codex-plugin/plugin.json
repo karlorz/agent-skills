@@ -1,6 +1,6 @@
 {
   "name": "harness-doctor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only audit of Claude, Grok, Codex, and Cursor harnesses: unused skills, cold plugins, duplicate memory, hook cost, and context budget. Never mutates host config.",
   "author": {
     "name": "karlorz"

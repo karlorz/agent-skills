@@ -2,6 +2,15 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.9] - 2026-10-20
+
+- Preserve host skill exclusions, disabled skills, discovery paths, and extra shared-table settings across config refreshes with stable, duplicate-free array merges.
+- Validate staged TOML and install config atomically with backups, expected-hash conflict detection, cooperative locking, and preserved file modes and symlink targets.
+- Handle Windows CRLF plugin-spec output, validate skip flags, propagate producer failures, and clean staging files on success and failure.
+- Label status catalog counts as static installed-file inventories with explicit UTF-8 bytes/4 estimates and add isolated-diagnostics guidance.
+- Share overwrite checks and array-of-tables serialization, remove redundant parser discovery, and validate plugin delimiters without subprocesses.
+- Add regression coverage for preservation, stale writes, backup ownership, Windows input, and live-config isolation.
+
 ## [0.5.8] - 2026-10-13
 
 - Pin `[memory] enabled = false` and `[memory_v2] enabled = false` in the config template so full host init matches the macOS fleet switch and beats managed remote enablement.

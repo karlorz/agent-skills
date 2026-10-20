@@ -83,6 +83,11 @@ jobs:
       - name: Run grok-build-harness regression checks
         run: bash scripts/test-grok-build-harness.sh
 
+      - name: Run harness inventory and doctor checks
+        run: |
+          python3 scripts/test-context-budget-inventory.py
+          python3 scripts/test-harness-doctor.py
+
       - name: Lint skill description catalog budget
         run: |
           python3 scripts/test-skill-description-budget.py

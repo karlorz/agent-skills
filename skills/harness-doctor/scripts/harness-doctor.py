@@ -116,6 +116,22 @@ GROK_ALWAYS_ON = (
     ("grok/rules/reply-in-english.md", "rules/reply-in-english.md"),
 )
 
+STATIC_TOKEN_ESTIMATE = "description tokens = UTF-8 bytes / 4 (coarse estimate)"
+INSPECT_TIMEOUT = 8.0
+MAX_INSPECT_BYTES = 8_000_000
+MAX_DUPLICATE_FINDINGS = 10
+INSPECT_TIMEOUT_ENV = "HARNESS_DOCTOR_INSPECT_TIMEOUT"
+
+# Numeric or label metrics whose names happen to contain token-ish words.
+SAFE_METRIC_KEYS = {
+    "token_estimate",
+    "description_tokens",
+    "unique_description_tokens",
+    "plugin_catalog_tokens",
+    "user_skill_tokens",
+    "tokens",
+}
+
 
 class UsageError(Exception):
     """Bad CLI usage (exit 2)."""
@@ -144,36 +160,147 @@ def file_tok(path: Path) -> int | None:
         return None
 
 
-def _skill_name_desc(text: str, fallback: str) -> tuple[str, str]:
-    name, desc = fallback, ""
-    if not text.startswith("---"):
-        return name, desc
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return name, desc
-    for line in parts[1].splitlines():
-        raw = line.strip()
-        if raw.startswith("name:"):
-            name = raw.split(":", 1)[1].strip().strip('"').strip("'") or name
-        elif raw.startswith("description:"):
-            desc = raw.split(":", 1)[1].strip().strip('"').strip("'")
-    return name, desc
+def _fallback_parse_frontmatter(text: str) -> dict[str, str]:
+    """Standalone fallback mirroring context_budget.parse_skill_frontmatter.
+
+    Handles BOM, CRLF, quoted/plain same-line values, scalar continuations,
+    and folded/literal block scalars. Returns {} without closed frontmatter.
+    """
+    lines = text.lstrip("\ufeff").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    end = None
+    for index in range(1, len(lines)):
+        if lines[index].strip() in ("---", "..."):
+            end = index
+            break
+    if end is None:
+        return {}
+    block = lines[1:end]
+    data: dict[str, str] = {}
+    index = 0
+    while index < len(block):
+        line = block[index]
+        if not line.strip() or line.lstrip().startswith("#"):
+            index += 1
+            continue
+        if line[:1].isspace() or ":" not in line:
+            index += 1
+            continue
+        key, raw = line.split(":", 1)
+        key = key.strip()
+        raw = raw.strip()
+        index += 1
+        if key not in ("name", "description"):
+            continue
+        if raw in (">", ">-", ">+", "|", "|-", "|+"):
+            parts: list[str] = []
+            while index < len(block):
+                follow = block[index]
+                if not follow.strip():
+                    parts.append("")
+                    index += 1
+                    continue
+                if not follow[:1].isspace():
+                    break
+                parts.append(follow.strip())
+                index += 1
+            while parts and not parts[-1]:
+                parts.pop()
+            while parts and not parts[0]:
+                parts.pop(0)
+            data[key] = (
+                re.sub(r"[ \t]+", " ", " ".join(p for p in parts if p)).strip()
+                if raw.startswith(">")
+                else "\n".join(parts).strip()
+            )
+            continue
+        if raw[:1] in ("'", '"'):
+            quote = raw[0]
+            if len(raw) >= 2 and raw[-1] == quote:
+                data[key] = raw[1:-1]
+                continue
+            parts = [raw[1:]]
+            while index < len(block):
+                follow = block[index].strip()
+                index += 1
+                if follow.endswith(quote):
+                    parts.append(follow[:-1])
+                    break
+                parts.append(follow)
+            data[key] = " ".join(p for p in parts if p)
+            continue
+        parts = [raw]
+        while index < len(block):
+            follow = block[index]
+            if not follow.strip() or not follow[:1].isspace():
+                break
+            parts.append(follow.strip())
+            index += 1
+        data[key] = re.sub(r"[ \t]+", " ", " ".join(p for p in parts if p)).strip()
+    return data
 
 
-def skill_catalog(root: Path) -> tuple[int, int]:
+# Standalone default; _bind_context_budget replaces it when the sibling ships.
+parse_skill_frontmatter = _fallback_parse_frontmatter
+
+
+def skill_records(root: Path) -> list[dict[str, Any]]:
+    """Static installed-file rows under root in deterministic path order."""
     if not root.is_dir():
-        return 0, 0
-    by: dict[str, int] = {}
-    for skill in root.rglob("SKILL.md"):
-        if any(part in skill.parts for part in ("node_modules", ".git")):
+        return []
+    records: list[dict[str, Any]] = []
+    for skill in sorted(root.rglob("SKILL.md"), key=lambda path: path.as_posix()):
+        if any(part in skill.parts for part in ("node_modules", ".git", "archive", "dist")):
             continue
         try:
             text = skill.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        name, desc = _skill_name_desc(text, skill.parent.name)
-        by[name] = tok_of(desc)
-    return len(by), sum(by.values())
+        meta = parse_skill_frontmatter(text)
+        name = meta.get("name", "").strip().strip("\"'") or skill.parent.name
+        desc = meta.get("description", "")
+        records.append(
+            {
+                "name": name,
+                "description_chars": len(desc),
+                "description_tokens": tok_of(desc),
+            }
+        )
+    return records
+
+
+def catalog_summary(root: Path) -> dict[str, Any]:
+    """Static inventory totals; every file row counts toward the estimate."""
+    records = skill_records(root)
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        by_name.setdefault(str(record["name"]), []).append(record)
+    duplicates = [
+        {"name": name, "count": len(rows)}
+        for name, rows in sorted(by_name.items())
+        if len(rows) > 1
+    ]
+    return {
+        "skill_files": len(records),
+        "unique_names": len(by_name),
+        "duplicate_rows": len(records) - len(by_name),
+        "duplicate_name_groups": duplicates,
+        "description_chars": sum(int(row["description_chars"]) for row in records),
+        "description_tokens": sum(int(row["description_tokens"]) for row in records),
+        "unique_description_chars": sum(
+            int(rows[0]["description_chars"]) for _, rows in sorted(by_name.items())
+        ),
+        "unique_description_tokens": sum(
+            int(rows[0]["description_tokens"]) for _, rows in sorted(by_name.items())
+        ),
+        "token_estimate": STATIC_TOKEN_ESTIMATE,
+    }
+
+
+def skill_catalog(root: Path) -> tuple[int, int]:
+    summary = catalog_summary(root)
+    return int(summary["skill_files"]), int(summary["description_tokens"])
 
 
 def try_load_context_budget() -> Any | None:
@@ -199,14 +326,19 @@ def try_load_context_budget() -> Any | None:
 
 
 def _bind_context_budget() -> None:
-    global tok_of, file_tok, skill_catalog, GROK_ALWAYS_ON
+    global tok_of, file_tok, skill_catalog, skill_records, GROK_ALWAYS_ON
+    global parse_skill_frontmatter, catalog_summary, STATIC_TOKEN_ESTIMATE
     budget = try_load_context_budget()
     if budget is None:
         return
     tok_of = budget.tok_of
     file_tok = budget.file_tok
     skill_catalog = budget.skill_catalog
+    skill_records = budget.skill_records
     GROK_ALWAYS_ON = budget.GROK_ALWAYS_ON
+    parse_skill_frontmatter = budget.parse_skill_frontmatter
+    catalog_summary = budget.catalog_summary
+    STATIC_TOKEN_ESTIMATE = budget.STATIC_TOKEN_ESTIMATE
 
 
 _bind_context_budget()
@@ -220,6 +352,8 @@ def redact_text(value: str) -> str:
 
 
 def is_secret_key(key: str) -> bool:
+    if key.lower() in SAFE_METRIC_KEYS:
+        return False
     return bool(SECRET_KEY_RE.search(key))
 
 
@@ -278,25 +412,55 @@ def which(name: str) -> str | None:
     return found if found else None
 
 
-def run_cmd(argv: list[str], timeout: float = CMD_TIMEOUT) -> tuple[int, str, str]:
+def run_cmd(
+    argv: list[str],
+    timeout: float = CMD_TIMEOUT,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> tuple[int, str, str]:
+    """Run argv read-only. Exit 124 marks timeout, 127 an exec failure."""
     try:
         proc = subprocess.run(
             argv,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             check=False,
+            cwd=str(cwd) if cwd is not None else None,
+            env=env,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
+        return 124, "", ""
+    except OSError:
         return 127, "", ""
     return proc.returncode, proc.stdout or "", proc.stderr or ""
 
 
-def cli_version(binary: str) -> str | None:
+def bound_env(home: Path) -> dict[str, str]:
+    """Bind CLI probes to the audited home and remove inherited overlays."""
+    env = dict(os.environ)
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    env["GROK_HOME"] = str(home / ".grok")
+    env["GROK_DISABLE_AUTOUPDATER"] = "1"
+    env.setdefault("NO_COLOR", "1")
+    env.pop("GROK_CONFIG", None)
+    env.pop("GROK_CONFIG_PATH", None)
+    return env
+
+
+def cli_version(binary: str, home: Path | None = None) -> str | None:
     path = which(binary)
     if not path:
         return None
-    code, out, err = run_cmd([path, "--version"])
+    cwd = None
+    env = None
+    if home is not None:
+        cwd = home
+        env = bound_env(home)
+    code, out, err = run_cmd([path, "--version"], cwd=cwd, env=env)
     blob = redact_text(f"{out}\n{err}")
     match = VERSION_RE.search(blob)
     if match:
@@ -678,26 +842,43 @@ def hook_findings(stats: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
     return findings
 
 
-def context_findings(tokens: int | None, label: str) -> list[dict[str, Any]]:
+def context_findings(
+    tokens: int | None,
+    label: str,
+    *,
+    quality: str = "static installed-file catalog",
+    basis: str = "static scan",
+    extra: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Estimate finding. `quality` names what was actually counted.
+
+    CONTEXT_HEAVY_TOKENS is a local heuristic, not a vendor runtime limit.
+    """
+    evidence = {"tokens": tokens, "quality": quality, "token_estimate": STATIC_TOKEN_ESTIMATE}
+    if extra:
+        evidence.update(extra)
     if tokens is None:
         return [
             finding(
                 "6-context",
                 "UNKNOWN",
                 "context_unknown",
-                f"{label} context estimate unavailable",
+                f"{label} {quality} estimate unavailable ({basis})",
                 "unavailable",
+                extra=evidence,
             )
         ]
+    summary = f"{label} {quality} ~{tokens} tok ({STATIC_TOKEN_ESTIMATE}; {basis})"
     if tokens >= CONTEXT_HEAVY_TOKENS:
         return [
             finding(
                 "6-context",
                 "WARN",
                 "context_heavy",
-                f"{label} catalog ~{tokens} tok exceeds {CONTEXT_HEAVY_TOKENS}",
+                summary
+                + f"; local heuristic threshold {CONTEXT_HEAVY_TOKENS} tok, not a vendor limit",
                 "estimate",
-                extra={"tokens": tokens},
+                extra=evidence,
             )
         ]
     return [
@@ -705,11 +886,109 @@ def context_findings(tokens: int | None, label: str) -> list[dict[str, Any]]:
             "6-context",
             "PASS",
             "context_ok",
-            f"{label} catalog ~{tokens} tok",
+            summary,
             "estimate",
-            extra={"tokens": tokens},
+            extra=evidence,
         )
     ]
+
+
+def discovered_context_findings(metrics: dict[str, Any], label: str) -> list[dict[str, Any]]:
+    """Discovered-row finding. Never claims model visibility."""
+    status = str(metrics.get("status") or "UNKNOWN")
+    reason = str(metrics.get("reason") or "")
+    if status != "OK":
+        return [
+            finding(
+                "6-context",
+                "UNKNOWN",
+                "context_discovered_unknown",
+                f"{label} discovered skill rows UNKNOWN ({reason or 'inspect unavailable'}); "
+                "static counts are not a substitute",
+                "unavailable",
+                extra={"reason": reason, "token_estimate": STATIC_TOKEN_ESTIMATE},
+            )
+        ]
+    tokens = int(metrics.get("description_tokens") or 0)
+    rows = int(metrics.get("discovered_rows") or 0)
+    names = int(metrics.get("unique_names") or 0)
+    summary = (
+        f"{label} discovered {rows} rows / {names} unique names, descriptions ~{tokens} tok "
+        f"({STATIC_TOKEN_ESTIMATE}); discovered rows are not proven model-visible"
+    )
+    severity = "WARN" if tokens >= CONTEXT_HEAVY_TOKENS else "PASS"
+    return [
+        finding(
+            "6-context",
+            severity,
+            "context_discovered_heavy" if severity == "WARN" else "context_discovered_ok",
+            summary,
+            "inventory",
+            extra={
+                "discovered_rows": rows,
+                "unique_names": names,
+                "duplicate_rows": metrics.get("duplicate_rows"),
+                "description_tokens": tokens,
+                "unique_description_tokens": metrics.get("unique_description_tokens"),
+                "source_breakdown": metrics.get("source_breakdown"),
+                "model_visible": "UNKNOWN",
+            },
+        )
+    ]
+
+
+def skill_duplicate_findings(metrics: dict[str, Any]) -> list[dict[str, Any]]:
+    """Duplicate discovered skill names; source ids only, no paths or text."""
+    if str(metrics.get("status") or "UNKNOWN") != "OK":
+        return [
+            finding(
+                "2-memory",
+                "UNKNOWN",
+                "duplicate_skill_names_unknown",
+                "discovered skill duplicate scan unavailable; inspect did not return usable rows",
+                "unavailable",
+            )
+        ]
+    groups = metrics.get("duplicate_name_groups") or []
+    omitted = int(metrics.get("duplicate_name_groups_omitted") or 0)
+    findings: list[dict[str, Any]] = []
+    for group in groups:
+        name = str(group.get("name") or "unknown")
+        sources = [str(item) for item in (group.get("sources") or [])]
+        findings.append(
+            finding(
+                "2-memory",
+                "WARN",
+                "duplicate_skill_name",
+                f"skill name {name} discovered {group.get('count')} times "
+                f"from {', '.join(sources) or 'unknown sources'}",
+                "inventory",
+                target=name,
+                extra={"count": group.get("count"), "sources": sources},
+            )
+        )
+    if omitted:
+        findings.append(
+            finding(
+                "2-memory",
+                "WARN",
+                "duplicate_skill_name_truncated",
+                f"{omitted} more duplicate-name groups omitted from this report",
+                "inventory",
+                extra={"omitted": omitted},
+            )
+        )
+    if not groups:
+        findings.append(
+            finding(
+                "2-memory",
+                "PASS",
+                "duplicate_skill_names_ok",
+                "no duplicate skill names among discovered rows",
+                "inventory",
+            )
+        )
+    return findings
 
 
 def duplicate_findings(duplicates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1018,10 +1297,12 @@ def audit_claude(home: Path, days: int, limit: int) -> dict[str, Any]:
     skills_n, catalog_tok = skill_catalog(catalog_root)
     user_n, user_tok = skill_catalog(home / ".claude" / "skills")
     result["context"] = {
+        "kind": "static installed-file catalog",
         "plugin_catalog_skills": skills_n,
         "plugin_catalog_tokens": catalog_tok,
         "user_skills": user_n,
         "user_skill_tokens": user_tok,
+        "token_estimate": STATIC_TOKEN_ESTIMATE,
     }
     perms = settings.get("permissions") if isinstance(settings, dict) else {}
     default_mode = perms.get("defaultMode") if isinstance(perms, dict) else None
@@ -1085,7 +1366,9 @@ def audit_claude(home: Path, days: int, limit: int) -> dict[str, Any]:
         )
     )
     findings.extend(hook_findings(hooks))
-    findings.extend(context_findings(catalog_tok + user_tok, "claude"))
+    findings.extend(
+        context_findings(catalog_tok + user_tok, "claude", quality="static installed-file catalog")
+    )
     if default_mode:
         findings.append(
             finding(
@@ -1201,18 +1484,157 @@ def parse_grok_sessions(
     return dict(skills), dict(tools), dict(mcp), dict(denials)
 
 
-def grok_inspect() -> dict[str, Any] | None:
+def inspect_timeout() -> float:
+    """Bounded probe timeout; the env override exists for fixture tests."""
+    raw = os.environ.get(INSPECT_TIMEOUT_ENV, "")
+    try:
+        value = float(raw)
+    except ValueError:
+        return INSPECT_TIMEOUT
+    return min(max(value, 0.2), INSPECT_TIMEOUT)
+
+
+def grok_inspect(home: Path) -> dict[str, Any]:
+    """Bounded `grok inspect --json` probe bound to the audited home.
+
+    Raw data stays internal to the audit; reports use sanitized metrics and
+    identifiers. State is ok, missing_cli, failed, timeout, or malformed.
+    """
+    out: dict[str, Any] = {"state": "missing_cli", "data": None, "probe": {"home_bound": True}}
     path = which("grok")
     if not path:
-        return None
-    code, out, _err = run_cmd([path, "inspect", "--json"], timeout=8.0)
-    if code != 0 or not out.strip():
-        return None
+        return out
+    env = bound_env(home)
+    code, stdout, _err = run_cmd(
+        [path, "inspect", "--json"],
+        timeout=inspect_timeout(),
+        cwd=home,
+        env=env,
+    )
+    out["probe"]["cwd_bound"] = True
+    if code == 124:
+        out["state"] = "timeout"
+        return out
+    if code != 0 or not stdout.strip():
+        out["state"] = "failed"
+        return out
+    raw = stdout.encode("utf-8")
+    if len(raw) > MAX_INSPECT_BYTES:
+        out["state"] = "malformed"
+        out["probe"]["oversized"] = True
+        return out
     try:
-        data = json.loads(out)
+        data = json.loads(stdout)
     except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
+        out["state"] = "malformed"
+        return out
+    if not isinstance(data, dict):
+        out["state"] = "malformed"
+        return out
+    for key in ("skills", "plugins", "mcpServers"):
+        rows = data.get(key)
+        if rows is not None and (
+            not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows)
+        ):
+            out["state"] = "malformed"
+            return out
+    out["state"] = "ok"
+    out["data"] = data
+    return out
+
+
+def safe_source_id(source: Any) -> str:
+    """Collapse an inspect source to a non-path identifier."""
+    if not isinstance(source, dict):
+        return "unknown"
+    kind = str(source.get("type") or "unknown")
+    if kind == "plugin":
+        plugin = re.sub(r"[^A-Za-z0-9._@-]", "?", str(source.get("plugin_name") or ""))[:80]
+        return f"plugin:{plugin}" if plugin else "plugin:unknown"
+    kind = re.sub(r"[^A-Za-z0-9._@-]", "?", kind)[:40]
+    return kind or "unknown"
+
+
+def inspect_skill_metrics(inspect: dict[str, Any]) -> dict[str, Any]:
+    """Discovered-skill metrics from inspect rows.
+
+    Every row contributes to the description estimate; a separate unique-name
+    view is reported. Rows expose no model-visibility flag, so that stays
+    UNKNOWN and is never inferred from discovery.
+    """
+    state = str(inspect.get("state") or "missing_cli")
+    result: dict[str, Any] = {
+        "status": "OK" if state == "ok" else "UNKNOWN",
+        "basis": "grok inspect --json (discovered rows)",
+        "model_visible": "UNKNOWN",
+        "model_visible_note": (
+            "inspect rows expose name/description/source/userInvocable only; "
+            "discovered is not proof of model-visible"
+        ),
+        "probe": inspect.get("probe") or {},
+        "token_estimate": STATIC_TOKEN_ESTIMATE,
+    }
+    if state != "ok":
+        result["reason"] = state
+        return result
+    data = inspect.get("data") if isinstance(inspect.get("data"), dict) else {}
+    rows = data.get("skills")
+    if not isinstance(rows, list):
+        result["status"] = "UNKNOWN"
+        result["reason"] = "malformed"
+        return result
+    names: dict[str, list[str]] = defaultdict(list)
+    sources: dict[str, int] = defaultdict(int)
+    rows_seen = 0
+    unnamed = 0
+    chars = 0
+    tokens = 0
+    unique_chars = 0
+    unique_tokens = 0
+    invocable = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        rows_seen += 1
+        desc = row.get("description")
+        desc_text = desc if isinstance(desc, str) else ""
+        chars += len(desc_text)
+        tokens += tok_of(desc_text)
+        if row.get("userInvocable") is True:
+            invocable += 1
+        source = safe_source_id(row.get("source"))
+        sources[source.split(":", 1)[0]] += 1
+        name = row.get("name")
+        if isinstance(name, str) and name.strip():
+            key = name.strip()
+            names[key].append(source)
+            if len(names[key]) == 1:
+                unique_chars += len(desc_text)
+                unique_tokens += tok_of(desc_text)
+        else:
+            unnamed += 1
+    duplicates = [
+        {"name": name, "count": len(srcs), "sources": sorted(set(srcs))[:6]}
+        for name, srcs in sorted(names.items())
+        if len(srcs) > 1
+    ]
+    result.update(
+        {
+            "discovered_rows": rows_seen,
+            "unique_names": len(names),
+            "unnamed_rows": unnamed,
+            "duplicate_rows": sum(len(srcs) - 1 for srcs in names.values()),
+            "duplicate_name_groups": duplicates[:MAX_DUPLICATE_FINDINGS],
+            "duplicate_name_groups_omitted": max(0, len(duplicates) - MAX_DUPLICATE_FINDINGS),
+            "source_breakdown": dict(sorted(sources.items())),
+            "user_invocable_rows": invocable,
+            "description_chars": chars,
+            "description_tokens": tokens,
+            "unique_description_chars": unique_chars,
+            "unique_description_tokens": unique_tokens,
+        }
+    )
+    return result
 
 
 def learn_status(home: Path) -> dict[str, Any]:
@@ -1232,10 +1654,12 @@ def audit_grok(home: Path, days: int, limit: int) -> dict[str, Any]:
     if not grok_home.exists():
         return empty_harness("grok", "missing", "no ~/.grok")
     result = empty_harness("grok", "present")
-    version = cli_version("grok")
-    inspect = grok_inspect()
+    probe = grok_inspect(home)
+    inspect = probe.get("data") if probe.get("state") == "ok" else None
     if inspect and inspect.get("grokVersion"):
         version = str(inspect.get("grokVersion"))
+    else:
+        version = cli_version("grok", home)
     result["version"] = {
         "value": version,
         "status": "PASS" if version else "UNKNOWN",
@@ -1263,7 +1687,12 @@ def audit_grok(home: Path, days: int, limit: int) -> dict[str, Any]:
                 )
         for row in inspect.get("skills") or []:
             if isinstance(row, dict) and row.get("name"):
-                inspect_skills.append({"name": row.get("name"), "source": (row.get("source") or {}).get("type") if isinstance(row.get("source"), dict) else None})
+                inspect_skills.append(
+                    {
+                        "name": row.get("name"),
+                        "source": safe_source_id(row.get("source")),
+                    }
+                )
         for row in inspect.get("mcpServers") or []:
             if isinstance(row, dict) and row.get("name"):
                 inspect_mcp.append(str(row.get("name")))
@@ -1279,6 +1708,11 @@ def audit_grok(home: Path, days: int, limit: int) -> dict[str, Any]:
         ]
     result["extensions"]["plugins"] = inspect_plugins
     result["extensions"]["skills"] = inspect_skills
+    result["extensions"]["skills_source"] = (
+        "grok inspect --json (discovered rows; model visibility UNKNOWN)"
+        if inspect
+        else "unavailable"
+    )
     result["extensions"]["mcp"] = inspect_mcp or [
         name[len("mcp_servers.") :].split(".", 1)[0]
         for name in tables
@@ -1302,19 +1736,32 @@ def audit_grok(home: Path, days: int, limit: int) -> dict[str, Any]:
         "has_config": config_path.is_file(),
         "learn": learn,
         "inspect": bool(inspect),
+        "inspect_state": probe.get("state"),
     }
     mem_files, duplicates = memory_files(
         [(label, grok_home / rel) for label, rel in GROK_ALWAYS_ON]
     )
     result["memory"] = {"files": mem_files, "duplicates": duplicates}
-    skills_n, catalog_tok = skill_catalog(grok_home / "installed-plugins")
+    installed_n, catalog_tok = skill_catalog(grok_home / "installed-plugins")
     user_n, user_tok = skill_catalog(grok_home / "skills")
+    discovered = inspect_skill_metrics(probe)
     result["context"] = {
-        "plugin_catalog_skills": skills_n,
+        "kind": "static installed-file catalog",
+        "plugin_catalog_skills": installed_n,
         "plugin_catalog_tokens": catalog_tok,
         "user_skills": user_n,
         "user_skill_tokens": user_tok,
+        "token_estimate": STATIC_TOKEN_ESTIMATE,
+        "static_note": (
+            "installed SKILL.md files only; ignores enable/ignore state and non-plugin roots; "
+            "not the discovered or model-visible set"
+        ),
+        "discovered": discovered,
     }
+    result["limitations"].append(
+        "Grok inspect rows expose name/description/source/userInvocable; discovered counts "
+        "are not proven model-visible prompt content"
+    )
     hooks = inspect.get("hooks") if inspect and isinstance(inspect.get("hooks"), list) else []
     result["hooks"] = {"inventory_count": len(hooks)}
     result["permissions"] = {}
@@ -1366,7 +1813,17 @@ def audit_grok(home: Path, days: int, limit: int) -> dict[str, Any]:
                     )
                 )
     findings.extend(duplicate_findings(duplicates))
-    findings.extend(context_findings(catalog_tok + user_tok, "grok"))
+    findings.extend(skill_duplicate_findings(discovered))
+    findings.extend(
+        context_findings(
+            catalog_tok + user_tok,
+            "grok",
+            quality="static installed-plugin+user file catalog",
+            basis="disk scan of installed-plugins and skills",
+            extra={"discovered_status": discovered.get("status")},
+        )
+    )
+    findings.extend(discovered_context_findings(discovered, "grok"))
     findings.extend(permission_findings(denials))
     if learn["collector_present"] or learn["skill_present"]:
         findings.append(
@@ -1495,7 +1952,12 @@ def audit_codex(home: Path, days: int, limit: int) -> dict[str, Any]:
     )
     result["memory"] = {"files": mem_files, "duplicates": duplicates}
     skills_n, catalog_tok = skill_catalog(cache)
-    result["context"] = {"plugin_catalog_skills": skills_n, "plugin_catalog_tokens": catalog_tok}
+    result["context"] = {
+        "kind": "static installed-file catalog",
+        "plugin_catalog_skills": skills_n,
+        "plugin_catalog_tokens": catalog_tok,
+        "token_estimate": STATIC_TOKEN_ESTIMATE,
+    }
     result["permissions"] = {
         "approval_policy": result["config"].get("approval_policy"),
         "sandbox_mode": result["config"].get("sandbox_mode"),
@@ -1520,7 +1982,9 @@ def audit_codex(home: Path, days: int, limit: int) -> dict[str, Any]:
         )
     )
     findings.extend(duplicate_findings(duplicates))
-    findings.extend(context_findings(catalog_tok, "codex"))
+    findings.extend(
+        context_findings(catalog_tok, "codex", quality="static installed-file catalog")
+    )
     if result["permissions"].get("approval_policy"):
         findings.append(
             finding(
@@ -1706,10 +2170,12 @@ def audit_cursor(home: Path, days: int, limit: int) -> dict[str, Any]:
     skills_n, catalog_tok = skill_catalog(cursor_home / "plugins" / "cache")
     user_n, user_tok = skill_catalog(cursor_home / "skills")
     result["context"] = {
+        "kind": "static installed-file catalog",
         "plugin_catalog_skills": skills_n,
         "plugin_catalog_tokens": catalog_tok,
         "user_skills": user_n,
         "user_skill_tokens": user_tok,
+        "token_estimate": STATIC_TOKEN_ESTIMATE,
     }
     mem_files, duplicates = memory_files(
         [
@@ -1771,7 +2237,9 @@ def audit_cursor(home: Path, days: int, limit: int) -> dict[str, Any]:
         )
     )
     findings.extend(duplicate_findings(duplicates))
-    findings.extend(context_findings(catalog_tok + user_tok, "cursor"))
+    findings.extend(
+        context_findings(catalog_tok + user_tok, "cursor", quality="static installed-file catalog")
+    )
     if result["permissions"].get("approvalMode"):
         findings.append(
             finding(

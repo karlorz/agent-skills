@@ -75,3 +75,4 @@ English-thinking rule SSOT is `assets/reply-in-english.md`. `--docs-only` copies
 - Contract not active → new session after a `match` refresh.
 - Full flag list / musl / keyed-config guard → `README.md` and `install.sh --help`.
 - Scratch test: `GROK_HOME=/tmp/grok-home bash "$INSTALL" --docs-only --dry-run`
+- Any config diagnostic (render, preserve, inspect, A/B skill discovery) → `references/isolated-diagnostics.md`. Never write a hand-built config over the live one.

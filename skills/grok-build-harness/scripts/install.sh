@@ -30,6 +30,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$HERE/.." && pwd)"
 ASSETS="$PLUGIN_ROOT/assets"
 GENERATE="$HERE/generate-config.py"
+INSTALL_CONFIG="$HERE/install-config.py"
 MERGE="$HERE/merge-agents.py"
 CHECK_CONFIG="$HERE/check-config.py"
 
@@ -108,6 +109,15 @@ log()  { printf 'grok-build-harness: %s\n' "$*"; }
 warn() { printf 'grok-build-harness: WARNING: %s\n' "$*" >&2; }
 die()  { printf 'grok-build-harness: ERROR: %s\n' "$*" >&2; exit 1; }
 
+TEMP_FILES=()
+cleanup_temporary_files() {
+  local temp_file
+  for temp_file in ${TEMP_FILES[@]+"${TEMP_FILES[@]}"}; do
+    rm -f "$temp_file"
+  done
+}
+trap cleanup_temporary_files EXIT
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --grok-home) GROK_HOME="$2"; shift 2 ;;
@@ -168,16 +178,57 @@ PERMISSION_MODE="always-approve"
 # SSOT: assets/plugin-specs.json (status.py --as-bash).
 SKIP_NONE=0
 command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH (required for grok-build-init)"
+
+# Capture first: process substitution hides the producer's exit status, and
+# Windows Python/console writes can leave a trailing CR that would otherwise
+# become part of the flag name (SKIP_NONE\r) and break indirect expansion.
+SPEC_OUTPUT="$(python3 "$HERE/status.py" --as-bash)" \
+  || die "status.py --as-bash failed (cannot read assets/plugin-specs.json)"
+SPEC_OUTPUT="${SPEC_OUTPUT//$'\r'/}"
+
 PLUGIN_SPECS=()
-while IFS= read -r spec; do
-  [ -n "$spec" ] && PLUGIN_SPECS+=("$spec")
-done < <(python3 "$HERE/status.py" --as-bash)
+if [ -n "$SPEC_OUTPUT" ]; then
+  while IFS= read -r spec; do
+    spec="${spec%"${spec##*[![:space:]]}"}"
+    [ -n "$spec" ] && PLUGIN_SPECS+=("$spec")
+  done <<< "$SPEC_OUTPUT"
+fi
 [ "${#PLUGIN_SPECS[@]}" -gt 0 ] || die "assets/plugin-specs.json produced no plugin specs"
+
+split_spec() {
+  # split_spec "<name|source|flag>" -> NAME, SOURCE, FLAG_NAME; validates shape
+  local spec="$1"
+  local pipes="${spec//[!|]/}"
+  [ "${#pipes}" -eq 2 ] \
+    || die "malformed plugin spec (expected name|source|flag): '$spec'"
+  IFS='|' read -r NAME SOURCE FLAG_NAME <<< "$spec"
+  [ -n "$NAME" ] && [ -n "$SOURCE" ] && [ -n "$FLAG_NAME" ] \
+    || die "malformed plugin spec (empty field): '$spec'"
+  case "$NAME" in
+    *[[:space:]\[\]\"]*) die "malformed plugin name: '$NAME'" ;;
+  esac
+}
+
+spec_skipped() {
+  # true when the spec's skip flag is set; rejects unknown/malformed flags
+  # before indirect expansion so a bad record cannot expand to garbage
+  if ! [[ "$FLAG_NAME" =~ ^SKIP_[A-Z0-9_]+$ ]]; then
+    die "malformed plugin skip flag '$FLAG_NAME' (expected SKIP_[A-Z0-9_]+)"
+  fi
+  declare -p "$FLAG_NAME" >/dev/null 2>&1 \
+    || die "unknown plugin skip flag '$FLAG_NAME' (no such installer option)"
+  local value="${!FLAG_NAME}"
+  case "$value" in
+    0|1) ;;
+    *) die "plugin skip flag '$FLAG_NAME' has non-flag value '$value'" ;;
+  esac
+  [ "$value" -eq 1 ]
+}
 
 ENABLED=()
 for spec in "${PLUGIN_SPECS[@]}"; do
-  IFS='|' read -r name _source flag_name <<< "$spec"
-  [ "${!flag_name}" -eq 1 ] || ENABLED+=("$name")
+  split_spec "$spec"
+  spec_skipped || ENABLED+=("$NAME")
 done
 
 prompt_yes() {
@@ -189,20 +240,26 @@ prompt_yes() {
   case "$answer" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 
-copy_if_changed() {
+should_install() {
   local src="$1" dst="$2" label="$3"
   if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
     log "$label: identical, skipping ($dst)"
-    return 0
+    return 1
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
     log "$label: would install -> $dst"
-    return 0
+    return 1
   fi
   if [ -f "$dst" ] && ! prompt_yes "overwrite existing $dst?"; then
     warn "$label: skipped (kept $dst)"
-    return 0
+    return 1
   fi
+  return 0
+}
+
+copy_if_changed() {
+  local src="$1" dst="$2" label="$3"
+  should_install "$src" "$dst" "$label" || return 0
   if [ -f "$dst" ]; then
     mkdir -p "$BACKUP_DIR"
     cp -p "$dst" "$BACKUP_DIR/$(basename "$dst")"
@@ -222,7 +279,7 @@ merge_agents_md() {
   # is identical to the plain copies.
   local dst="$GROK_HOME/AGENTS.md" tmp
   tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-agents.XXXXXX")"
-  trap 'rm -f "$tmp"' RETURN
+  TEMP_FILES+=("$tmp")
   if [ -f "$dst" ]; then
     python3 "$MERGE" "$ASSETS/AGENTS.md" "$dst" > "$tmp"
   else
@@ -240,13 +297,15 @@ config_has_injected_keys() {
 }
 
 render_config() {
-  # Render to a temp file, then reuse copy_if_changed: identical configs are
-  # skipped, user-modified configs are backed up before overwrite, and
-  # --dry-run prints without writing — same semantics as every other file.
+  # Config installation is not a plain copy: it carries host state (skill
+  # exclusions, plugin paths, inline keys), so it is staged, validated, and
+  # installed by install-config.py with a stale-write check against the hash
+  # this render was based on. Identical renders, --dry-run, and the overwrite
+  # prompt behave like every other file.
   local out="$GROK_HOME/config.toml"
-  local tmp args
+  local tmp args expected install_out
   tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-config.XXXXXX")"
-  trap 'rm -f "$tmp"' RETURN
+  TEMP_FILES+=("$tmp")
   # keyed-config downgrade guard: never silently replace a config that has
   # injected keys with an env-only render when this run provides no key at
   # all — skip the render and keep the working config (ADR-4)
@@ -257,6 +316,8 @@ render_config() {
     warn "re-run with --hub-key/--new-key/--context7-key (or HARNESS_* env), or pass --force-render to rewrite env-only"
     return 0
   fi
+  expected="$(python3 "$INSTALL_CONFIG" --hash "$out")" \
+    || die "cannot hash existing $out"
   args=(--out "$tmp")
   [ -n "$HUB_KEY" ] && args+=(--hub-key "$HUB_KEY")
   [ -n "$NEW_KEY" ] && args+=(--new-key "$NEW_KEY")
@@ -267,8 +328,22 @@ render_config() {
   # sources, [plugins].disabled, extra tables): re-rendering from the
   # template alone would drop them and churn config on every re-run
   [ -f "$out" ] && args+=(--preserve "$out")
-  python3 "$GENERATE" --template "$ASSETS/config.toml.template" "${args[@]}" >/dev/null
-  copy_if_changed "$tmp" "$out" "config.toml"
+  python3 "$GENERATE" --template "$ASSETS/config.toml.template" "${args[@]}" >/dev/null \
+    || die "config render failed; $out left unchanged"
+  should_install "$tmp" "$out" "config.toml" || return 0
+  install_out="$(python3 "$INSTALL_CONFIG" --source "$tmp" --dest "$out" \
+    --expected-sha256 "$expected" --backup-dir "$BACKUP_DIR")" \
+    || die "config install failed; $out left unchanged"
+  case "$install_out" in
+    identical*) log "config.toml: identical, skipping ($out)" ;;
+    *)
+      CONFIG_INSTALLED=1
+      if printf '%s\n' "$install_out" | grep -q '^backup '; then
+        log "config.toml: backed up existing file to $BACKUP_DIR"
+      fi
+      log "config.toml: installed -> $out"
+      ;;
+  esac
 }
 
 find_grok() {
@@ -304,6 +379,10 @@ require_host_tools() {
 
 # Auto-detect result only; --with-grokgod / --skip-grokgod still short-circuit.
 GROKGOD_DETECTED_CACHED=""
+
+# A changed render already saved the original config. The plan_mode merge
+# keeps that backup; a previously identical config needs its own backup.
+CONFIG_INSTALLED=0
 
 grokgod_detected() {
   if [ "$WITH_GROKGOD" -eq 1 ]; then
@@ -348,10 +427,12 @@ merge_grokgod_plan_mode() {
     log "plan_mode: implement_via_subagents already set in $cfg"
     return 0
   fi
+  local tmp expected install_out
+  expected="$(python3 "$INSTALL_CONFIG" --hash "$cfg")" \
+    || die "cannot hash existing $cfg"
+  tmp="$(mktemp "$cfg.plan-mode.XXXXXX")"
+  TEMP_FILES+=("$tmp")
   if grep -q '^[[:space:]]*\[plan_mode\]' "$cfg"; then
-    local tmp
-    tmp="$(mktemp "$cfg.plan-mode.XXXXXX")"
-    trap 'rm -f "$tmp"' RETURN
     awk '
       BEGIN { added=0 }
       /^[[:space:]]*\[plan_mode\]/ && added==0 {
@@ -361,17 +442,21 @@ merge_grokgod_plan_mode() {
         next
       }
       { print }
-    ' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
-    trap - RETURN
-    log "plan_mode: merged implement_via_subagents = true into existing [plan_mode] in $cfg"
-    return 0
+    ' "$cfg" > "$tmp" || die "cannot stage the plan_mode merge"
+  else
+    cat "$cfg" > "$tmp" || die "cannot stage the plan_mode merge"
+    [ -s "$tmp" ] && printf '\n' >> "$tmp"
+    printf '[plan_mode]\nimplement_via_subagents = true\n' >> "$tmp"
   fi
-  {
-    if [ -s "$cfg" ]; then
-      printf '\n'
-    fi
-    printf '[plan_mode]\nimplement_via_subagents = true\n'
-  } >> "$cfg"
+  # same staged/validated/atomic path as the render: a concurrent edit is a
+  # stale-write conflict, not a silent overwrite. The config this run just
+  # wrote needs no backup; a pre-existing one does.
+  local backup_args=()
+  [ "$CONFIG_INSTALLED" -eq 1 ] || backup_args=(--backup-dir "$BACKUP_DIR")
+  install_out="$(python3 "$INSTALL_CONFIG" --source "$tmp" --dest "$cfg" \
+    --expected-sha256 "$expected" ${backup_args[@]+"${backup_args[@]}"})" \
+    || die "plan_mode merge failed; $cfg left unchanged"
+  rm -f "$tmp"
   log "plan_mode: wrote [plan_mode] implement_via_subagents = true to $cfg"
 }
 
@@ -567,12 +652,8 @@ for entry in data:
 ' || "$GROK" plugin list 2>/dev/null | sed 's/^/  /' || true
     # assert every enabled plugin actually landed — a failed install must
     # surface here, not just in a warning
-    local expected name _src flag_name
-    expected=()
-    for spec in "${PLUGIN_SPECS[@]}"; do
-      IFS='|' read -r name _src flag_name <<< "$spec"
-      [ "${!flag_name}" -eq 1 ] || expected+=("$name")
-    done
+    local expected name
+    expected=("${ENABLED[@]}")
     local missing_plugins
     missing_plugins="$(
       "$GROK" plugin list --json 2>/dev/null | python3 -c '
@@ -711,8 +792,8 @@ if [ "$SKIP_PLUGINS" -eq 0 ]; then
 
   log "installing plugins"
   for spec in "${PLUGIN_SPECS[@]}"; do
-    IFS='|' read -r name source flag_name <<< "$spec"
-    [ "${!flag_name}" -eq 1 ] || install_plugin "$name" "$source"
+    split_spec "$spec"
+    spec_skipped || install_plugin "$NAME" "$SOURCE"
   done
 else
   log "plugins skipped (--skip-plugins)"

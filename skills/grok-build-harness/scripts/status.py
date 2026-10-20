@@ -4,6 +4,10 @@
 Windows/Unix: python3 status.py --grok-home DIR --plugin-root DIR
 install.sh --status is a thin wrapper. --docs-status stays one word.
 
+Skill counts are a static installed-file inventory with a UTF-8 bytes/4
+description-token estimate. This script never runs the grok CLI, so the
+discovered and model-visible skill sets stay UNKNOWN here.
+
 Does not print API keys, env_key values, or secret tokens.
 """
 
