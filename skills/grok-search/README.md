@@ -7,7 +7,7 @@ See [address selection](skills/grok-search/references/endpoint.md).
 
 ## Connector
 
-> Connect to grok-search using https://search.karldigi.dev/mcp by default, or the MCP URL I explicitly provide, using https://github.com/karlorz/agent-skills. Read skills/grok-search/skills/grok-search/SKILL.md and follow this host's supported connector setup. Reuse a working connection for the selected address, complete secure authorization if needed, then verify one tiny search and source retrieval. Do not write host MCP config. Do not paste secrets into chat.
+> Connect to grok-search using https://github.com/karlorz/agent-skills. Preserve a saved MCP address unless I explicitly provide another; for a new installation use https://search.karldigi.dev/mcp by default. Read skills/grok-search/skills/grok-search/SKILL.md and follow this host's supported connector setup. Reuse a working connection for the selected address, complete secure authorization if needed, then verify one tiny search and source retrieval. Do not write host MCP config. Do not paste secrets into chat.
 
 The agent selects the supported native connector or vaulted helper using the
 [host guide](skills/grok-search/references/first-run.md). New authorization may

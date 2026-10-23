@@ -330,7 +330,7 @@ if [name for name, _ in routes] != ["Connector present", "Muse vaulted helper", 
 for (_, route), required in zip(routes, (
     ("web_search", "get_sources", "plan_*", "grok-search-http", "Never dual-call", "write host MCP files"),
     ("Muse runtime", "official", "credential tool", "reuse", "muse-connector.md", "five allowed tools", "without `plan_*`", "Do not restore"),
-    ("Cue / 小Q", production_url, "no custom headers", "Added / authorize", "host UI", "return to step 1"),
+    ("Cue / 小Q", "selected address", "no custom headers", "Added / authorize", "host UI", "return to step 1"),
     ("git + Node", "sparse-checkout", "skills/grok-search/skills/grok-search", "one", "reuse", "auth-start --agent-id", "approveUrl", "auth-status", "same turn", "authenticated", "poll secret", "mcp.json", "config.toml"),
     ("Stop", "ChatGPT web", "Doubao 对话", "WeCom", "outside chat", "Do not ask", "去授權", "operator password"),
 )):

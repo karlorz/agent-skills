@@ -15,7 +15,7 @@ Check actual host capabilities and stop at the first matching route; do not use 
 
 1. **Connector present:** Host `grok-search` MCP tools (`web_search`, `get_sources`, …) are available. On desktop Claude/Grok/Codex/Cursor plugin hosts, consult [first-run.md](references/first-run.md) desktop readiness before the first `plan_*` / `web_search`. Then use connector mode: `plan_*` then `web_search`. Ignore leftover `grok-search-http`; it is not a fallback. Never dual-call it or write host MCP files.
 2. **Muse vaulted helper:** In a Muse runtime with the official custom-connector setup skill and credential tool, reuse the vaulted helper or follow [muse-connector.md](references/muse-connector.md). This is helper execution, not native MCP discovery. Plan locally; call only its five allowed tools, without `plan_*`. Do not restore a retired CLI.
-3. **In-thread MCP card:** The host can add an HTTP MCP app from chat (Cue / 小Q). Add `grok-search` at `https://search.karldigi.dev/mcp` with **no custom headers**; finish the in-thread Added / authorize card with the operator. Secrets stay in the host UI, never in chat. Then return to step 1.
+3. **In-thread MCP card:** The host can add an HTTP MCP app from chat (Cue / 小Q). Add `grok-search` at the selected address with **no custom headers**; finish the in-thread Added / authorize card with the operator. Secrets stay in the host UI, never in chat. Then return to step 1.
 4. **Skill+CLI:** No supported connector/helper is available, and the host has git + Node. Follow [install.md](references/install.md): sparse-checkout `https://github.com/karlorz/agent-skills` at `skills/grok-search`, copy `skills/grok-search/skills/grok-search` into **one** host skill directory, or reuse the existing unit. Run `node scripts/grok-search.cjs` from that directory. On `auth_required`, run `auth-start --agent-id <short host label>` (`kimi`, `cue`, `muse`, `doubao`, …), reply with `approveUrl` only, and loop `auth-status` in the **same turn** until `authenticated`, respecting `intervalSeconds` and stopping at `expiresAt` or a terminal error. Each invocation makes one bounded check. Never print the token or poll secret; never write `mcp.json` / `config.toml`.
 5. **Chat-only:** Stop (ChatGPT web, Doubao 对话, WeCom). A person finishes connector/OAuth outside chat. Do not ask the chat to create the app, click 去授權, or type the operator password.
 
@@ -51,7 +51,7 @@ Muse helpers use their [allowlisted workflow](references/muse-connector.md), not
 
 Use `web_fetch` for a specific URL. Use `web_map` to discover a site tree.
 
-`get_config_info` is diagnostics only. Never display credentials. A healthy response names the remote `streamable_http` engine at `https://search.karldigi.dev/mcp` and that the client needs no local GrokSearch stack. Loopback URLs, filesystem paths, credential fragments, and exception bodies in that diagnostic are a contract failure; do not repeat them. Call `toggle_builtin_tools` or `switch_model` only when asked.
+`get_config_info` is diagnostics only. Never display credentials. A healthy response names the remote `streamable_http` engine at the selected address and that the client needs no local GrokSearch stack. Loopback URLs, filesystem paths, credential fragments, and exception bodies in that diagnostic are a contract failure; do not repeat them. Call `toggle_builtin_tools` or `switch_model` only when asked.
 
 ## Errors
 
