@@ -16,11 +16,13 @@ Leftover `~/.manus/skills/grok-search` plus `~/.config/grok-search/` makes Cue r
 
 Proof on 2026-10-12: after uninstalling the leftover CLI copy, Cue presented the in-thread Apps MCP card, listed grok-search tools, and `web_search` returned `ok: true`, `sources_count: 6`. A new thread's successful tool call is its own readiness proof.
 
+## Muse vaulted helper
+
+Muse with the installed official custom-connector setup skill and credential tool uses the [vaulted helper recipe](muse-connector.md) when native MCP tools are absent. A vault connection alone does not inject MCP tools: the connector also includes instructions and a host-local helper. Reuse a valid existing connector. It does not depend on the old standalone Skill+CLI installation; do not restore a retired local copy. Keep project-wide CLI support for environments without this connector capability. If the official setup capability is absent, report that limitation and offer CLI when git and Node are available; do not invent a Muse credential schema.
+
 ## Skill+CLI hosts
 
-Muse, Doubao 工作 / 云电脑, Orca workers, and other hosts with git and Node 22 or 24 can use [install.md](install.md) when connector tools and an in-thread MCP card are unavailable. Reuse an existing nested skill unit; copy into only one host skill directory. No npm install and no host MCP registration.
-
-Muse **prefer_first: skill-cli**. Settings → Connectors lists marketplace presets (Browser, GitHub, …) plus Muse-created Lab Access Id/Jwt/Secret rows. Those Lab rows are **credential vaults** (operator pastes in a Muse secure card; scripts use surrogates). They are not HTTP MCP tool attachment. Muse has no HTTP-MCP connector type. Existing MCP OAuth (ChatGPT/Doubao authorize/token/register on the production MCP host) can fill a Muse `oauth2_code` vault secret; it still does not inject `web_search` / `get_sources`. Do not add more OAuth on grok-search for Muse. Persist is Skill+CLI on the Muse VM (`--agent-id muse`); the file token lasts. Unlike kimi.com K3, do not re-mint every thread.
+Doubao 工作 / 云电脑, Orca workers, and other hosts with git and Node 22 or 24 can use [install.md](install.md) when native tools, a supported vaulted helper and an in-thread MCP card are unavailable. Reuse an existing nested skill unit; copy into only one host skill directory. No npm install and no host MCP registration.
 
 kimi.com web is **not** a persist host. Plugins are marketplace presets (`persist_via_plugins: no`); there is no user HTTP MCP add. Custom MCP is Kimi Work desktop Plugin Builder. K3 sandbox Skill+CLI (`--agent-id kimi`) is a one-chat proof; HOME and `http-mcp.token` wipe. kimi.com/skills Add persists SKILL.md only. Instant without a terminal is chat-only. Do not treat Kimi web as Cue.
 

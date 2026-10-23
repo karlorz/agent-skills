@@ -143,7 +143,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.27"
+expected_version = "0.1.28"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -325,10 +325,11 @@ routing = re.search(r"## First-run: detect → install → init\n(.*?)\n## ", bo
 if not routing:
     raise SystemExit(f"{skill_path}: missing detect → install → init algorithm")
 routes = re.findall(r"^\d+\. \*\*([^:]+):\*\* (.+)$", routing.group(1), re.M)
-if [name for name, _ in routes] != ["Connector present", "In-thread MCP card", "Skill+CLI", "Chat-only"]:
-    raise SystemExit(f"{skill_path}: first-run must detect connector, card, CLI, chat-only in order")
+if [name for name, _ in routes] != ["Connector present", "Muse vaulted helper", "In-thread MCP card", "Skill+CLI", "Chat-only"]:
+    raise SystemExit(f"{skill_path}: first-run must detect native tools, Muse helper, card, CLI, chat-only")
 for (_, route), required in zip(routes, (
     ("web_search", "get_sources", "plan_*", "grok-search-http", "Never dual-call", "write host MCP files"),
+    ("Muse runtime", "official", "credential tool", "reuse", "muse-connector.md", "five allowed tools", "without `plan_*`", "Do not restore"),
     ("Cue / 小Q", production_url, "no custom headers", "Added / authorize", "host UI", "return to step 1"),
     ("git + Node", "sparse-checkout", "skills/grok-search/skills/grok-search", "one", "reuse", "auth-start --agent-id", "approveUrl", "auth-status", "same turn", "authenticated", "poll secret", "mcp.json", "config.toml"),
     ("Stop", "ChatGPT web", "Doubao 对话", "WeCom", "outside chat", "Do not ask", "去授權", "operator password"),
@@ -526,7 +527,7 @@ python3 - "$PLUGIN_ROOT/skills/grok-search/scripts" <<'PYSCAN'
 from pathlib import Path
 import re, sys
 root = Path(sys.argv[1])
-expected = {"grok-search.cjs", "lib/toqr.cjs"}
+expected = {"grok-search.cjs", "check-connection-profile.cjs", "lib/toqr.cjs"}
 actual = {str(p.relative_to(root)) for p in root.rglob("*.cjs")}
 if actual != expected:
     raise SystemExit(f"Update the reviewed bundled source inventory: {actual ^ expected}")

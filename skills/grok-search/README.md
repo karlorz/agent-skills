@@ -8,7 +8,15 @@ Copy this to the agent:
 
 > Enable grok-search on this host. Production MCP is https://search.karldigi.dev/mcp. Source: https://github.com/karlorz/agent-skills nested unit skills/grok-search/skills/grok-search. Read that unit's SKILL.md. Discover how this host can connect, then run one tiny search. Do not write host MCP config. Do not paste secrets into chat.
 
-The agent follows [`skills/grok-search/SKILL.md`](skills/grok-search/SKILL.md): use existing grok-search tools, else an in-thread HTTP MCP card, else Skill+CLI, else stop. Host detail lives in [`references/first-run.md`](skills/grok-search/references/first-run.md). Skill+CLI copy steps live in [`references/install.md`](skills/grok-search/references/install.md).
+The agent follows [`skills/grok-search/SKILL.md`](skills/grok-search/SKILL.md): reuse native grok-search tools, use a supported Muse vaulted helper or in-thread HTTP MCP card where available, otherwise offer Skill+CLI to terminal hosts. Host detail lives in [`references/first-run.md`](skills/grok-search/references/first-run.md). Skill+CLI copy steps live in [`references/install.md`](skills/grok-search/references/install.md).
+
+## Connector installation request
+
+> Set up the grok-search connector using https://github.com/karlorz/agent-skills/blob/main/skills/grok-search/skills/grok-search/references/muse-connector.md. Reuse native tools or a working Muse connector, verify the shared profile against live discovery, use the official secure consent card if needed, then test search and source retrieval.
+
+The [Muse recipe](skills/grok-search/references/muse-connector.md) uses the host's installed official templates and credential tool, keeps credentials in its secure vault, and stores non-secret settings beside the helper. It does not require the old standalone Skill. Other hosts use their native MCP attachment surface. Human sign-in and consent remain required for a new grant.
+
+Both installation routes ship with the [shared connection profile](skills/grok-search/references/connection-profile.json). For hosted connector setup, run the [credential-free discovery check](skills/grok-search/references/muse-connector.md#2-check-discovery-before-requesting-access) before issuing a card; stop on drift. Existing connections are reused. Installation does not require redeploying the server.
 
 ## Marketplace plugin (optional)
 

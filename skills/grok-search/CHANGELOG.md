@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.28] - 2026-10-24
+
+### Added
+- Publish separate Muse vaulted-connector and standalone Skill+CLI installation requests, with a shared non-secret connection profile.
+- Add a bounded credential-free live discovery check and typed Muse credential request output, without registering clients or requesting tokens.
+
+### Fixed
+- Select native MCP, a supported Muse helper, an in-thread card or CLI using actual host capabilities; remove the obsolete Muse CLI-first rule.
+- Keep Muse's five-tool helper workflow independent of server planning tools, and reuse existing connections instead of creating duplicate grants.
+
+### Changed
+- Document official Muse scaffolding, secure consent, local allowlists, truthful readiness checks and untested refresh/expiry limits. Existing server and CLI runtime behavior is unchanged.
+
 ## [0.1.27] - 2026-10-14
 
 ### Fixed

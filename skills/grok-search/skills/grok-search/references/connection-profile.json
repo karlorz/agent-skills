@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "provider": "grok-search",
+  "origin": "https://search.karldigi.dev",
+  "resource": "https://search.karldigi.dev/mcp",
+  "api_hosts": [
+    "search.karldigi.dev"
+  ],
+  "scopes": [
+    "mcp",
+    "offline_access"
+  ],
+  "protected_resource_metadata": "https://search.karldigi.dev/.well-known/oauth-protected-resource/mcp",
+  "authorization_server_metadata": "https://search.karldigi.dev/.well-known/oauth-authorization-server",
+  "allowed_tools": [
+    "web_search",
+    "web_fetch",
+    "web_map",
+    "get_sources",
+    "get_config_info"
+  ]
+}

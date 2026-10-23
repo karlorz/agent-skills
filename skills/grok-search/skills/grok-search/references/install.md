@@ -1,6 +1,6 @@
 # Grok Search Standalone Install Contract
 
-Use this fallback only after detecting that grok-search connector tools and an in-thread HTTP MCP card are unavailable. Cue defaults to the Apps card; see [first-run.md](first-run.md). This recipe needs git and Node 22 or 24 on the host.
+Use this fallback only after detecting that native MCP tools, a supported vaulted helper, and an in-thread HTTP MCP card are unavailable. Muse with official connector setup uses [muse-connector.md](muse-connector.md). Cue defaults to the Apps card; see [first-run.md](first-run.md). This recipe needs git and Node 22 or 24 on the host.
 
 ## One-Sentence Install Request
 
@@ -49,13 +49,18 @@ node "$TARGET_SKILL_DIR/scripts/grok-search.cjs"; test $? -eq 2
 
 ## Installed Unit Contents
 
-The installed directory contains strictly:
+The installed directory contains:
 - `SKILL.md` (root prompt and instructions)
 - `scripts/grok-search.cjs` (standalone CLI executable)
+- `scripts/check-connection-profile.cjs` (optional credential-free discovery check)
 - `scripts/lib/toqr.cjs` (offline QR encoder with license notice)
 - `references/cli-contract.md`
 - `references/auth-contract.md`
 - `references/install.md`
 - `references/first-run.md`
+- `references/muse-connector.md`
+- `references/connection-profile.json` (shared, non-secret policy)
 
 Plugin manifest files (`.claude-plugin`, `.cursor-plugin`, `.codex-plugin`, `.mcp.json`, `mcp.json`) and Claude hooks are not installed into the host skill directory.
+
+The connection profile applies to hosted connector setup. It does not replace the CLI auth contract or upgrade CLI operator credentials into OAuth scopes. Existing CLI issuance and credential storage remain supported.
