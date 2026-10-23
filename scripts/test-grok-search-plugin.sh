@@ -143,7 +143,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.28"
+expected_version = "0.1.29"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -409,14 +409,15 @@ if "doubao" not in host_body.lower() or "去授權" not in host_body:
 if re.search(r"`/grok-search`", body) or re.search(r"start (?:the skill|it) with (?:a )?`/grok-search`", body):
     raise SystemExit(f"{skill_path}: must not instruct users to invoke skill with a leading slash")
 
-# 9. README.md is one paste-to-agent request; host cases live in SKILL + references.
+# 9. README has two host-neutral setup requests; host cases live in references.
 readme_text = texts[readme_path]
-if readme_text.count("## Ask an agent") != 1:
-    raise SystemExit(f"{readme_path}: must have exactly one Ask an agent section")
-if "Enable grok-search on this host" not in readme_text:
-    raise SystemExit(f"{readme_path}: must include the one-sentence enable request")
-if "Discover how this host can connect" not in readme_text:
-    raise SystemExit(f"{readme_path}: enable request must tell the agent to discover the host surface")
+if re.findall(r"^## (.+)$", readme_text, re.M) != ["Connector", "Skill + CLI"]:
+    raise SystemExit(f"{readme_path}: expose only connector and Skill + CLI setup sections")
+requests = [line for line in readme_text.splitlines() if line.startswith("> ")]
+if len(requests) != 2:
+    raise SystemExit(f"{readme_path}: must have exactly two copyable setup requests")
+if "Muse" in "\n".join(requests):
+    raise SystemExit(f"{readme_path}: setup requests must be host-neutral")
 if "one tiny search" not in readme_text:
     raise SystemExit(f"{readme_path}: enable request must finish with one tiny search")
 if "Do not write host MCP config" not in readme_text:

@@ -1,24 +1,28 @@
 # grok-search
 
-Live web search, page fetch, and site mapping.
+Live web search, page fetch, and site mapping. Choose one setup request below.
+Production MCP: `https://search.karldigi.dev/mcp`.
 
-## Ask an agent
+## Connector
 
-Copy this to the agent:
+> Connect to the grok-search MCP at https://search.karldigi.dev/mcp using https://github.com/karlorz/agent-skills. Read skills/grok-search/skills/grok-search/SKILL.md and follow this host's supported connector setup. Reuse a working connection, complete secure authorization if needed, then verify one tiny search and source retrieval. Do not write host MCP config. Do not paste secrets into chat.
 
-> Enable grok-search on this host. Production MCP is https://search.karldigi.dev/mcp. Source: https://github.com/karlorz/agent-skills nested unit skills/grok-search/skills/grok-search. Read that unit's SKILL.md. Discover how this host can connect, then run one tiny search. Do not write host MCP config. Do not paste secrets into chat.
+The agent selects the supported native connector or vaulted helper using the
+[host guide](skills/grok-search/references/first-run.md). New authorization may
+require your sign-in and consent. If this host cannot support a connector, use
+the Skill + CLI route below. No server redeployment is needed.
 
-The agent follows [`skills/grok-search/SKILL.md`](skills/grok-search/SKILL.md): reuse native grok-search tools, use a supported Muse vaulted helper or in-thread HTTP MCP card where available, otherwise offer Skill+CLI to terminal hosts. Host detail lives in [`references/first-run.md`](skills/grok-search/references/first-run.md). Skill+CLI copy steps live in [`references/install.md`](skills/grok-search/references/install.md).
+## Skill + CLI
 
-## Connector installation request
+> Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills using sparse checkout of skills/grok-search at a reviewed release SHA. Reuse an existing installation; otherwise copy its nested skills/grok-search unit into one host skill directory. Follow the installed SKILL.md to authorize and verify a small search with sources. Do not configure host MCP or paste secrets into chat.
 
-> Set up the grok-search connector using https://github.com/karlorz/agent-skills/blob/main/skills/grok-search/skills/grok-search/references/muse-connector.md. Reuse native tools or a working Muse connector, verify the shared profile against live discovery, use the official secure consent card if needed, then test search and source retrieval.
+Use this route on a terminal host with git and Node 22 or 24. The
+[installation guide](skills/grok-search/references/install.md) covers the complete
+copy and verification steps; the [auth contract](skills/grok-search/references/auth-contract.md)
+covers approval, expiry and recovery. Runtime npm, Python and uv are unnecessary.
 
-The [Muse recipe](skills/grok-search/references/muse-connector.md) uses the host's installed official templates and credential tool, keeps credentials in its secure vault, and stores non-secret settings beside the helper. It does not require the old standalone Skill. Other hosts use their native MCP attachment surface. Human sign-in and consent remain required for a new grant.
-
-Both installation routes ship with the [shared connection profile](skills/grok-search/references/connection-profile.json). For hosted connector setup, run the [credential-free discovery check](skills/grok-search/references/muse-connector.md#2-check-discovery-before-requesting-access) before issuing a card; stop on drift. Existing connections are reused. Installation does not require redeploying the server.
-
-## Marketplace plugin (optional)
+<details>
+<summary>Optional marketplace package</summary>
 
 ```bash
 claude plugin install grok-search@karlorz-agent-skills
@@ -26,24 +30,8 @@ codex plugin add grok-search@karlorz-agent-skills
 ```
 
 Cursor: install `grok-search` from the `karlorz-agent-skills` marketplace.
+These commands install the marketplace package.
 
-## License
+</details>
 
-MIT
-
-## Standalone Skill+CLI
-
-> Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills using sparse checkout of skills/grok-search at a reviewed release SHA, copy its nested skills/grok-search unit into this host's skill directory, and run that unit's scripts/grok-search.cjs without configuring host MCP.
-
-The [staging recipe](skills/grok-search/references/install.md) refuses to overwrite an
-existing install and copies only the nested unit with root `SKILL.md`, scripts and
-references. Use Node 22 or 24; runtime npm, Python and uv are unnecessary. Existing
-marketplace connectors keep their own behavior. The CLI uses the pinned HTTPS
-origin with a private file token or an environment token, and never writes host
-MCP configuration. Hosted approval prints an HTTPS link and a desktop QR; every
-status invocation makes one bounded check. See the
-[auth contract](skills/grok-search/references/auth-contract.md) for expiry and recovery.
-
-Before release, verify packaged install and QR decoding, hosted phone approval,
-source-bearing search, fetch/map, and the unchanged connector at exact deployed
-commits. SkillWiki transfer follows deployed M1 evidence; it is separate work.
+License: MIT.
