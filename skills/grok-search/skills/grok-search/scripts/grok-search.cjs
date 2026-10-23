@@ -9,7 +9,8 @@ const http = require('http');
 const crypto = require('crypto');
 const net = require('net');
 
-const DEFAULT_ORIGIN = 'https://search.karldigi.dev';
+const { normalizeEndpoint, DEFAULT_MCP_URL } = require('./lib/endpoint.cjs');
+let activeEndpoint = null;
 const MCP_PATH = '/mcp';
 const REST_API_PREFIX = '/api/v1';
 const MCP_PROTOCOL_VERSION = '2025-03-26';
@@ -26,9 +27,34 @@ function setTransport(fn) {
   activeTransport = fn;
 }
 
+function resolveBaseConfigDir() {
+  return path.join(process.env.HOME || os.homedir(), '.config', 'grok-search');
+}
+
+function loadEndpoint() {
+  const base = resolveBaseConfigDir();
+  for (const dir of [path.dirname(base), base]) {
+    const stat = checkSafePath(dir);
+    if (stat && !stat.isDirectory()) throw new Error('unsafe_path');
+  }
+  const file = path.join(base, 'endpoint.json');
+  let mcpUrl = DEFAULT_MCP_URL;
+  if (checkSafePath(file)) {
+    let settings;
+    try { settings = JSON.parse(readPrivateFile(file, base)); } catch { throw new Error('invalid_endpoint_settings'); }
+    if (!settings || settings.schemaVersion !== 1) throw new Error('invalid_endpoint_settings');
+    mcpUrl = normalizeEndpoint(settings.mcpUrl);
+  }
+  return { mcpUrl, origin: new URL(mcpUrl).origin, isDefault: mcpUrl === DEFAULT_MCP_URL };
+}
+
+function getEndpoint() { return activeEndpoint || loadEndpoint(); }
+
 function resolveConfigDir() {
-  const home = process.env.HOME || os.homedir();
-  return path.join(home, '.config', 'grok-search');
+  const endpoint = getEndpoint();
+  const base = resolveBaseConfigDir();
+  return endpoint.isDefault ? base : path.join(base, 'servers',
+    crypto.createHash('sha256').update(endpoint.mcpUrl).digest('hex'));
 }
 
 function checkSafePath(targetPath) {
@@ -44,11 +70,18 @@ function checkSafePath(targetPath) {
   return stat;
 }
 
-function ensureConfigDir() {
+function ensureConfigDir(dir = resolveConfigDir()) {
   if (process.platform === 'win32') throw new Error('secure_storage_unavailable: Use an environment token; POSIX storage is required for hosted auth');
-  const dir = resolveConfigDir();
-  const parent = path.dirname(dir);
-  for (const target of [parent, dir]) {
+  const base = resolveBaseConfigDir();
+  const relative = path.relative(base, dir);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('unsafe_path');
+  const directories = [path.dirname(base), base];
+  let current = base;
+  for (const part of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, part);
+    directories.push(current);
+  }
+  for (const target of directories) {
     const stat = checkSafePath(target);
     if (stat && !stat.isDirectory()) throw new Error('unsafe_path: Expected a credential directory');
     if (!stat) fs.mkdirSync(target, { mode: 0o700 });
@@ -58,8 +91,8 @@ function ensureConfigDir() {
   return dir;
 }
 
-function readPrivateFile(targetPath) {
-  ensureConfigDir();
+function readPrivateFile(targetPath, dir = resolveConfigDir()) {
+  ensureConfigDir(dir);
   const stat = checkSafePath(targetPath);
   if (!stat) return null;
   if (!stat.isFile() || stat.size > 65536) throw new Error('unsafe_file: Invalid credential file');
@@ -72,8 +105,8 @@ function readPrivateFile(targetPath) {
   } finally { fs.closeSync(fd); }
 }
 
-function atomicWriteFile(targetPath, content, mode = 0o600) {
-  ensureConfigDir();
+function atomicWriteFile(targetPath, content, mode = 0o600, dir = resolveConfigDir()) {
+  ensureConfigDir(dir);
   const old = checkSafePath(targetPath);
   if (old && !old.isFile()) throw new Error('unsafe_file');
   const tmpPath = path.join(path.dirname(targetPath), `.tmp-${crypto.randomBytes(16).toString('hex')}`);
@@ -95,8 +128,8 @@ function atomicWriteFile(targetPath, content, mode = 0o600) {
   }
 }
 
-async function withAuthLock(action) {
-  const dir = ensureConfigDir();
+async function withAuthLock(action, configDir = resolveConfigDir()) {
+  const dir = ensureConfigDir(configDir);
   const lockPath = path.join(dir, 'cli-auth.lock');
   checkSafePath(lockPath);
   let fd;
@@ -117,7 +150,7 @@ function readPendingState() {
   if (raw === null) return null;
   let state;
   try { state = JSON.parse(raw); } catch (_) { outputError('corrupted_auth_state', 'Invalid private auth state; start a new approval after removing this file.'); }
-  if (state.origin !== DEFAULT_ORIGIN || typeof state.authRunId !== 'string' || !state.authRunId || state.authRunId.length > 256 ||
+  if (state.origin !== getEndpoint().origin || (!getEndpoint().isDefault && state.resource !== getEndpoint().mcpUrl) || typeof state.authRunId !== 'string' || !state.authRunId || state.authRunId.length > 256 ||
       typeof state.pollSecret !== 'string' || !state.pollSecret || state.pollSecret.length > 512 || !Number.isFinite(Date.parse(state.expiresAt))) {
     outputError('corrupted_auth_state', 'Private auth state has invalid fields or origin.');
   }
@@ -142,6 +175,9 @@ function withInviteQuery(approveUrl, inviteCode) {
 function getTokenResolution() {
   const envToken = process.env.GROK_SEARCH_MCP_TOKEN;
   if (envToken && envToken.trim()) {
+    const endpoint = getEndpoint();
+    const binding = process.env.GROK_SEARCH_MCP_TOKEN_RESOURCE;
+    if ((!endpoint.isDefault || binding) && binding !== endpoint.mcpUrl) throw new Error('env_token_resource_mismatch');
     return { token: envToken.trim(), source: 'env' };
   }
   const configDir = resolveConfigDir();
@@ -152,7 +188,7 @@ function getTokenResolution() {
   if (metaRaw !== null) {
     try { meta = JSON.parse(metaRaw); } catch (_) { throw new Error('invalid_token_metadata'); }
     if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('invalid_token_metadata');
-    if (meta.origin !== DEFAULT_ORIGIN) throw new Error('invalid_token_origin');
+    if (meta.origin !== getEndpoint().origin || (!getEndpoint().isDefault && meta.resource !== getEndpoint().mcpUrl)) throw new Error('invalid_token_origin');
     // Generated metadata is also the durable transaction record. Legacy manual
     // metadata has none of these fields; a partial generated record is invalid.
     if (['schemaVersion', 'generation', 'tokenSha256', 'status'].some(key => Object.hasOwn(meta, key))) {
@@ -375,7 +411,7 @@ function parseCliArgs(argv) {
 
 function performHttpRequest(reqUrl, reqOptions, body) {
   const serviceUrl = new URL(reqUrl);
-  if (serviceUrl.origin !== DEFAULT_ORIGIN || serviceUrl.username || serviceUrl.password) throw new Error('service_origin_rejected');
+  if (serviceUrl.origin !== getEndpoint().origin || serviceUrl.username || serviceUrl.password) throw new Error('service_origin_rejected');
   if (activeTransport) {
     return activeTransport(reqUrl, reqOptions, body);
   }
@@ -468,11 +504,11 @@ function isPinnedSessionRejection(res) {
 }
 
 class HiddenMcpClient {
-  constructor(origin, token, tokenSource) {
+  constructor(origin, token, tokenSource, mcpUrl) {
     this.origin = origin.replace(/\/+$/, '');
     this.token = token;
     this.tokenSource = tokenSource;
-    this.mcpUrl = `${this.origin}${MCP_PATH}`;
+    this.mcpUrl = mcpUrl || `${this.origin}${MCP_PATH}`;
     this.sessionId = null;
     this.nextRequestId = 1;
     this.protocolVersion = MCP_PROTOCOL_VERSION;
@@ -629,7 +665,7 @@ class HiddenMcpClient {
 }
 
 async function handleAuthStart(authOptions = {}) {
-  const origin = DEFAULT_ORIGIN;
+  const origin = getEndpoint().origin;
   const configDir = resolveConfigDir();
 
   return withAuthLock(async () => {
@@ -665,7 +701,7 @@ async function handleAuthStart(authOptions = {}) {
     let approveUrl = startData.approveUrl;
     let approval;
     try { approval = new URL(approveUrl); } catch (_) {}
-    if (!approval || approval.origin !== DEFAULT_ORIGIN || approval.username || approval.password ||
+    if (!approval || approval.origin !== getEndpoint().origin || approval.username || approval.password ||
         approval.pathname !== '/auth/cli/approve' || approveUrl.includes(pollSecret) ||
         typeof authRunId !== 'string' || !authRunId || authRunId.length > 256 ||
         typeof pollSecret !== 'string' || !pollSecret || pollSecret.length > 512 ||
@@ -679,6 +715,7 @@ async function handleAuthStart(authOptions = {}) {
       authRunId,
       pollSecret,
       origin,
+      resource: getEndpoint().mcpUrl,
       approveUrl,
       expiresAt,
       intervalSeconds,
@@ -728,7 +765,7 @@ async function handleAuthStatus() {
       outputError('corrupted_auth_state', 'Pending auth state missing authRunId or pollSecret', { exitCode: 1 });
     }
 
-    const checkUrl = `${DEFAULT_ORIGIN}/auth/cli/check?authRunId=${encodeURIComponent(authRunId)}`;
+    const checkUrl = `${getEndpoint().origin}/auth/cli/check?authRunId=${encodeURIComponent(authRunId)}`;
     const res = await performHttpRequest(checkUrl, {
       method: 'GET',
       headers: {
@@ -804,7 +841,8 @@ function persistClaimedToken(configDir, pendingFile, origin, data) {
       generation: crypto.randomBytes(16).toString('hex'),
       tokenSha256: crypto.createHash('sha256').update(token.trim()).digest('hex'),
       status: 'pending',
-      origin: origin || DEFAULT_ORIGIN,
+      origin: origin || getEndpoint().origin,
+      resource: getEndpoint().mcpUrl,
       expiresAt,
       updatedAt: new Date().toISOString(),
     };
@@ -838,13 +876,15 @@ async function main() {
   process.once('SIGINT', abortRequests);
   process.once('SIGTERM', abortRequests);
 
+  const previousEndpoint = activeEndpoint;
   try {
+    activeEndpoint = loadEndpoint();
     await executeCommand(clients);
   } finally {
     clearTimeout(timer);
     process.removeListener('SIGINT', abortRequests);
     process.removeListener('SIGTERM', abortRequests);
-    for (const client of clients) await client.close();
+    try { for (const client of clients) await client.close(); } finally { activeEndpoint = previousEndpoint; }
   }
 }
 
@@ -858,7 +898,21 @@ async function executeCommand(clients) {
 
   const { command, options } = parsed;
   if (!command) {
-    outputError('missing_command', 'Usage: grok-search <search|fetch|map|auth-start|auth-status> [options]', { exitCode: 2 });
+    outputError('missing_command', 'Usage: grok-search <search|fetch|map|auth-start|auth-status|configure> [options]', { exitCode: 2 });
+  }
+
+  if (command === 'configure') {
+    if (Object.keys(options).some(key => key !== 'mcp-url')) outputError('unknown_option', 'configure accepts only --mcp-url', { exitCode: 2 });
+    if (options['mcp-url'] === undefined) outputJson({ ok: true, data: getEndpoint() });
+    let mcpUrl;
+    try { mcpUrl = normalizeEndpoint(options['mcp-url']); } catch { outputError('invalid_mcp_url', 'Use an HTTPS MCP URL without credentials, query or fragment.', { exitCode: 2 }); }
+    const base = resolveBaseConfigDir();
+    return withAuthLock(async () => {
+      const current = loadEndpoint();
+      if (mcpUrl === current.mcpUrl) outputJson({ ok: true, data: { ...current, changed: false } });
+      atomicWriteFile(path.join(base, 'endpoint.json'), JSON.stringify({ schemaVersion: 1, mcpUrl }, null, 2), 0o600, base);
+      outputJson({ ok: true, data: { mcpUrl, origin: new URL(mcpUrl).origin, isDefault: mcpUrl === DEFAULT_MCP_URL, changed: true } });
+    }, base);
   }
 
   if (command === 'auth-start') {
@@ -917,7 +971,7 @@ async function executeCommand(clients) {
     };
 
     // 1. Try REST endpoint first
-    const restRes = await requestRestEndpoint(DEFAULT_ORIGIN, 'search', token, source, searchPayload);
+    const restRes = getEndpoint().isDefault ? await requestRestEndpoint(getEndpoint().origin, 'search', token, source, searchPayload) : { fallbackToMcp: true };
     if (restRes && restRes.success) {
       const restData = restRes.data || {};
       const content = restData.content || '';
@@ -945,7 +999,7 @@ async function executeCommand(clients) {
     }
 
     // 2. Fall back to exactly one hidden MCP execution if REST was classified 404 (endpoint unavailable)
-    const client = new HiddenMcpClient(DEFAULT_ORIGIN, token, source);
+    const client = new HiddenMcpClient(getEndpoint().origin, token, source, getEndpoint().mcpUrl);
     clients.push(client);
     await client.initialize();
 
@@ -1023,7 +1077,7 @@ async function executeCommand(clients) {
     const fetchPayload = { url: validUrl };
 
     // 1. Try REST endpoint first
-    const restRes = await requestRestEndpoint(DEFAULT_ORIGIN, 'fetch', token, source, fetchPayload);
+    const restRes = getEndpoint().isDefault ? await requestRestEndpoint(getEndpoint().origin, 'fetch', token, source, fetchPayload) : { fallbackToMcp: true };
     if (restRes && restRes.success) {
       const restData = restRes.data || {};
       const content = typeof restData === 'string' ? restData : (restData && restData.content !== undefined ? restData.content : String(restData || ''));
@@ -1046,7 +1100,7 @@ async function executeCommand(clients) {
     }
 
     // 2. Fall back to exactly one hidden MCP execution if REST was classified 404 (endpoint unavailable)
-    const client = new HiddenMcpClient(DEFAULT_ORIGIN, token, source);
+    const client = new HiddenMcpClient(getEndpoint().origin, token, source, getEndpoint().mcpUrl);
     clients.push(client);
     await client.initialize();
 
@@ -1125,7 +1179,7 @@ async function executeCommand(clients) {
     }
 
     // 1. Try REST endpoint first
-    const restRes = await requestRestEndpoint(DEFAULT_ORIGIN, 'map', token, source, mapPayload);
+    const restRes = getEndpoint().isDefault ? await requestRestEndpoint(getEndpoint().origin, 'map', token, source, mapPayload) : { fallbackToMcp: true };
     if (restRes && restRes.success) {
       const restData = restRes.data || {};
       const content = typeof restData === 'string' ? restData : (restData && restData.content !== undefined ? restData.content : String(restData || ''));
@@ -1148,7 +1202,7 @@ async function executeCommand(clients) {
     }
 
     // 2. Fall back to exactly one hidden MCP execution if REST was classified 404 (endpoint unavailable)
-    const client = new HiddenMcpClient(DEFAULT_ORIGIN, token, source);
+    const client = new HiddenMcpClient(getEndpoint().origin, token, source, getEndpoint().mcpUrl);
     clients.push(client);
     await client.initialize();
 
@@ -1179,7 +1233,7 @@ async function executeCommand(clients) {
 async function run() {
   try { await main(); } catch (err) {
     if (err instanceof CliExit) { process.exitCode = err.exitCode; return; }
-    const code = /^(symlink_rejected|unsafe_owner|unsafe_path|unsafe_file|secure_storage_unavailable|invalid_token_origin|invalid_token_metadata|credential_save_incomplete|credential_pair_mismatch)/.exec(err.message || '');
+    const code = /^(symlink_rejected|unsafe_owner|unsafe_path|unsafe_file|secure_storage_unavailable|invalid_token_origin|invalid_token_metadata|credential_save_incomplete|credential_pair_mismatch|invalid_endpoint_settings|invalid_mcp_url|env_token_resource_mismatch)/.exec(err.message || '');
     process.stdout.write(JSON.stringify({ ok: false, error: { code: code ? code[1] : 'transport_error', message: 'Command failed. Verify private state or service availability; an ambiguous search must not be replayed automatically.', retryable: false } }) + '\n');
     process.exitCode = 1;
   }
@@ -1189,6 +1243,8 @@ if (require.main === module) run();
 
 module.exports = {
   run,
+  getEndpoint,
+  resolveConfigDir,
   HiddenMcpClient,
   requestRestEndpoint,
   validateUserUrl,

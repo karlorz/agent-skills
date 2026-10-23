@@ -1,5 +1,7 @@
 # Grok Search First-Run Host Details
 
+Resolve the selected address using [endpoint.md](endpoint.md) first. Production URLs below describe the default, not permission to override a saved/custom choice. Reuse native tools only when their configured service matches the selected address; names alone are insufficient.
+
 Apply the detect → install → init order in [SKILL.md](../SKILL.md). Use the first matching surface; do not run connector and CLI searches together. Agents never write host MCP files (`mcp.json`, `config.toml`, or `mcp.env`).
 
 ## Connector already present

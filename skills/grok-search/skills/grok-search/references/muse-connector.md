@@ -8,6 +8,10 @@ Use this recipe only in a Muse runtime with the installed official custom-connec
 
 For an environment without this supported framework, use the separate [Skill+CLI installation request](install.md). Retiring the old Muse CLI does not remove project-wide CLI support; do not reinstall a retired local route as a setup side effect.
 
+## Address selection
+
+Apply [endpoint.md](endpoint.md). The normal provider is `grok-search`; an explicit custom resource gets a distinct provider from the checked profile, so it cannot replace or reuse the default connection. In the paths and examples below, substitute the selected `provider` for `grok-search` and `custom.<provider>` for `custom.grok-search`. Reuse an existing connector only for the same exact resource. Do not edit the packaged production profile.
+
 ## 1. Inspect and reuse
 
 Read `/opt/muse/skills/custom-connector-setup/SKILL.md`, especially “Connect the credential” and “Build the helper”, and its `references/mcp-cli.md`. Confirm the current typed credential schema before calling it. If these installed capabilities are absent, report that limitation and offer [Skill+CLI](install.md) to a suitable terminal agent.
@@ -22,11 +26,13 @@ From a checked-out or copied skill unit, with Node 22 or 24:
 
 ```bash
 node scripts/check-connection-profile.cjs --live
+# Only when the operator explicitly supplied another deployment URL:
+node scripts/check-connection-profile.cjs --live --mcp-url https://your-deployment.example/agent/mcp
 ```
 
-This credential-free check fetches only the two pinned metadata documents, rejects redirects, limits each document to 64 KiB and each request to ten seconds, and validates origin, resource, scopes, DCR, authorization code, PKCE S256, refresh grant support and public-client authentication. It does not register a client or prove refresh behavior. Successful output contains the non-secret fields for the official credential request.
+This credential-free check fetches only the two metadata documents for the selected resource, rejects redirects, limits each document to 64 KiB and each request to ten seconds, and validates origin, resource, scopes, DCR, authorization code, PKCE S256, refresh grant support and public-client authentication. It does not register a client or prove refresh behavior. Successful output contains the non-secret fields for the official credential request.
 
-On a Muse runtime without Node, perform the equivalent bounded comparison using the installed runtime: exact issuer/origin and resource, API hostname, requested scope membership in both documents, HTTPS same-origin endpoints, and the advertised features above. Do not silently skip verification.
+On a Muse runtime without Node, perform the equivalent bounded comparison using the installed runtime: exact selected issuer/origin and resource, API hostname, requested scope membership in both documents, HTTPS same-origin endpoints, and the advertised features above. Do not silently skip verification.
 
 Use `credentials.request_api_access` with the checked output's `credential_request` fields:
 
@@ -63,5 +69,7 @@ Populate `ALLOWED_TOOLS` from the shared profile: `web_search`, `web_fetch`, `we
 3. Run one small `web_search`, then call `get_sources` for its returned session in a separate helper invocation. Require usable content and sources. A second successful invocation proves credential reuse, not token refresh.
 4. Report which of `web_fetch`, `web_map` and `get_config_info` were actually exercised; redact diagnostics. Do not send setting mutations for a read-only test.
 5. Test repeat setup by confirming it reuses the same connector and grant. A copied-skill check proves package completeness, not a fresh Muse scaffold or fresh consent. If the official generator lacks a safe disposable target, record fresh scaffold as untested; verifying a no-op re-run of an existing scaffold proves only no-overwrite behavior. Record fresh consent, automatic continuation, expiry, refresh rotation and concurrent refresh as **untested** until actually exercised.
+
+The custom profile retains the ordinary scopes and five-tool policy and currently supports compatible same-origin OAuth issuers with the advertised DCR/public-client contract. It does not silently broaden trust to an external issuer. A host that cannot configure a custom endpoint must report that limitation rather than reuse production tools.
 
 The reviewed baseline successfully initialized, listed tools, searched and retrieved sources through a vaulted helper. New installs and subsequent releases require their own evidence. Publishing this recipe does not require a server restart or an automatic change to existing connectors.

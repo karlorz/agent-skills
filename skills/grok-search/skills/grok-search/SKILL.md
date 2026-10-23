@@ -9,7 +9,7 @@ Live web search, fetch, and site mapping. Production HTTP MCP: `https://search.k
 
 ## First-run: detect → install → init
 
-Discover the host when enabling grok-search.
+Select the address using [endpoint.md](references/endpoint.md): preserve a saved address, otherwise use production, unless the operator explicitly supplies another. Reuse tools only for the selected address.
 
 Check actual host capabilities and stop at the first matching route; do not use a global host-name preference:
 

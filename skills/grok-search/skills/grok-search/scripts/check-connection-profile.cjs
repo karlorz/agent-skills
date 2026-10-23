@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // Credential-free policy check. Never registers a client or requests a token.
-const profile = require('../references/connection-profile.json');
+const { profileForEndpoint } = require('./lib/endpoint.cjs');
 
 function requireThat(condition, field) {
   if (!condition) throw new Error(`Connection policy mismatch: ${field}`);
@@ -18,10 +18,9 @@ function validateProfile(p) {
   const origin = pinnedURL(p.origin, p.origin, 'origin');
   requireThat(origin.href === `${p.origin}/`, 'origin must have no path');
   const resource = pinnedURL(p.resource, p.origin, 'resource');
-  requireThat(resource.pathname === '/mcp', 'resource path');
   requireThat(JSON.stringify(p.api_hosts) === JSON.stringify([resource.hostname]), 'api_hosts');
   requireThat(JSON.stringify(p.scopes) === JSON.stringify(['mcp', 'offline_access']), 'scopes');
-  requireThat(p.provider === 'grok-search', 'provider');
+  requireThat(p.provider === profileForEndpoint(p.resource).provider, 'provider');
   requireThat(JSON.stringify(p.allowed_tools) === JSON.stringify([
     'web_search', 'web_fetch', 'web_map', 'get_sources', 'get_config_info'
   ]), 'allowed_tools');
@@ -77,16 +76,17 @@ async function fetchMetadata(url, fetcher = fetch) {
 }
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length !== 1 || args[0] !== '--live') {
-    process.stderr.write('Usage: node scripts/check-connection-profile.cjs --live\n');
+  if (args[0] !== '--live' || ![1, 3].includes(args.length) || (args.length === 3 && args[1] !== '--mcp-url')) {
+    process.stderr.write('Usage: node scripts/check-connection-profile.cjs --live [--mcp-url HTTPS_URL]\n');
     process.exitCode = 2;
     return;
   }
+  const profile = profileForEndpoint(args.length === 3 ? args[2] : undefined);
   validateProfile(profile);
   const [resource, auth] = await Promise.all([
     fetchMetadata(profile.protected_resource_metadata), fetchMetadata(profile.authorization_server_metadata)
   ]);
-  process.stdout.write(JSON.stringify({ status: 'verified', profile_schema_version: profile.schema_version,
+  process.stdout.write(JSON.stringify({ status: 'verified', profile_schema_version: profile.schema_version, resource: profile.resource,
     credential_request: validateDiscovery(profile, resource, auth) }, null, 2) + '\n');
 }
 if (require.main === module) main().catch(() => {

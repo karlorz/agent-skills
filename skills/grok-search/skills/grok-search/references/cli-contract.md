@@ -12,7 +12,12 @@ node scripts/grok-search.cjs fetch --url 'https://...'
 node scripts/grok-search.cjs map --url 'https://...' [--instructions '...'] [--depth 1-5] [--breadth 1-500] [--limit 1-500] [--timeout 10-150]
 node scripts/grok-search.cjs auth-start [--agent-id <agent_id>] [--invite-code <invite_code>]
 node scripts/grok-search.cjs auth-status
+node scripts/grok-search.cjs configure [--mcp-url <HTTPS_MCP_URL>]
 ```
+
+## Endpoint selection
+
+`configure` without options reports the saved address or the production default; it never changes the selection. `configure --mcp-url <URL>` explicitly saves an HTTPS MCP resource locally. Repeating the same address is a no-op. See [endpoint.md](endpoint.md) for installation behavior and credential isolation. Custom deployments use direct MCP at the exact selected path; REST-first behavior below applies only to the production default. Pairing requires a compatible same-origin coordinator. There is no automatic fallback from a custom service to production.
 
 ## Options and Validation
 
@@ -83,7 +88,7 @@ For read operations (`search`, `fetch`, and `map`), the CLI follows a REST-first
 3. **Classified 404 fallback**: If and only if the REST HTTP status is 404 and the response body is not a recognized JSON application error envelope (`{ ok: false, error: ... }` or `{ code: "not_found" }`), the CLI classifies the route as endpoint-unavailable (e.g. gateway/Caddy 404 on an older server) and executes exactly one hidden Streamable HTTP MCP transaction (`initialize`, `notifications/initialized`, `tools/call`).
 4. **No fallback on failures**: The CLI fails closed without MCP fallback on HTTP 401, 403, 429, 5xx, timeouts, malformed JSON, application error envelopes, or fetched page 404 bodies.
 5. **Stateless discovery**: No persistent fallback flag is saved; subsequent commands always attempt REST first to allow instant adaptation when the server upgrades.
-6. **Bearer isolation**: The Grok bearer token is strictly sent only to the pinned service origin (`https://search.karldigi.dev`) and never attached to user-provided fetch or map URLs. Target URLs with credentials or localhost/private network destinations are rejected.
+6. **Bearer isolation**: The Grok bearer token is strictly sent only to the selected service origin (production by default) and never attached to user-provided fetch or map URLs. Target URLs with credentials or localhost/private network destinations are rejected.
 
 
 MCP fallback negotiates protocol `2025-03-26`, validates JSON-RPC response IDs and

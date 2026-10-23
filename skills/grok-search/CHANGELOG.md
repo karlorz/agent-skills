@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.30] - 2026-10-24
+
+### Added
+- Allow an explicitly supplied compatible GrokSearch MCP URL at installation, while preserving a saved address and using the hosted service for new default installations.
+- Add local CLI endpoint configuration, separate private state for each custom resource, and a credential-free checker for the selected resource and its discovery metadata.
+
+### Fixed
+- Prevent custom endpoints from inheriting production credentials or unbound environment tokens; freeze the address for each command and retain existing production credentials when switching back.
+- Use the exact custom MCP path without production REST assumptions or fallback, and derive a separate connector provider for each custom resource.
+
+### Changed
+- Keep the two host-neutral setup requests and document supported connector settings, same-origin discovery and CLI pairing requirements, and custom-address testing limits. No server deployment is required.
+
 ## [0.1.29] - 2026-10-24
 
 ### Changed

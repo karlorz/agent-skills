@@ -1,15 +1,17 @@
 # Grok Search CLI Authentication Contract
 
-The CLI authenticates against the hosted coordinator at `https://search.karldigi.dev` using hosted approve-and-poll.
+The CLI authenticates against the selected deployment using hosted approve-and-poll. Production defaults to `https://search.karldigi.dev`; a custom deployment must expose the compatible `/auth/cli/start`, `/auth/cli/check` and `/auth/cli/approve` routes on the same HTTPS origin. See [endpoint.md](endpoint.md). Endpoint selection is frozen for each command, including cleanup.
 
 ## Credential Resolution Order
 
-1. Environment variable: Non-empty `GROK_SEARCH_MCP_TOKEN`.
-2. File token: `~/.config/grok-search/http-mcp.token`.
+1. Environment variable: Non-empty `GROK_SEARCH_MCP_TOKEN`. A custom endpoint also requires `GROK_SEARCH_MCP_TOKEN_RESOURCE` to equal the exact selected MCP URL; an inherited unbound production token fails before network access. If this binding is set for production, it must match there too.
+2. File token: the selected endpoint namespace. Production retains `~/.config/grok-search/http-mcp.token`; a custom endpoint uses `~/.config/grok-search/servers/<sha256-of-exact-MCP-URL>/http-mcp.token`. Tokens and pending approvals are never copied between namespaces.
 
 If the environment variable is present and rejected (HTTP 401), the CLI returns `env_token_rejected` and explains that the operator must update or unset the environment override. A file token cannot supersede an active environment variable.
 
 If no token is found, read commands return `auth_required` instructing the user to run `auth-start`.
+
+The non-secret selection lives in `~/.config/grok-search/endpoint.json`. All paths below show the legacy production namespace; custom namespaces contain the same state filenames. Generated custom metadata and pending approvals additionally bind the exact MCP resource, including its path. Existing production metadata without this new field remains accepted.
 
 ## State and File Permissions
 
@@ -60,7 +62,7 @@ If no token is found, read commands return `auth_required` instructing the user 
      - `cancelled`, `expired`, `failed`: deletes `cli-auth.json` and exits with an error status.
      - Any other check status: exits `auth_failed` with `retryable: true` and leaves `cli-auth.json` so a status mismatch cannot burn the session.
 
-The CLI rejects approval URLs outside the pinned HTTPS origin, invalid or expired
+The CLI rejects approval URLs outside the selected HTTPS origin, invalid or expired
 start responses, private state bound to a different origin, and expired pending
 runs before polling. A live pending approval cannot be overwritten by another
 start. Token metadata derives expiry from the actual `expires_in` response;

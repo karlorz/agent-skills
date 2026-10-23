@@ -2,6 +2,8 @@
 
 Use this fallback only after detecting that native MCP tools, a supported vaulted helper, and an in-thread HTTP MCP card are unavailable. Muse with official connector setup uses [muse-connector.md](muse-connector.md). Cue defaults to the Apps card; see [first-run.md](first-run.md). This recipe needs git and Node 22 or 24 on the host.
 
+Select the address using [endpoint.md](endpoint.md): a new installation defaults to production; a repeat installation keeps its saved endpoint; change it only for an explicit operator request.
+
 ## One-Sentence Install Request
 
 > Install the grok-search Skill+CLI from https://github.com/karlorz/agent-skills using sparse checkout of skills/grok-search, copy its skills/grok-search skill unit into this host's skill directory, and run that installed unit's scripts/grok-search.cjs without configuring host MCP.
@@ -53,11 +55,13 @@ The installed directory contains:
 - `SKILL.md` (root prompt and instructions)
 - `scripts/grok-search.cjs` (standalone CLI executable)
 - `scripts/check-connection-profile.cjs` (optional credential-free discovery check)
+- `scripts/lib/endpoint.cjs` (shared endpoint validation and profile selection)
 - `scripts/lib/toqr.cjs` (offline QR encoder with license notice)
 - `references/cli-contract.md`
 - `references/auth-contract.md`
 - `references/install.md`
 - `references/first-run.md`
+- `references/endpoint.md`
 - `references/muse-connector.md`
 - `references/connection-profile.json` (shared, non-secret policy)
 

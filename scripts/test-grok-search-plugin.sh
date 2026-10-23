@@ -143,7 +143,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.29"
+expected_version = "0.1.30"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -528,7 +528,7 @@ python3 - "$PLUGIN_ROOT/skills/grok-search/scripts" <<'PYSCAN'
 from pathlib import Path
 import re, sys
 root = Path(sys.argv[1])
-expected = {"grok-search.cjs", "check-connection-profile.cjs", "lib/toqr.cjs"}
+expected = {"grok-search.cjs", "check-connection-profile.cjs", "lib/endpoint.cjs", "lib/toqr.cjs"}
 actual = {str(p.relative_to(root)) for p in root.rglob("*.cjs")}
 if actual != expected:
     raise SystemExit(f"Update the reviewed bundled source inventory: {actual ^ expected}")
