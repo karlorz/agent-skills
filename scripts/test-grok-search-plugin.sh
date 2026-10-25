@@ -143,7 +143,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.32"
+expected_version = "0.1.33"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -403,6 +403,8 @@ if "omit" not in host_body.lower() or "mcpServers" not in host_body:
     raise SystemExit(f"{first_run_path}: must say the Codex overlay omits mcpServers")
 if "skills-available" not in host_body.lower():
     raise SystemExit(f"{first_run_path}: must say GitHub marketplace import is skills-available on ChatGPT web")
+if "settings/plugins-settings" not in host_body:
+    raise SystemExit(f"{first_run_path}: must document ChatGPT Personal Settings Plugins URL")
 if grok_overlay_table not in host_body or grok_overlay_header not in host_body:
     raise SystemExit(f"{first_run_path}: must document Grok config.toml HTTP url + headers.Authorization overlay")
 if discriminator not in host_body.lower() or "DISPLAY" not in host_body:
