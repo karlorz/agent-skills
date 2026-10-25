@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.31] - 2026-10-25
+
+### Changed
+- Point the ChatGPT web person-outside-chat route at the Admin Console **Plugins** page: Add/plus → **Add custom MCP server** → **Create as a plugin** (some Admin UIs say **Create MCP plugin**), with the production URL, OAuth, and no custom headers.
+- Replace the removed `https://chatgpt.com/admin/apps` Create App requirement, note the Disabled → Review app / publish / enable step, and keep the GitHub marketplace card desktop-only because `mcp.json` ships.
+
 ## [0.1.30] - 2026-10-24
 
 ### Added

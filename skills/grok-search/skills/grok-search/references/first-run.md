@@ -41,7 +41,7 @@ Use `muse`, `doubao`, `cue`, or `kimi` (K3 one-chat proof only) as appropriate. 
 
 ChatGPT web, Doubao 对话, and WeCom without git + Node or an in-thread MCP card stop at the chat-only route. A chat cannot finish first-time connector setup on these surfaces. A person completes connector/OAuth outside chat; do not ask the chat to create the app, click 去授權, or type the operator password.
 
-- **ChatGPT web:** A person uses `https://chatgpt.com/admin/apps` → Create App, URL `https://search.karldigi.dev/mcp`, OAuth, no custom headers. The GitHub marketplace card is desktop-only because `mcp.json` ships.
+- **ChatGPT web:** A person opens the ChatGPT Admin Console **Plugins** page and uses Add/plus → **Add custom MCP server** → **Create as a plugin** (some Admin UIs say **Create MCP plugin**). Use URL `https://search.karldigi.dev/mcp`, OAuth, no custom headers. If the plugin is Disabled, finish Review app / publish / enable. The GitHub marketplace card is desktop-only because `mcp.json` ships.
 - **Doubao Work paid/connector path:** A person uses `技能 · 連接器 · 夥伴` → 连接器 → 新增自定义连接器, HTTP, production URL, no custom headers, then 去授權 in the browser. This person-outside-chat path does not inherit Cue's card flow.
 - **Doubao free:** `新建自定义连接器` may be disabled. Skill+CLI works in 工作 / 云电脑 with git + Node; 对话 remains chat-only. Do not send 对话 to 去授權 for first mint.
 

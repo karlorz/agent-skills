@@ -143,7 +143,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.30"
+expected_version = "0.1.31"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -342,7 +342,7 @@ for phrase in ("stop at the first", "Init smoke", "one tiny search", "search --q
         raise SystemExit(f"{skill_path}: first-run missing {phrase!r}")
 
 host_body = texts[first_run_path]
-for host_detail in ("check_readiness.py", "headless_oauth_loopback", "[mcp_servers.grok-search.headers]", "https://chatgpt.com/admin/apps"):
+for host_detail in ("check_readiness.py", "headless_oauth_loopback", "[mcp_servers.grok-search.headers]", "https://chatgpt.com/admin/apps", "Create App"):
     if host_detail in body:
         raise SystemExit(f"{skill_path}: move host detail {host_detail!r} to {first_run_path}")
 
@@ -378,8 +378,27 @@ if "stdio (default)" in host_body.lower() or "stdio as default" in host_body.low
     raise SystemExit(f"{first_run_path}: must not present stdio as default")
 if "OAuth" not in host_body:
     raise SystemExit(f"{first_run_path}: must describe OAuth for installed desktop plugin")
-if "https://chatgpt.com/admin/apps" not in host_body or "Create App" not in host_body:
-    raise SystemExit(f"{first_run_path}: must mention ChatGPT web route via https://chatgpt.com/admin/apps Create App")
+for chatgpt_web in (
+    "Admin Console",
+    "**Plugins**",
+    "Add/plus",
+    "**Add custom MCP server**",
+    "**Create as a plugin**",
+    "**Create MCP plugin**",
+    "OAuth",
+    "no custom headers",
+    "Disabled",
+    "Review app",
+    "desktop-only",
+):
+    if chatgpt_web not in host_body:
+        raise SystemExit(
+            f"{first_run_path}: must mention ChatGPT web Admin Plugins route phrase {chatgpt_web!r}"
+        )
+if "https://chatgpt.com/admin/apps" in host_body:
+    raise SystemExit(f"{first_run_path}: must not require the removed https://chatgpt.com/admin/apps URL")
+if "Create App" in host_body:
+    raise SystemExit(f"{first_run_path}: must use Create as a plugin / Create MCP plugin, not Create App")
 if "desktop-only" not in host_body.lower():
     raise SystemExit(f"{first_run_path}: must explain GitHub marketplace import is desktop-only")
 if "a chat cannot finish first-time connector setup" not in host_body.lower():
