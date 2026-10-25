@@ -143,7 +143,7 @@ for json_path in (mcp_path, example_path, manifest_path, codex_manifest_path):
 # Manifest version checks
 claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
-expected_version = "0.1.31"
+expected_version = "0.1.32"
 if claude_manifest.get("version") != expected_version:
     raise SystemExit(f"{manifest_path}: version must be {expected_version}")
 if cursor_manifest.get("version") != expected_version:
@@ -203,14 +203,13 @@ if not cursor_entry:
 if cursor_entry.get("source") != "skills/grok-search":
     raise SystemExit(f"{cursor_marketplace_path}: grok-search source must be skills/grok-search")
 
-# 5. Codex manifest: expected version, bearer_token_env_var, no apps, type http, production url
+# 5. Codex overlay: ChatGPT GitHub import reads this file. mcpServers marks the card Desktop only.
 codex_manifest = json.loads(texts[codex_manifest_path])
 if codex_manifest.get("version") != expected_version:
     raise SystemExit(f"{codex_manifest_path}: version must be {expected_version}")
-codex_servers = codex_manifest.get("mcpServers")
-if not isinstance(codex_servers, dict) or set(codex_servers) != {"grok-search"}:
+if "mcpServers" in codex_manifest:
     raise SystemExit(
-        f"{codex_manifest_path}: mcpServers must contain exactly one key: grok-search"
+        f"{codex_manifest_path}: omit mcpServers so ChatGPT GitHub import is not Desktop only"
     )
 if "hooks" in codex_manifest:
     raise SystemExit(f"{codex_manifest_path}: Codex manifest must not expose Claude hooks")
@@ -228,19 +227,8 @@ if "GROK_SEARCH_MCP_TOKEN" not in long_desc:
     raise SystemExit(f"{codex_manifest_path}: longDescription must name GROK_SEARCH_MCP_TOKEN")
 if "OAuth" not in long_desc:
     raise SystemExit(f"{codex_manifest_path}: longDescription must keep ChatGPT/Doubao MCP OAuth")
-
-codex_server = codex_servers["grok-search"]
-if codex_server.get("type") != "http":
-    raise SystemExit(f"{codex_manifest_path}: Codex MCP type must be http")
-if codex_server.get("url") != production_url:
-    raise SystemExit(f"{codex_manifest_path}: Codex MCP url must be exactly {production_url}")
-if codex_server.get("bearer_token_env_var") != "GROK_SEARCH_MCP_TOKEN":
-    raise SystemExit(
-        f"{codex_manifest_path}: bearer_token_env_var must be GROK_SEARCH_MCP_TOKEN"
-    )
-for forbidden in ("headers", "http_headers", "env_http_headers", "command", "args", "env"):
-    if forbidden in codex_server:
-        raise SystemExit(f"{codex_manifest_path}: Codex MCP server must not contain {forbidden!r}")
+if "mcpServers" not in long_desc:
+    raise SystemExit(f"{codex_manifest_path}: longDescription must say the overlay omits mcpServers")
 
 # 6. Root Claude marketplace entry for grok-search
 claude_market = json.loads(texts[claude_marketplace_path])
@@ -399,8 +387,8 @@ if "https://chatgpt.com/admin/apps" in host_body:
     raise SystemExit(f"{first_run_path}: must not require the removed https://chatgpt.com/admin/apps URL")
 if "Create App" in host_body:
     raise SystemExit(f"{first_run_path}: must use Create as a plugin / Create MCP plugin, not Create App")
-if "desktop-only" not in host_body.lower():
-    raise SystemExit(f"{first_run_path}: must explain GitHub marketplace import is desktop-only")
+if "desktop only" not in host_body.lower() and "desktop-only" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must warn that Codex overlay mcpServers labels the card Desktop only")
 if "a chat cannot finish first-time connector setup" not in host_body.lower():
     raise SystemExit(f"{first_run_path}: must state a chat cannot finish first-time connector setup")
 if "headless_oauth_loopback" not in host_body:
@@ -410,7 +398,11 @@ if "cursor-cli-mcp.example.json" not in host_body:
 if "Bearer ${GROK_SEARCH_MCP_TOKEN}" not in host_body:
     raise SystemExit(f"{first_run_path}: must document installed plugin Bearer ${{GROK_SEARCH_MCP_TOKEN}}")
 if "bearer_token_env_var" not in host_body:
-    raise SystemExit(f"{first_run_path}: must document Codex bearer_token_env_var")
+    raise SystemExit(f"{first_run_path}: must name bearer_token_env_var as omitted from the Codex overlay")
+if "omit" not in host_body.lower() or "mcpServers" not in host_body:
+    raise SystemExit(f"{first_run_path}: must say the Codex overlay omits mcpServers")
+if "skills-available" not in host_body.lower():
+    raise SystemExit(f"{first_run_path}: must say GitHub marketplace import is skills-available on ChatGPT web")
 if grok_overlay_table not in host_body or grok_overlay_header not in host_body:
     raise SystemExit(f"{first_run_path}: must document Grok config.toml HTTP url + headers.Authorization overlay")
 if discriminator not in host_body.lower() or "DISPLAY" not in host_body:

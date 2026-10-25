@@ -1,6 +1,6 @@
 {
   "name": "grok-search",
-  "version": "0.1.31",
+  "version": "0.1.32",
   "description": "Live web search, source extraction, URL fetching, and site mapping through the hosted GrokSearch HTTP MCP service.",
   "author": {
     "name": "karlorz"
@@ -15,17 +15,10 @@
     "codex"
   ],
   "skills": "./skills/",
-  "mcpServers": {
-    "grok-search": {
-      "type": "http",
-      "url": "https://search.karldigi.dev/mcp",
-      "bearer_token_env_var": "GROK_SEARCH_MCP_TOKEN"
-    }
-  },
   "interface": {
     "displayName": "Grok Search",
     "shortDescription": "Search and fetch current web sources",
-    "longDescription": "Use the hosted GrokSearch HTTP MCP service for live web search, source extraction, URL fetching, and site mapping. Desktop auth is GROK_SEARCH_MCP_TOKEN; ChatGPT and Doubao keep HTTPS MCP OAuth.",
+    "longDescription": "Use the hosted GrokSearch HTTP MCP service for live web search, source extraction, URL fetching, and site mapping. This Codex overlay omits mcpServers so ChatGPT GitHub import is not Desktop only. Live ChatGPT tools use Create MCP plugin with HTTPS OAuth. Desktop Cursor/Claude/Grok keep mcp.json and GROK_SEARCH_MCP_TOKEN.",
     "developerName": "karlorz",
     "category": "Research",
     "capabilities": [

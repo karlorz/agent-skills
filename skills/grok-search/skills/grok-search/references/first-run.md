@@ -41,7 +41,7 @@ Use `muse`, `doubao`, `cue`, or `kimi` (K3 one-chat proof only) as appropriate. 
 
 ChatGPT web, Doubao 对话, and WeCom without git + Node or an in-thread MCP card stop at the chat-only route. A chat cannot finish first-time connector setup on these surfaces. A person completes connector/OAuth outside chat; do not ask the chat to create the app, click 去授權, or type the operator password.
 
-- **ChatGPT web:** A person opens the ChatGPT Admin Console **Plugins** page and uses Add/plus → **Add custom MCP server** → **Create as a plugin** (some Admin UIs say **Create MCP plugin**). Use URL `https://search.karldigi.dev/mcp`, OAuth, no custom headers. If the plugin is Disabled, finish Review app / publish / enable. The GitHub marketplace card is desktop-only because `mcp.json` ships.
+- **ChatGPT web:** A person opens the ChatGPT Admin Console **Plugins** page and uses Add/plus → **Add custom MCP server** → **Create as a plugin** (some Admin UIs say **Create MCP plugin**). Use URL `https://search.karldigi.dev/mcp`, OAuth, no custom headers. If the plugin is Disabled, finish Review app / publish / enable. GitHub marketplace import of this plugin is skills-available on ChatGPT web. Do not add `mcpServers` to `.codex-plugin/plugin.json`; ChatGPT then labels the card desktop-only. Live `web_search` tools still need the separate Create MCP plugin.
 - **Doubao Work paid/connector path:** A person uses `技能 · 連接器 · 夥伴` → 连接器 → 新增自定义连接器, HTTP, production URL, no custom headers, then 去授權 in the browser. This person-outside-chat path does not inherit Cue's card flow.
 - **Doubao free:** `新建自定义连接器` may be disabled. Skill+CLI works in 工作 / 云电脑 with git + Node; 对话 remains chat-only. Do not send 对话 to 去授權 for first mint.
 
@@ -50,9 +50,9 @@ ChatGPT web, Doubao 对话, and WeCom without git + Node or an in-thread MCP car
 These are existing desktop plugin contracts, not instructions for CLI installation or Cue's Apps card:
 
 - Installed `.mcp.json` / Cursor `mcp.json` use `type: http` and `Authorization: Bearer ${GROK_SEARCH_MCP_TOKEN}`. Export `GROK_SEARCH_MCP_TOKEN` in the process launching the client. Grok skips OAuth when that Authorization header is present; a missing token yields 401 instead of `[authenticating]`.
-- Claude/Grok default to production. `GROK_SEARCH_MCP_URL` may override only on those hosts. Codex and Cursor-native pin production; the URL is not configurable in Cursor.
+- Claude/Grok default to production. `GROK_SEARCH_MCP_URL` may override only on those hosts. Cursor-native pins production; the URL is not configurable in Cursor.
 - **Claude/Grok plugin hosts:** Resolve `PLUGIN_ROOT` from `GROK_PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT`, then run `python3 "$PLUGIN_ROOT/scripts/check_readiness.py" --apply --json` before the first MCP call. `in_sync` verifies configuration; a live search verifies execution. Keep production if warnings mention a stale preview URL.
-- **Codex:** Native manifest uses `bearer_token_env_var: GROK_SEARCH_MCP_TOKEN`.
+- **Codex:** The Codex overlay omits `mcpServers` and `bearer_token_env_var` so ChatGPT GitHub import is not Desktop only. Codex desktop does not auto-wire MCP from this overlay.
 - **Cursor-native / Agent TUI:** Cursor-native pins production and does not run the probe. Installed `mcp.json` uses the environment-backed header above.
 - Grok SessionStart cannot inject the parent MCP environment. `~/.config/grok-search/mcp.env` is not auto-sourced. Do not auto-write host configuration or start a local stdio `uvx` server.
 
