@@ -1,5 +1,7 @@
 # Chrome Debug Launcher
 
+If the job is generic website automation (open, click, fill, screenshot, extract) and `ego-browser` is on PATH, use `/ego-browser` unless `BROWSER_AUTOMATION=playwright-cli`. This file is the chrome-debug CDP `:9222` path: peerd queue-wake, Cloudflare on this Chrome, live-profile attach, and unpacked extensions.
+
 Start Chrome with remote debugging enabled, ready for `playwright-cli attach`.
 
 Contract stamp: **`chrome-debug-contract: v6`** (see `scripts/chrome-debug.sh` header).

@@ -651,13 +651,13 @@ run_playwright_cli_skill_contract_checks() {
   references="$package_root/references"
 
   assert_eq "playwright-cli Claude manifest version" \
-    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "1.4.3"
+    "$(read_json_version "$package_root/.claude-plugin/plugin.json")" "1.4.4"
   assert_eq "playwright-cli Codex manifest version" \
-    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "1.4.3"
+    "$(read_json_version "$package_root/.codex-plugin/plugin.json")" "1.4.4"
   assert_eq "playwright-cli Cursor manifest version" \
-    "$(read_json_version "$package_root/.cursor-plugin/plugin.json")" "1.4.3"
+    "$(read_json_version "$package_root/.cursor-plugin/plugin.json")" "1.4.4"
   assert_eq "playwright-cli marketplace version" \
-    "$(read_market_version "$marketplace" playwright-cli)" "1.4.3"
+    "$(read_market_version "$marketplace" playwright-cli)" "1.4.4"
   assert_contains "playwright-cli skill minimum" "$skill" '≥ 0.1.20'
   assert_contains "playwright-cli generic web uses ego-browser" "$skill" 'Generic website automation'
   assert_contains "playwright-cli CDP stay on chrome-debug" "$skill" 'chrome-debug CDP'
@@ -672,6 +672,8 @@ run_playwright_cli_skill_contract_checks() {
   assert_contains "playwright-cli WebMCP status diagnostic" "$skill" 'page status reports how many WebMCP tools'
   assert_contains "playwright-cli setup minimum" "$setup_script" 'MIN_CLI_VERSION="0.1.20"'
   assert_contains "playwright-cli chrome-debug minimum" "$chrome_debug" '≥ 0.1.20'
+  assert_contains "playwright-cli chrome-debug generic-web gate" "$chrome_debug" 'use `/ego-browser` unless `BROWSER_AUTOMATION=playwright-cli`'
+  assert_contains "playwright-cli Quick start ego gate" "$skill" 'The commands below are the Microsoft playwright-cli surface'
   assert_contains "playwright-cli idle timeout" "$(cat "$references/session-management.md")" 'open --idle-timeout=<ms>'
   assert_contains "playwright-cli tracing output" "$(cat "$references/tracing.md")" '.playwright-cli/traces/'
   assert_contains "playwright-cli video attachment" "$(cat "$references/video-recording.md")" 'gh pr create'

@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [1.4.4] - 2026-10-28
+
+- chrome-debug.md, `chrome-debug --explain`, and the Microsoft Quick start now tell agents to use `/ego-browser` for generic website automation when that CLI is on PATH. CDP `nextAction` (peerd, Cloudflare, live-profile attach) stays on chrome-debug.
+
 ## [1.4.3] - 2026-10-27
 
 - Route generic website automation to `/ego-browser` when `ego-browser` is on PATH. This skill stays the chrome-debug CDP `:9222` path (grokbot/channel, Cloudflare, live-profile attach). `BROWSER_AUTOMATION=playwright-cli` forces this skill for generic web tasks.

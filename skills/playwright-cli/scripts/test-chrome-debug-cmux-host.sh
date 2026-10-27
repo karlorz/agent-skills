@@ -131,6 +131,9 @@ action = data["nextAction"].lower()
 assert "cdp-list" in action, data
 assert "do not run chrome-debug --restart" in action, data
 assert "try-cli-attach" in action, data
+hint = data["genericWebHint"].lower()
+assert "ego-browser" in hint, data
+assert "browser_automation=playwright-cli" in hint, data
 PY
 
 cmux_check="$(check_json "${CMUX_PORT}")"
@@ -159,6 +162,7 @@ import json, sys
 data = json.loads(sys.argv[1])
 assert data["portStatus"] == "owned_by_profile", data
 assert "restart" in data["nextAction"].lower() or "attach" in data["nextAction"].lower(), data
+assert "ego-browser" in data["genericWebHint"].lower(), data
 PY
 
 printf 'test-chrome-debug-cmux-host: PASS\n'

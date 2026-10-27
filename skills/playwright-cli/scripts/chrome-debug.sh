@@ -547,7 +547,8 @@ PY
 
 emit_explanation() {
   local chrome_bin="$1"
-  local port_status profile_exists preferences_exist next_action summary
+  local port_status profile_exists preferences_exist next_action summary generic_web_hint
+  generic_web_hint="If this task is generic website automation (open, click, fill, screenshot, extract) and ego-browser is on PATH, use /ego-browser unless BROWSER_AUTOMATION=playwright-cli. nextAction below is the chrome-debug CDP path only."
 
   port_status="$(resolve_port_status)"
   if [[ -d "${PROFILE_DIR}" ]]; then
@@ -602,6 +603,7 @@ emit_explanation() {
     PREFERENCES_EXIST_JSON="${preferences_exist}" \
     SUMMARY_JSON="${summary}" \
     NEXT_ACTION_JSON="${next_action}" \
+    GENERIC_WEB_HINT_JSON="${generic_web_hint}" \
     python3 - <<'PY'
 import json
 import os
@@ -620,6 +622,7 @@ print(
             "preferencesExist": os.environ["PREFERENCES_EXIST_JSON"] == "yes",
             "summary": os.environ["SUMMARY_JSON"],
             "nextAction": os.environ["NEXT_ACTION_JSON"],
+            "genericWebHint": os.environ["GENERIC_WEB_HINT_JSON"],
         }
     )
 )
@@ -639,6 +642,7 @@ Profile exists: ${profile_exists}
 Prefs seeded  : ${preferences_exist}
 Summary       : ${summary}
 Next action   : ${next_action}
+Generic web   : ${generic_web_hint}
 EOF_EXPLAIN
 }
 

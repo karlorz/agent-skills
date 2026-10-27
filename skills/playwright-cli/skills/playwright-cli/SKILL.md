@@ -187,6 +187,8 @@ The sections below track the upstream Microsoft playwright-cli skill (package â‰
 
 ## Quick start
 
+Generic website automation uses `/ego-browser` when `ego-browser` is on PATH unless `BROWSER_AUTOMATION=playwright-cli`. The commands below are the Microsoft playwright-cli surface for this skill's Chrome CDP path.
+
 ```bash
 # open new browser
 playwright-cli open
