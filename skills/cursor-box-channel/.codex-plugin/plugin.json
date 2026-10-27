@@ -1,6 +1,6 @@
 {
   "name": "cursor-box-channel",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "description": "Attended HTTP Streamable MCP at https://channel.termolo.com/mcp, plus an optional read-only audit wrapper for https://channel.termolo.com/console.",
   "author": {
     "name": "karlorz"
@@ -15,17 +15,10 @@
     "codex"
   ],
   "skills": "./skills/",
-  "mcpServers": {
-    "cursor-box-channel": {
-      "type": "http",
-      "url": "https://channel.termolo.com/mcp",
-      "bearer_token_env_var": "CURSOR_BOX_MCP_TOKEN"
-    }
-  },
   "interface": {
     "displayName": "Cursor Box Channel",
     "shortDescription": "Attended HTTP MCP plus audit console",
-    "longDescription": "Hosted cursor-box-channel HTTP Streamable MCP for ask, list_replies, heartbeat, claim, and reply, plus an optional Cloudflare Access console at https://channel.termolo.com/console.",
+    "longDescription": "Hosted cursor-box-channel HTTP Streamable MCP for ask, list_replies, heartbeat, claim, and reply, plus an optional Cloudflare Access console at https://channel.termolo.com/console. This Codex overlay omits mcpServers so ChatGPT GitHub import is not Desktop only. Live ChatGPT tools use Create MCP plugin; hosted /mcp stays Origin Bearer. Desktop Cursor/Claude/Grok keep mcp.json and CURSOR_BOX_MCP_TOKEN.",
     "developerName": "karlorz",
     "category": "Productivity",
     "capabilities": [

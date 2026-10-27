@@ -2,6 +2,13 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.13] - 2026-10-27
+
+### Changed
+- Omit `mcpServers` from `.codex-plugin/plugin.json`. ChatGPT GitHub marketplace import reads that overlay and labeled Cursor Box Channel **Desktop only** when it declared the hosted HTTP MCP server, including a remote HTTPS URL.
+- Keep Cursor `mcp.json` and Claude/Grok `.mcp.json` for desktop connector hosts.
+- Document that ChatGPT web GitHub import is skills-available; live ChatGPT tools still use Admin Console **Create MCP plugin**. Hosted `/mcp` stays Origin Bearer, so ChatGPT web cannot send custom headers until a later gateway OAuth change.
+
 ## [0.3.12] - 2026-10-14
 
 ### Changed

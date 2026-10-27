@@ -16,7 +16,7 @@ From `karlorz-agent-skills`:
 claude plugin install cursor-box-channel@karlorz-agent-skills
 ```
 
-Cursor: install the plugin, then **Plugins → Configure** and enter `CURSOR_BOX_MCP_TOKEN`. Codex: `codex plugin add cursor-box-channel@karlorz-agent-skills` and set the same bearer.
+Cursor: install the plugin, then **Plugins → Configure** and enter `CURSOR_BOX_MCP_TOKEN`. Codex: `codex plugin add cursor-box-channel@karlorz-agent-skills`. The Codex overlay omits `mcpServers`, so Codex desktop does not auto-wire MCP; set `CURSOR_BOX_MCP_TOKEN` in process environment. ChatGPT GitHub import is skills-available. Live ChatGPT tools still use person-outside-chat Admin Console **Plugins** → **Create MCP plugin** (some UIs say **Create as a plugin**) with URL `https://channel.termolo.com/mcp`. Hosted `/mcp` is Origin Bearer; ChatGPT web sends OAuth and no custom headers, so live ChatGPT MCP stays a later gateway change.
 
 ## Token (MCP only)
 
@@ -26,7 +26,7 @@ Cursor: install the plugin, then **Plugins → Configure** and enter `CURSOR_BOX
 - Never print a real token.
 - The browser console does **not** use this bearer. Cloudflare Access on `/console*` is the gate. `/mcp` stays Bearer-only.
 
-Claude/Grok default URL is `https://channel.termolo.com/mcp` (`CURSOR_BOX_MCP_URL` override). Cursor-native and Codex pin that URL.
+Claude/Grok default URL is `https://channel.termolo.com/mcp` (`CURSOR_BOX_MCP_URL` override). Cursor-native pins that URL. Codex overlay omits `mcpServers` so ChatGPT GitHub import is not Desktop only.
 
 ## Audit console
 
