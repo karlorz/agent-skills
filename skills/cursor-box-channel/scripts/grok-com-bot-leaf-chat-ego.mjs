@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { selectWriter, inspectPage, TARGET_URL, writeReceipt } from "./grok-com-bot-leaf-chat.mjs";
+import { selectWriter, inspectPage, messageMatchesPrompt, TARGET_URL, writeReceipt } from "./grok-com-bot-leaf-chat.mjs";
 
 // Self-contained Node program for ego-browser nodejs; never pass this in argv.
 export function buildScript(prompt, timeoutMs, marker) {
@@ -13,6 +13,7 @@ export function buildScript(prompt, timeoutMs, marker) {
 const prompt = ${JSON.stringify(prompt)};
 const target = ${JSON.stringify(TARGET_URL)};
 const marker = ${JSON.stringify(marker)};
+const messageMatchesPrompt = ${messageMatchesPrompt.toString()};
 const inspectPage = ${inspectPage.toString()};
 const expectedUrl = new URL(target);
 const mapped = (url) => {
@@ -65,13 +66,14 @@ async function run() {
     return { status: "skipped", reason: "draft_not_ready" };
   entered = true; // A lost press response is uncertain; there is no retry.
   await page.keyboard.press("Enter");
+  const proofDeadline = Date.now() + ${timeoutMs};
   let last;
   do {
     await pause();
     last = await inspect();
     if (!sameTab(last, baseline)) break;
     if (last.draft === "" && last.matchingCount > baseline.matchingCount) return { status: "ok" };
-  } while (Date.now() < deadline);
+  } while (Date.now() < proofDeadline);
   return { status: sameTab(last, baseline) && last.draft === expectedDraft ? "submit_stuck" : "submit_unknown" };
 }
 let result;

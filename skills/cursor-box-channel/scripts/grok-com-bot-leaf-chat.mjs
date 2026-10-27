@@ -28,6 +28,19 @@ export function selectWriter({
   return handshake === "connected" ? "mcp" : "stop";
 }
 
+export function messageMatchesPrompt(text, expected) {
+  const got = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const want = String(expected || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!got || !want) return false;
+  if (got === want || got.startsWith(want)) return true;
+  // Truncated bubble text: require a stable prefix of the prompt.
+  return got.length >= 24 && want.startsWith(got);
+}
+
 // This function is serialized into the page. User text stays in memory, never in receipts/output.
 export function inspectPage(prompt, page = globalThis) {
   const document = page.document;
@@ -50,9 +63,18 @@ export function inspectPage(prompt, page = globalThis) {
     generating: !!document.querySelector(
       'button[aria-label="Stop generating"], button[aria-label="Stop response"], button[data-testid="stop-button"]',
     ),
-    matchingCount: users.filter((user) => !el?.contains(user) && clean(user.innerText) === expected)
-      .length,
+    matchingCount: users.filter(
+      (user) => !el?.contains(user) && messageMatchesPrompt(user.innerText, expected),
+    ).length,
   };
+}
+
+export function inspectPageExpression(prompt) {
+  return `(() => {
+    const messageMatchesPrompt = ${messageMatchesPrompt.toString()};
+    const inspectPage = ${inspectPage.toString()};
+    return inspectPage(${JSON.stringify(prompt)});
+  })()`;
 }
 
 export class CdpConnection {
@@ -168,7 +190,7 @@ export async function runLeafChat({
   if (typeof prompt !== "string" || !prompt.trim())
     return { status: "skipped", reason: "empty_prompt" };
   const normalizedPrompt = normalize(prompt);
-  const inspectExpr = `(${inspectPage.toString()})(${JSON.stringify(prompt)})`;
+  const inspectExpr = inspectPageExpression(prompt);
   // :19222 is the box reverse tunnel. Leaf callers may override only for local test servers.
   try {
     const u = new URL(endpoint);
@@ -270,6 +292,7 @@ export async function runLeafChat({
     entered = true; // A lost keyDown response is already ambiguous; never try Enter again.
     await command("Input.dispatchKeyEvent", { type: "keyDown", ...key });
     await command("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+    const proofDeadline = Date.now() + timeoutMs;
     let last;
     do {
       await sleep(100);
@@ -279,7 +302,7 @@ export async function runLeafChat({
         status = "ok";
         break;
       }
-    } while (Date.now() < deadline);
+    } while (Date.now() < proofDeadline);
     if (
       status !== "ok" &&
       last?.readable &&

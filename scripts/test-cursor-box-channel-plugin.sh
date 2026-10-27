@@ -110,8 +110,8 @@ claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
 codex_manifest = json.loads(texts[codex_manifest_path])
 expected_version = claude_manifest.get("version")
-if expected_version != "0.3.14":
-    raise SystemExit(f"{manifest_path}: version must be 0.3.14")
+if expected_version != "0.3.15":
+    raise SystemExit(f"{manifest_path}: version must be 0.3.15")
 if cursor_manifest.get("version") != expected_version:
     raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if codex_manifest.get("version") != expected_version:
@@ -167,6 +167,8 @@ if "Create MCP plugin" not in long_desc:
 
 # 5. CHANGELOG
 changelog_text = texts[changelog_path]
+if "## [0.3.15]" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must contain 0.3.15")
 if "## [0.3.14]" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain 0.3.14")
 if "## [0.3.13]" not in changelog_text:

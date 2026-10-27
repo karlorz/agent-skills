@@ -73,6 +73,8 @@ test("reuses Ego TaskSpace and submits exactly one Enter with positive proof", a
   assert.deepEqual(h.calls.filter(([name]) => name === "press"), [["press", "Enter"]]);
   assert.equal(h.calls.filter(([name]) => name === "insertText").length, 1);
   assert.ok(h.script.includes(JSON.stringify(prompt)));
+  assert.match(h.script, /messageMatchesPrompt/);
+  assert.match(h.script, /proofDeadline/);
   assert.equal(h.calls.filter(([name]) => name === "goto").length, 0);
   assert.deepEqual(Object.keys(h.receipts[0]).sort(), ["promptSha256", "status", "timestamp", "url"]);
   assert.equal(h.receipts[0].promptSha256, createHash("sha256").update(prompt).digest("hex"));

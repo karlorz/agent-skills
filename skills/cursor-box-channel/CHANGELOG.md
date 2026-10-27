@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.15] - 2026-10-28
+
+### Fixed
+- Leaf-chat submit proof accepts user-message bubbles with trailing UI chrome or a truncated prefix of the prompt, instead of exact innerText equality. Post-Enter polling uses a dedicated proof window so page-load time cannot starve matching.
+
 ## [0.3.14] - 2026-10-27
 
 ### Added
