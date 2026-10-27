@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { selectWriter, inspectPage, messageMatchesPrompt, TARGET_URL, writeReceipt } from "./grok-com-bot-leaf-chat.mjs";
+import { selectWriter, inspectPageExpression, TARGET_URL, writeReceipt } from "./grok-com-bot-leaf-chat.mjs";
 
 // Self-contained Node program for ego-browser nodejs; never pass this in argv.
 export function buildScript(prompt, timeoutMs, marker) {
@@ -13,8 +13,7 @@ export function buildScript(prompt, timeoutMs, marker) {
 const prompt = ${JSON.stringify(prompt)};
 const target = ${JSON.stringify(TARGET_URL)};
 const marker = ${JSON.stringify(marker)};
-const messageMatchesPrompt = ${messageMatchesPrompt.toString()};
-const inspectPage = ${inspectPage.toString()};
+const inspectExpr = ${JSON.stringify(inspectPageExpression(prompt))};
 const expectedUrl = new URL(target);
 const mapped = (url) => {
   try {
@@ -41,7 +40,7 @@ async function run() {
   }
   pageLabel = page.label;
   const deadline = Date.now() + ${timeoutMs};
-  const inspect = () => page.evaluate(inspectPage, prompt);
+  const inspect = () => page.evaluate(inspectExpr);
   const pause = () => new Promise((resolve) => setTimeout(resolve, 100));
   let baseline;
   do {

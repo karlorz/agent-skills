@@ -110,8 +110,8 @@ claude_manifest = json.loads(texts[manifest_path])
 cursor_manifest = json.loads(texts[cursor_manifest_path])
 codex_manifest = json.loads(texts[codex_manifest_path])
 expected_version = claude_manifest.get("version")
-if expected_version != "0.3.15":
-    raise SystemExit(f"{manifest_path}: version must be 0.3.15")
+if expected_version != "0.3.16":
+    raise SystemExit(f"{manifest_path}: version must be 0.3.16")
 if cursor_manifest.get("version") != expected_version:
     raise SystemExit(f"{cursor_manifest_path}: version must match Claude manifest")
 if codex_manifest.get("version") != expected_version:
@@ -167,6 +167,8 @@ if "Create MCP plugin" not in long_desc:
 
 # 5. CHANGELOG
 changelog_text = texts[changelog_path]
+if "## [0.3.16]" not in changelog_text:
+    raise SystemExit(f"{changelog_path}: must contain 0.3.16")
 if "## [0.3.15]" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain 0.3.15")
 if "## [0.3.14]" not in changelog_text:
@@ -178,6 +180,11 @@ if "## [0.3.12]" not in changelog_text:
 for helper_name in ("grok-com-bot-leaf-chat.mjs", "grok-com-bot-leaf-chat-ego.mjs"):
     if not (root / "scripts" / helper_name).is_file():
         raise SystemExit(f"missing Leaf chat helper: {helper_name}")
+ego_helper = (root / "scripts" / "grok-com-bot-leaf-chat-ego.mjs").read_text(encoding="utf-8")
+if "inspectPageExpression" not in ego_helper:
+    raise SystemExit("Ego helper must serialize inspectPageExpression into the page")
+if "page.evaluate(inspectPage" in ego_helper:
+    raise SystemExit("Ego helper must not pass inspectPage into page.evaluate")
 for needle in ("ego-browser", "scripts/grok-com-bot-leaf-chat-ego.mjs", "BROWSER_AUTOMATION=playwright-cli", "ego_not_running"):
     if needle not in texts[skill_path] or needle not in texts[readme_path]:
         raise SystemExit(f"Ego Leaf chat contract missing: {needle}")

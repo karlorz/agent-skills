@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import {
   inspectPage,
   inspectPageExpression,
@@ -66,4 +67,12 @@ test("inspectPageExpression serializes the matcher into the page program", () =>
   assert.match(expr, /messageMatchesPrompt/);
   assert.match(expr, /inspectPage/);
   assert.ok(expr.includes("LIVE-TEST"));
+});
+
+test("inspectPageExpression runs in a page realm without Node-scope helpers", () => {
+  const page = fakePage({ draft: "", users: [`${prompt}\nCopy`] });
+  const result = vm.runInNewContext(inspectPageExpression(prompt), page);
+  assert.equal(result.matchingCount, 1);
+  assert.equal(result.draft, "");
+  assert.equal(result.documentId, "doc-1");
 });

@@ -20,8 +20,10 @@ function harness({ states = [], reuse = true, pressFails = false, lostOutput = f
   let script;
   const page = { label: "p1", async goto(url) { calls.push(["goto", url]); if (navigateFails) throw Error(prompt); },
     async evaluate(fn) {
-      if (fn.name !== "inspectPage") return focus;
-      return { ...base, ...(inspections.shift() || {}) };
+      if (typeof fn === "string" && fn.includes("inspectPage")) {
+        return { ...base, ...(inspections.shift() || {}) };
+      }
+      return focus;
     }, keyboard: {
       async insertText(value) { calls.push(["insertText", value]); },
       async press(key) { calls.push(["press", key]); if (pressFails) throw Error(prompt); },
@@ -73,6 +75,9 @@ test("reuses Ego TaskSpace and submits exactly one Enter with positive proof", a
   assert.deepEqual(h.calls.filter(([name]) => name === "press"), [["press", "Enter"]]);
   assert.equal(h.calls.filter(([name]) => name === "insertText").length, 1);
   assert.ok(h.script.includes(JSON.stringify(prompt)));
+  assert.match(h.script, /const inspectExpr = "\(\(\) =>/);
+  assert.match(h.script, /page\.evaluate\(inspectExpr\)/);
+  assert.doesNotMatch(h.script, /page\.evaluate\(inspectPage/);
   assert.match(h.script, /messageMatchesPrompt/);
   assert.match(h.script, /proofDeadline/);
   assert.equal(h.calls.filter(([name]) => name === "goto").length, 0);

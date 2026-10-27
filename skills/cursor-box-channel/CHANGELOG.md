@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.16] - 2026-10-28
+
+### Fixed
+- Ego Leaf chat inspects with `inspectPageExpression` so `page.evaluate` receives a self-contained string. Passing `inspectPage` as a function left `messageMatchesPrompt` undefined in the page and crashed inspect whenever a user-message existed.
+
 ## [0.3.15] - 2026-10-28
 
 ### Fixed
