@@ -3,13 +3,9 @@
 import process from "node:process";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { selectWriter, inspectPage, TARGET_URL } from "./grok-com-bot-leaf-chat.mjs";
-
-export { selectWriter, inspectPage, TARGET_URL };
+import { selectWriter, inspectPage, TARGET_URL, writeReceipt } from "./grok-com-bot-leaf-chat.mjs";
 
 // Self-contained Node program for ego-browser nodejs; never pass this in argv.
 export function buildScript(prompt, timeoutMs, marker) {
@@ -18,13 +14,16 @@ const prompt = ${JSON.stringify(prompt)};
 const target = ${JSON.stringify(TARGET_URL)};
 const marker = ${JSON.stringify(marker)};
 const inspectPage = ${inspectPage.toString()};
+const expectedUrl = new URL(target);
 const mapped = (url) => {
   try {
-    const u = new URL(url), expected = new URL(target);
-    return u.origin === expected.origin && u.pathname.replace(/\\/+$/, "") === expected.pathname;
+    const u = new URL(url);
+    return u.origin === expectedUrl.origin && u.pathname.replace(/\\/+$/, "") === expectedUrl.pathname;
   } catch { return false; }
 };
 const clean = (text) => text.replace(/\\s+/g, " ").trim();
+const expectedDraft = clean(prompt);
+const sameTab = (s, base) => !!s?.readable && mapped(s.url) && s.documentId === base.documentId;
 const emit = (result) => console.log(marker + JSON.stringify(result));
 let entered = false, spaceId, pageLabel;
 async function run() {
@@ -62,26 +61,28 @@ async function run() {
   await page.keyboard.insertText(prompt);
   const filled = await inspect();
   if (!mapped(filled.url) || filled.documentId !== baseline.documentId || filled.generating ||
-      !filled.readable || filled.draft !== clean(prompt) || filled.matchingCount !== baseline.matchingCount)
+      !filled.readable || filled.draft !== expectedDraft || filled.matchingCount !== baseline.matchingCount)
     return { status: "skipped", reason: "draft_not_ready" };
   entered = true; // A lost press response is uncertain; there is no retry.
-  emit({ entered: true });
   await page.keyboard.press("Enter");
   let last;
   do {
     await pause();
     last = await inspect();
-    if (!mapped(last.url) || last.documentId !== baseline.documentId || !last.readable) break;
+    if (!sameTab(last, baseline)) break;
     if (last.draft === "" && last.matchingCount > baseline.matchingCount) return { status: "ok" };
   } while (Date.now() < deadline);
-  return { status: last?.readable && mapped(last.url) && last.documentId === baseline.documentId &&
-    last.draft === clean(prompt) ? "submit_stuck" : "submit_unknown" };
+  return { status: sameTab(last, baseline) && last.draft === expectedDraft ? "submit_stuck" : "submit_unknown" };
 }
 let result;
 try { result = await run(); }
 catch { result = { status: entered ? "submit_unknown" : "skipped", reason: "ego_unavailable" }; }
 emit({ ...result, entered, spaceId, pageLabel });
 `;
+}
+
+function spawnStatus(error) {
+  return error?.code === "ENOENT" ? "ego_not_running" : "submit_unknown";
 }
 
 async function execute(script, marker, timeoutMs, spawnChild) {
@@ -96,21 +97,24 @@ async function execute(script, marker, timeoutMs, spawnChild) {
     try {
       child = spawnChild("ego-browser", ["nodejs"], { stdio: ["pipe", "pipe", "pipe"] });
     } catch (error) {
-      done({ status: error.code === "ENOENT" ? "ego_not_running" : "submit_unknown" });
+      done({ status: spawnStatus(error) });
       return;
     }
     // Never forward child logs: errors and browser output can contain prompt text.
     child.stderr.on("data", () => {});
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => { output = (output + chunk).slice(-65536); });
-    child.on("error", (error) => done({ status: error.code === "ENOENT" ? "ego_not_running" : "submit_unknown" }));
+    child.on("error", (error) => done({ status: spawnStatus(error) }));
     child.on("close", () => {
-      const lines = output.split(/\r?\n/).filter((line) => line.startsWith(marker));
+      const start = output.lastIndexOf(marker);
       let record;
-      try { record = JSON.parse(lines.at(-1)?.slice(marker.length)); } catch { /* Uncertain. */ }
+      try {
+        const line = start < 0 ? "" : output.slice(start, output.indexOf("\n", start) + 1 || undefined);
+        record = JSON.parse(line.slice(marker.length));
+      } catch { /* Uncertain. */ }
+      const wantEntered = { skipped: false, ok: true, submit_stuck: true }[record?.status];
       if (!record || !["ok", "skipped", "submit_unknown", "submit_stuck"].includes(record.status) ||
-          (record.status === "skipped" && record.entered !== false) ||
-          (["ok", "submit_stuck"].includes(record.status) && record.entered !== true)) {
+          (wantEntered !== undefined && record.entered !== wantEntered)) {
         done({ status: "submit_unknown" });
         return;
       }
@@ -131,16 +135,6 @@ async function execute(script, marker, timeoutMs, spawnChild) {
   });
 }
 
-async function writeReceipt(record, home) {
-  const dir = join(home, ".grok", "handoffs");
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  const path = join(dir, `${record.timestamp.slice(0, 10)}-leaf-chat-${record.promptSha256}.md`);
-  await writeFile(path,
-    `---\ntimestamp: ${record.timestamp}\nurl: ${record.url}\nprompt_sha256: ${record.promptSha256}\nstatus: ${record.status}\n---\n`,
-    { mode: 0o600 });
-  return path;
-}
-
 export async function runLeafChat({ prompt, timeoutMs = 15000, home = homedir(), hooks = {},
   routeState = { operatorChatNow: true } } = {}) {
   const writer = selectWriter(routeState);
@@ -150,7 +144,6 @@ export async function runLeafChat({ prompt, timeoutMs = 15000, home = homedir(),
   const marker = `LEAF_${randomUUID()}:`;
   const result = await execute(buildScript(prompt, timeoutMs, marker), marker, timeoutMs, hooks.spawn || spawn);
   if (["skipped", "ego_not_running"].includes(result.status)) return result;
-  result.url = TARGET_URL;
   const record = { timestamp: new Date().toISOString(), url: TARGET_URL,
     promptSha256: createHash("sha256").update(prompt).digest("hex"), status: result.status };
   try {

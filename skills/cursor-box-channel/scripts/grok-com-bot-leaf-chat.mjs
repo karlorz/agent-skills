@@ -143,7 +143,7 @@ function mapped(url) {
   }
 }
 
-async function writeReceipt(record, home) {
+export async function writeReceipt(record, home) {
   const dir = join(home, ".grok", "handoffs");
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, `${record.timestamp.slice(0, 10)}-leaf-chat-${record.promptSha256}.md`);

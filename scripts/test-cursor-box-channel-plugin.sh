@@ -173,12 +173,9 @@ if "## [0.3.13]" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must retain 0.3.13 Codex overlay change")
 if "## [0.3.12]" not in changelog_text:
     raise SystemExit(f"{changelog_path}: must contain 0.3.12")
-leaf_helper = root / "scripts" / "grok-com-bot-leaf-chat.mjs"
-if not leaf_helper.is_file():
-    raise SystemExit("missing standalone Leaf chat helper")
-ego_helper = root / "scripts" / "grok-com-bot-leaf-chat-ego.mjs"
-if not ego_helper.is_file():
-    raise SystemExit("missing Ego Leaf chat helper")
+for helper_name in ("grok-com-bot-leaf-chat.mjs", "grok-com-bot-leaf-chat-ego.mjs"):
+    if not (root / "scripts" / helper_name).is_file():
+        raise SystemExit(f"missing Leaf chat helper: {helper_name}")
 for needle in ("ego-browser", "scripts/grok-com-bot-leaf-chat-ego.mjs", "BROWSER_AUTOMATION=playwright-cli", "ego_not_running"):
     if needle not in texts[skill_path] or needle not in texts[readme_path]:
         raise SystemExit(f"Ego Leaf chat contract missing: {needle}")

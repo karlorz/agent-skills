@@ -6,7 +6,8 @@ import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { runLeafChat, TARGET_URL } from "./grok-com-bot-leaf-chat-ego.mjs";
+import { runLeafChat } from "./grok-com-bot-leaf-chat-ego.mjs";
+import { TARGET_URL } from "./grok-com-bot-leaf-chat.mjs";
 
 const prompt = 'Private unicode 測試 $token `literal`\nsecond line';
 const base = { url: TARGET_URL, documentId: "doc", readable: true, draft: "", generating: false, matchingCount: 2 };
