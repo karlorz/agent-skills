@@ -14,14 +14,14 @@ install or verify it without `sudo`.
 
 ## When to use
 
-This skill owns **chrome-debug CDP** (`http://localhost:9222`): grokbot/newbie
-leaf chat, cursor-box-channel peerd wake, Cloudflare on that Chrome, unpacked
+This skill owns **chrome-debug CDP** (`http://localhost:9222`): cursor-box-channel peerd wake, explicit
+Chrome Leaf chat, Cloudflare on that Chrome, unpacked
 extensions, and attach to an already-open logged-in tab.
 
 Generic website automation (open, click, fill, screenshot, extract) uses
 `/ego-browser` when `ego-browser` is on PATH. Ego Lite cannot attach to
-chrome-debug `:9222`. Raw-CDP skills (`cursor-box-channel` leaf chat,
-AgentChat-OneWeb, AgentChat-Muse) stay on chrome-debug.
+chrome-debug `:9222`. Mac `cursor-box-channel` Leaf chat prefers its Ego helper under the same rule.
+Peerd queue-wake, AgentChat-OneWeb and AgentChat-Muse stay on chrome-debug.
 
 Set `BROWSER_AUTOMATION=playwright-cli` to force this skill for generic web
 tasks in this session.

@@ -1,6 +1,6 @@
 ---
 name: browser-worker
-description: Use this agent when you need a mechanical browser automation worker — launching Chrome with CDP, attaching via playwright-cli, navigating pages, taking snapshots and screenshots, and managing browser lifecycle. Typical triggers include navigating to a URL and capturing page state, taking screenshots, and running simple interaction sequences (click, fill, type). See "When to invoke" in the agent body.
+description: Spawn only for chrome-debug CDP work such as :9222 attach, Cloudflare on that Chrome, peerd queue-wake, and live-profile attach. Generic website and Ego Leaf chat tasks stay with the orchestrator.
 model: sonnet
 color: green
 tools:
@@ -17,7 +17,7 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 
 ## When to invoke
 
-Spawn this worker for **chrome-debug CDP** work (`:9222` attach, Cloudflare on that Chrome, grokbot/channel tabs, live-profile attach). Generic website automation stays on `/ego-browser` in the orchestrator unless `BROWSER_AUTOMATION=playwright-cli`.
+Spawn this worker for **chrome-debug CDP** work (`:9222` attach, Cloudflare on that Chrome, peerd queue-wake, explicitly selected Chrome Leaf chat, live-profile attach). Generic website automation and Ego Leaf chat stay on `/ego-browser` in the orchestrator. An override for generic web tasks does not itself authorize spawning this CDP worker.
 
 - **Chrome launch.** The orchestrator needs to start Chrome with CDP debugging on port 9222 and attach playwright-cli.
 - **Page navigation and capture.** The orchestrator needs to navigate to a URL, take a page snapshot, and report element refs.

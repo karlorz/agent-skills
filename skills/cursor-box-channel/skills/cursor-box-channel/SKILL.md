@@ -1,13 +1,13 @@
 ---
 name: cursor-box-channel
-description: "This skill should be used when an agent needs cursor-box-channel MCP asks or replies, Mac Leaf chat on Chrome :9222, or the read-only audit console."
+description: "This skill should be used when an agent needs cursor-box-channel MCP asks or replies, Mac Leaf chat via Ego Lite or Chrome :9222, or the read-only audit console."
 ---
 
 # Cursor Box Channel
 
 Use this skill for attended HTTP Streamable MCP at `https://channel.termolo.com/mcp`.
 
-Marketplace MCP is HTTP only. Do not start a local stdio daemon or grok CLI wrapper. Mac Leaf chat uses the standalone CDP helper below when selected before dispatch.
+Marketplace MCP is HTTP only. Do not start a local stdio daemon or grok CLI wrapper. Mac Leaf chat uses the standalone helper below when selected before dispatch.
 
 ## First-run
 
@@ -54,26 +54,31 @@ Marketplace MCP is HTTP only. Do not start a local stdio daemon or grok CLI wrap
 
 ## Leaf chat
 
-Two jobs have different owners. **Queue wake** runs peerd/gate-loop on cursor-box after a messageId exists, using `box/routine-helpers/grok-com-bot-cdp.mjs --target <target> --message-id <id>` and messageId-only wake text. **Leaf chat** runs the new sibling `scripts/grok-com-bot-leaf-chat.mjs` on macos-dev, the chrome-debug owner, and sends a full prompt from stdin to newbie.
+**Queue wake** runs peerd/gate-loop on cursor-box after a messageId exists, using `box/routine-helpers/grok-com-bot-cdp.mjs --target <target> --message-id <id>` with messageId-only text. **Leaf chat** sends a full prompt from macos-dev stdin to newbie.
 
-- **Port map:** Mac Leaf chat attaches `http://127.0.0.1:9222` locally. `http://127.0.0.1:19222` is **box-only**, the reverse tunnel to Mac :9222. Never probe :19222 as the Mac CDP path. Box must not launch Chrome onto or steal Mac :9222.
-- **One writer per turn:** Select the route before dispatch. Operator “chat now” selects Leaf chat before any MCP ask. Otherwise try the MCP handshake once: when connected, ask and CLOSE until `final:true`; handshake HTTP 530 / Cloudflare 1033 / disconnected before ask dispatch permits Leaf chat. A 401 or missing token remains a configuration stop unless the operator explicitly selected chat now.
-- A messageId or pending receipt commits this prompt to MCP. Hold, lease handoff, slow reply, or later disconnect is never a second CDP writer. **Lost ask response:** a dispatched ask with no response has unknown acceptance, even without a messageId. Reconcile before re-posting or falling back. Chat now does not erase an already-dispatched copy.
-- Run readiness first. Its `leaf_chat` field reports local :9222 `OK` independently of MCP credentials; `macos_cdp_port_mismatch` warns about a box-only port expectation. This probes DevTools independently.
+- Prefer `scripts/grok-com-bot-leaf-chat-ego.mjs` when `ego-browser` is on PATH, unless `BROWSER_AUTOMATION=playwright-cli`. It opens/reuses the bot in an Ego Lite TaskSpace; keep that Space/tab open. Missing CLI returns `ego_not_running`; never launch Chrome as fallback after an Ego attempt.
+- **Port map:** Chrome helper `scripts/grok-com-bot-leaf-chat.mjs` remains local `http://127.0.0.1:9222`. `http://127.0.0.1:19222` is **box-only**, the reverse tunnel to Mac :9222. Peerd stays on chrome-debug CDP. Box must not launch Chrome onto Mac :9222.
+- **One writer per turn:** Operator “chat now” selects Leaf chat before any MCP ask. Otherwise handshake once: connected means ask and CLOSE until `final:true`; HTTP 530 / Cloudflare 1033 / disconnected before dispatch permits Leaf chat. A 401/missing token is a configuration stop unless chat now was explicitly selected.
+- A messageId/pending receipt commits this prompt to MCP. Hold, lease handoff, slow reply or later disconnect never permits another writer. **Lost ask response:** acceptance is unknown even without a messageId; reconcile before reposting or falling back. Chat now cannot erase a dispatched copy.
+- Readiness `leaf_chat` probes Chrome :9222 independently of MCP credentials, not Ego availability; `macos_cdp_port_mismatch` warns about box-only port expectations.
 
-Resolve `PLUGIN_ROOT` from `GROK_PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` (Cursor: installed cursor-box-channel plugin directory). Send prompt text through stdin, never argv:
+Resolve `PLUGIN_ROOT` from `GROK_PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` (Cursor: installed plugin directory). Select before dispatch; prompt is stdin, never argv:
 
 ```bash
-node "$PLUGIN_ROOT/scripts/grok-com-bot-leaf-chat.mjs" <<'PROMPT'
+helper=grok-com-bot-leaf-chat.mjs
+if command -v ego-browser >/dev/null 2>&1 && [ "${BROWSER_AUTOMATION:-}" != playwright-cli ]; then
+  helper=grok-com-bot-leaf-chat-ego.mjs
+fi
+node "$PLUGIN_ROOT/scripts/$helper" <<'PROMPT'
 Your full prompt for newbie goes here.
 PROMPT
 ```
 
-The helper matches only `https://grok.com/bot/22b3b80c-f7ba-400d-8ad1-6e686cec4d58`, opens it with `PUT /json/new` if missing, and never launches Chrome. If DevTools is down, inspect chrome-debug ownership; only the owner may recover an actually down browser. Stop if not signed in. Generating or composer_busy skips before typing. One real Enter is followed by submit confirmation: a readable empty composer plus a newly observed matching user-message in the same document/tab. `ok` confirms submission, not the answer. Snapshot that same tab for the reply.
+Both helpers match only `https://grok.com/bot/22b3b80c-f7ba-400d-8ad1-6e686cec4d58`. Chrome opens missing tabs with `PUT /json/new`, never launches Chrome; only its owner recovers DevTools. Stop if signed out, generating or composer_busy. One real Enter needs an empty readable composer plus a new matching user-message in the same document/tab. `ok` confirms submission, not the answer; inspect that same tab for the reply.
 
-`submit_unknown` means timeout, disconnect, navigation, unreadable composer, or missing sent-message proof. `submit_stuck` means the readable draft remains unchanged. Inspect the same tab before deciding on any retry; never auto-resend, refill, press Enter again, or switch writers. `chrome_not_running` means DevTools is down. After an Enter attempt, the helper writes `~/.grok/handoffs/YYYY-MM-DD-leaf-chat-<hash>.md` with timestamp, URL, prompt sha256, and status only; no body or tokens. `ok` with `logStatus: write_failed` still means sent; log failure must not cause a resend. The Mac busy check is not a cross-host lock against peerd.
+`submit_unknown` covers timeout/disconnect/navigation or missing proof; `submit_stuck` means the draft remains unchanged. Inspect the same tab; never auto-resend, refill, press Enter again or switch writers. `chrome_not_running` means DevTools is down. After Enter (or uncertain CLI completion), receipts at `~/.grok/handoffs/YYYY-MM-DD-leaf-chat-<sha256>.md` contain timestamp, URL, prompt sha256 and status only; no body/tokens. `logStatus: write_failed` never permits resend, including with `ok`. Busy checks are not cross-host locks against peerd.
 
-**Skill origins:** macos Grok loads this marketplace plugin SKILL.md; Cursor uses its plugin copy. Box Grok Bot loads only `/home/box/agent-data/workflows/cursor-box-channel/SKILL.md`, which keeps queue-wake / :19222 instructions. Do not copy this Leaf chat section or the Mac helper into that box workflow. Marketplace injection into Grok Bot Agent chat is unproven. Existing chats do not hot-reload; start a **new macos Grok session** after plugin install/update to load this skill text. Never `Browser.close`, `Target.closeTarget`, or `playwright-cli close`.
+**Skill origins:** Mac/Cursor loads marketplace text. Box Grok Bot loads only `/home/box/agent-data/workflows/cursor-box-channel/SKILL.md`; keep it queue-wake/:19222 only. Do not copy Leaf chat or either Mac helper, including the Ego helper, there. Marketplace injection into Grok Bot Agent chat is unproven. Existing chats do not hot-reload; start a **new macos Grok session** after update. Never `page.close`, `closeTaskSpace`, `Browser.close`, `Target.closeTarget` or `playwright-cli close`.
 
 ## Tools
 

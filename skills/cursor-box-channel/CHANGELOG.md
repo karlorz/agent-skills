@@ -2,6 +2,15 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.14] - 2026-10-27
+
+### Added
+- Ego Lite Mac Leaf chat sibling `scripts/grok-com-bot-leaf-chat-ego.mjs`, using `ego-browser nodejs` stdin, one real Enter, positive submit proof, and hash-only receipts. Stubbed spawn tests cover uncertainty, receipt failure, privacy, and leaving the TaskSpace/tab open.
+
+### Changed
+- Prefer Ego for Mac Leaf chat when available unless `BROWSER_AUTOMATION=playwright-cli`; retain the Chrome helper and peerd/box :19222 CDP route. Missing Ego never launches Chrome; uncertain delivery and receipt-write failure never resend.
+- Keep Leaf chat and both Mac helpers out of the box-only workflow. Keep the Codex overlay without `mcpServers`.
+
 ## [0.3.13] - 2026-10-27
 
 ### Changed
