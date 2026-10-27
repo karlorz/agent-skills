@@ -2,7 +2,9 @@
 
 All notable changes to this skill are documented in this file.
 
-## [Unreleased]
+## [1.4.3] - 2026-10-27
+
+- Route generic website automation to `/ego-browser` when `ego-browser` is on PATH. This skill stays the chrome-debug CDP `:9222` path (grokbot/channel, Cloudflare, live-profile attach). `BROWSER_AUTOMATION=playwright-cli` forces this skill for generic web tasks.
 
 ## [1.4.2] - 2026-10-13
 

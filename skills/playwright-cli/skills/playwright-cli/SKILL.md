@@ -1,6 +1,6 @@
 ---
 name: playwright-cli
-description: "Automate headed Chrome with Playwright CLI: inspect, screenshot, and test pages. Use for browser automation, chrome-debug setup, or a Cloudflare check stuck in chrome-debug."
+description: "Attach Playwright CLI to chrome-debug CDP :9222 for headed Chrome, Cloudflare, grokbot/channel, and live-profile attach. Generic website tasks use ego-browser."
 allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*) Bash(chrome-debug:*) Bash(bash\ scripts/chrome-debug.sh:*) Bash(bash\ scripts/setup-playwright-cli.sh:*) Bash(make\ chrome-debug:*)
 ---
 
@@ -11,6 +11,20 @@ layer **attach-first + global Chrome profile** via `scripts/chrome-debug.sh`.
 
 Requires `@playwright/cli` **≥ 0.1.20**. Use the setup workflow below to
 install or verify it without `sudo`.
+
+## When to use
+
+This skill owns **chrome-debug CDP** (`http://localhost:9222`): grokbot/newbie
+leaf chat, cursor-box-channel peerd wake, Cloudflare on that Chrome, unpacked
+extensions, and attach to an already-open logged-in tab.
+
+Generic website automation (open, click, fill, screenshot, extract) uses
+`/ego-browser` when `ego-browser` is on PATH. Ego Lite cannot attach to
+chrome-debug `:9222`. Raw-CDP skills (`cursor-box-channel` leaf chat,
+AgentChat-OneWeb, AgentChat-Muse) stay on chrome-debug.
+
+Set `BROWSER_AUTOMATION=playwright-cli` to force this skill for generic web
+tasks in this session.
 
 ## One-time setup / init
 
@@ -130,7 +144,7 @@ Project `.playwright/cli.config.json` typically sets:
 
 ### Host matrix
 
-- **macOS (macos-dev):** headed; default-user clone under `~/Library/Application Support/Google/chrome-debug-profile-from-default`. **Attach-first chrome-debug is the default and must stay on.** `--restart` remains valid when `owned_by_profile`.
+- **macOS (macos-dev):** headed; default-user clone under `~/Library/Application Support/Google/chrome-debug-profile-from-default`. **Attach-first chrome-debug stays on for this skill's CDP path.** `--restart` remains valid when `owned_by_profile`.
 - **Linux / LXC / container:** `--no-sandbox` + shm flags; **headless auto when `DISPLAY` is unset**; override with `CHROME_DEBUG_HEADLESS=0|1`
 - **cmux pvelxc:** 9222 is `cmux-cdp-proxy` → live cmux-devtools Chrome (typically `/root/.config/chrome` on 39382). Status `owned_by_cmux`. Skip `playwright-cli attach`; use `chrome-debug --cdp-*`. Never `--restart`.
 - **Remote:** tunnel CDP `ssh -L 9222:127.0.0.1:9222 host`

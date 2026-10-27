@@ -17,6 +17,8 @@ Mechanical browser automation worker. Handles Chrome lifecycle, CDP attachment, 
 
 ## When to invoke
 
+Spawn this worker for **chrome-debug CDP** work (`:9222` attach, Cloudflare on that Chrome, grokbot/channel tabs, live-profile attach). Generic website automation stays on `/ego-browser` in the orchestrator unless `BROWSER_AUTOMATION=playwright-cli`.
+
 - **Chrome launch.** The orchestrator needs to start Chrome with CDP debugging on port 9222 and attach playwright-cli.
 - **Page navigation and capture.** The orchestrator needs to navigate to a URL, take a page snapshot, and report element refs.
 - **Screenshot.** The orchestrator needs a screenshot of a page or specific element.

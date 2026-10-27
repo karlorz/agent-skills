@@ -166,7 +166,7 @@
       "name": "playwright-cli",
       "source": "./skills/playwright-cli",
       "description": "Playwright CLI setup and browser automation with a user-level chrome-debug command, project config initialization, attach-first global Chrome default-user profile, browser-worker, Linux/LXC, and cmux CDP helper",
-      "version": "1.4.2",
+      "version": "1.4.3",
       "category": "automation",
       "keywords": [
         "playwright",
