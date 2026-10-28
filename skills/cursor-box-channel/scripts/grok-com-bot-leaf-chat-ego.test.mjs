@@ -49,7 +49,7 @@ function harness({ states = [], reuse = true, pressFails = false, lostOutput = f
         const fakeProcess = {
           stdout: { write(text) {
             if (lostOutput || (noStatus && String(text).includes('"status"'))) return true;
-            child.stdout.write(malformed ? "bad output\n" : text);
+            child.stderr.write(malformed ? "bad output\n" : text);
             return true;
           } },
         };

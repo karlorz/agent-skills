@@ -101,10 +101,16 @@ async function execute(script, marker, timeoutMs, spawnChild) {
       done({ status: spawnStatus(error) });
       return;
     }
-    // Never forward child logs: errors and browser output can contain prompt text.
-    child.stderr.on("data", () => {});
+    // ego-browser nodejs sends console.log and process.stdout.write to stderr.
+    // Keep only chunks that contain the marker; never forward the rest.
+    const take = (chunk) => {
+      const text = String(chunk);
+      if (text.includes(marker)) output = (output + text).slice(-65536);
+    };
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", take);
     child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { output = (output + chunk).slice(-65536); });
+    child.stdout.on("data", take);
     child.on("error", (error) => done({ status: spawnStatus(error) }));
     child.on("close", () => {
       const start = output.lastIndexOf(marker);

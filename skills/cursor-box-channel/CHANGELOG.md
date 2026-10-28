@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.18] - 2026-10-28
+
+### Fixed
+- Ego Leaf parent keeps stderr chunks that contain the result marker. `ego-browser nodejs` remaps both `console.log` and `process.stdout.write` onto stderr, so stdout-only parse still missed a successful emit.
+
 ## [0.3.17] - 2026-10-28
 
 ### Fixed
