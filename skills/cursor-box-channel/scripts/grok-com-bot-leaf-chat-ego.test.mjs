@@ -44,11 +44,18 @@ function harness({ states = [], reuse = true, pressFails = false, lostOutput = f
         if (missing) { child.emit("error", Object.assign(Error(prompt), { code: "ENOENT" })); return; }
         const logger = { log(text) {
           if (lostOutput || (noStatus && text.includes('"status"'))) return;
-          child.stdout.write(malformed ? "bad output\n" : text + "\n");
+          child.stderr.write(malformed ? "bad output\n" : text + "\n");
         } };
-        try { await new AsyncFunction("taskSpace", "console", script)(async (name) => {
+        const fakeProcess = {
+          stdout: { write(text) {
+            if (lostOutput || (noStatus && String(text).includes('"status"'))) return true;
+            child.stdout.write(malformed ? "bad output\n" : text);
+            return true;
+          } },
+        };
+        try { await new AsyncFunction("taskSpace", "console", "process", script)(async (name) => {
           calls.push(["taskSpace", name]); return task;
-        }, logger); } catch (error) { child.stderr.write(String(error)); }
+        }, logger, fakeProcess); } catch (error) { child.stderr.write(String(error)); }
         child.emit("close", 0);
       });
       return child;
@@ -78,6 +85,8 @@ test("reuses Ego TaskSpace and submits exactly one Enter with positive proof", a
   assert.match(h.script, /const inspectExpr = "\(\(\) =>/);
   assert.match(h.script, /page\.evaluate\(inspectExpr\)/);
   assert.doesNotMatch(h.script, /page\.evaluate\(inspectPage/);
+  assert.match(h.script, /process\.stdout\.write\(marker/);
+  assert.doesNotMatch(h.script, /console\.log\(marker/);
   assert.match(h.script, /messageMatchesPrompt/);
   assert.match(h.script, /proofDeadline/);
   assert.equal(h.calls.filter(([name]) => name === "goto").length, 0);

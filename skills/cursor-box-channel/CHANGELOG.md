@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.17] - 2026-10-28
+
+### Fixed
+- Ego Leaf chat writes the result marker with `process.stdout.write`. `ego-browser nodejs` sends `console.log` to stderr, and the parent parses stdout only, so a successful post became bare `submit_unknown`.
+
 ## [0.3.16] - 2026-10-28
 
 ### Fixed

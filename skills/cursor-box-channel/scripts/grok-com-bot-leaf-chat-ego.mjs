@@ -24,7 +24,7 @@ const mapped = (url) => {
 const clean = (text) => text.replace(/\\s+/g, " ").trim();
 const expectedDraft = clean(prompt);
 const sameTab = (s, base) => !!s?.readable && mapped(s.url) && s.documentId === base.documentId;
-const emit = (result) => console.log(marker + JSON.stringify(result));
+const emit = (result) => process.stdout.write(marker + JSON.stringify(result) + "\\n");
 let entered = false, spaceId, pageLabel;
 async function run() {
   const task = await taskSpace("cursor-box-channel-leaf-chat");
