@@ -274,9 +274,12 @@ merge_agents_md() {
   # Splice the harness-owned contract into ~/.grok/AGENTS.md while preserving
   # everything else — user content and the llm-wiki skillwiki marker survive
   # (ADR-1). The asset is a marked block; v0.2.0 files with an unmarked
-  # contract get a one-time block-match migration (ADR-2). The merged result
-  # goes through copy_if_changed so identical/dry-run/prompt/backup behavior
-  # is identical to the plain copies.
+  # contract get a one-time block-match migration (ADR-2). When the merged
+  # file has no ## User preferences yet, english_rule.py --splice-agents seeds
+  # assets/user-preferences-ego-browser.md, then the English-thinking bullet.
+  # An existing User preferences section is never overwritten. The merged
+  # result goes through copy_if_changed so identical/dry-run/prompt/backup
+  # behavior is identical to the plain copies.
   local dst="$GROK_HOME/AGENTS.md" tmp
   tmp="$(mktemp "${TMPDIR:-/tmp}/grok-build-harness-agents.XXXXXX")"
   TEMP_FILES+=("$tmp")

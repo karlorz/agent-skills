@@ -70,6 +70,8 @@ Keep-working rule lives in the harness block: Ask User Question + timeout = Reco
 
 English-thinking rule SSOT is `assets/reply-in-english.md`. `--docs-only` copies/splices each host-native load path under `--user-home` (default: parent of `--grok-home`): Grok `rules/` + `AGENTS.md` bullet, Claude `rules/` + `CLAUDE.md`, Codex `AGENTS.md` bullet, Cursor `rules/reply-in-english.mdc`. Status reports those six paths. Do not recreate vault `.cursor/rules` / `.claude/rules` / `.grok/rules` copies.
 
+On first AGENTS.md create (no `## User preferences` heading yet), `--splice-agents` seeds `assets/user-preferences-ego-browser.md` before the English bullet. An existing User preferences section is left alone.
+
 ## Troubleshooting
 
 - Contract not active → new session after a `match` refresh.

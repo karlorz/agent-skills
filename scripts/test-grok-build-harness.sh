@@ -102,6 +102,18 @@ python3 -m py_compile "$PLUGIN/scripts/context_budget.py" 2>/dev/null \
   && ok "context_budget.py compiles" || fail "context_budget.py fails to compile"
 assert_contains "english-rule SSOT asset exists" \
   "$(cat "$PLUGIN/assets/reply-in-english.md")" "You are an English-thinking assistant"
+assert_not_contains "contract asset stays splice-only (no ego-browser)" \
+  "$(cat "$PLUGIN/assets/AGENTS.md")" "ego-browser"
+assert_not_contains "contract asset stays splice-only (no User preferences)" \
+  "$(cat "$PLUGIN/assets/AGENTS.md")" "## User preferences"
+assert_contains "ego-browser seed asset has PATH gate" \
+  "$(cat "$PLUGIN/assets/user-preferences-ego-browser.md")" "ego-browser"
+assert_contains "ego-browser seed asset has chrome-debug split" \
+  "$(cat "$PLUGIN/assets/user-preferences-ego-browser.md")" "chrome-debug"
+assert_contains "ego-browser seed asset has playwright-cli override" \
+  "$(cat "$PLUGIN/assets/user-preferences-ego-browser.md")" "BROWSER_AUTOMATION=playwright-cli"
+assert_contains "ego-browser seed asset disables Grok ego plugin" \
+  "$(cat "$PLUGIN/assets/user-preferences-ego-browser.md")" 'Keep the Grok `ego` plugin disabled'
 assert_contains "harness plugin in plugin-specs.json" \
   "$(cat "$PLUGIN/assets/plugin-specs.json")" '"name": "grok-build-harness"'
 assert_contains "status.py --as-bash emits harness spec" \
@@ -211,6 +223,32 @@ printf '%s\n' "$(cat "$TEST_ROOT/migrated.md")" | sed 's/Parent owns all edits/P
 assert_eq "status: drift when harness block edited" \
   "$(python3 "$MERGE_PY" --status "$ASSET_MD" "$TEST_ROOT/drifted.md")" "drift"
 
+# --- english_rule: first-create seeds ego-browser; existing prefs stay --------
+python3 - "$PLUGIN" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+import english_rule as er
+
+plugin = Path(sys.argv[1])
+seed = er.load_ego_pref_seed(plugin)
+contract = (plugin / "assets" / "AGENTS.md").read_text(encoding="utf-8")
+assert not er.has_user_preferences(contract), "assets/AGENTS.md must stay contract-only"
+fresh = er.seed_ego_browser_pref(contract, seed)
+assert er.has_user_preferences(fresh), fresh
+assert "ego-browser" in fresh
+assert "chrome-debug" in fresh
+assert "BROWSER_AUTOMATION=playwright-cli" in fresh
+assert "Keep the Grok `ego` plugin disabled" in fresh
+kept = "## User preferences\n- keep me\n"
+out = er.seed_ego_browser_pref(kept, seed)
+assert "- keep me" in out
+assert "ego-browser" not in out
+print("ok")
+PY
+assert_eq "seed_ego_browser_pref: first-create vs existing User preferences" "$?" "0"
+
 # --- installer: dry-run plan --------------------------------------------------
 DRY_OUT="$("$INSTALL" --grok-home "$TEST_ROOT/never-created" --dry-run --skip-plugins 2>&1 || true)"
 assert_contains "dry-run: agent install plan listed" "$DRY_OUT" "agent grok-build-byok: would install"
@@ -242,8 +280,28 @@ assert_contains "merge installs subagent contract" "$MERGE_OUT" "## Subagent con
 assert_contains "merge wraps contract in harness marker" "$MERGE_OUT" "<!-- grok-build-harness:begin -->"
 assert_contains "merge keeps user content" "$MERGE_OUT" "## User preferences"
 assert_contains "merge keeps user content text" "$MERGE_OUT" "- keep me"
+assert_not_contains "existing User preferences is not overwritten with ego-browser" \
+  "$MERGE_OUT" "ego-browser"
 MERGE_STATUS="$("$INSTALL" --grok-home "$MERGE_HOME" --docs-status)"
 assert_eq "docs-status after splice is match" "$MERGE_STATUS" "match"
+
+# --- installer: first AGENTS.md create seeds the ego-browser split ------------
+FRESH_HOME="$TEST_ROOT/fresh-agents-home"
+mkdir -p "$FRESH_HOME"
+"$INSTALL" --grok-home "$FRESH_HOME" --docs-only -y >/dev/null 2>&1
+FRESH_OUT="$(cat "$FRESH_HOME/AGENTS.md")"
+assert_contains "first-create splices harness contract" \
+  "$FRESH_OUT" "<!-- grok-build-harness:begin -->"
+assert_contains "first-create seeds User preferences heading" \
+  "$FRESH_OUT" "## User preferences"
+assert_contains "first-create seeds ego-browser bullet" \
+  "$FRESH_OUT" "ego-browser"
+assert_contains "first-create seeds chrome-debug split" \
+  "$FRESH_OUT" "chrome-debug"
+assert_contains "first-create seeds playwright-cli override" \
+  "$FRESH_OUT" "BROWSER_AUTOMATION=playwright-cli"
+assert_contains "first-create keeps Grok ego plugin disabled" \
+  "$FRESH_OUT" 'Keep the Grok `ego` plugin disabled'
 
 # --- installer: --docs-only skips config, plugins, and key warnings ----------
 DOCS_HOME="$TEST_ROOT/docs-only-home"
@@ -259,6 +317,8 @@ assert_contains "docs-only: splices AGENTS.md contract" \
   "$(cat "$DOCS_HOME/AGENTS.md")" "<!-- grok-build-harness:begin -->"
 assert_contains "docs-only: keeps user notes" \
   "$(cat "$DOCS_HOME/AGENTS.md")" "# my notes"
+assert_contains "docs-only without User preferences seeds ego-browser" \
+  "$(cat "$DOCS_HOME/AGENTS.md")" "BROWSER_AUTOMATION=playwright-cli"
 if [ -f "$DOCS_HOME/agents/grok-build-byok.md" ]; then DOCS_AGENT=yes; else DOCS_AGENT=no; fi
 assert_eq "docs-only: agents file installed" "$DOCS_AGENT" "yes"
 DOCS_STATUS="$("$INSTALL" --grok-home "$DOCS_HOME" --docs-status)"

@@ -12,6 +12,7 @@ one installable plugin for [grok-build](https://x.ai).
 | `assets/agents/scout.md` | Custom disposable read-only scout subagent (`model: sonnet`) |
 | `assets/agentrules.md` | Global subagent routing and workflow rules (frontier/sonnet split, goal-mode routing, delegation discipline, evidence rules) |
 | `assets/AGENTS.md` | Session-start subagent contract, wrapped in a `<!-- grok-build-harness:begin/end -->` marker block so the merge can splice updates without touching user content (or the llm-wiki skillwiki block) |
+| `assets/user-preferences-ego-browser.md` | First-create seed for `## User preferences` when that heading is absent: live ego-browser / chrome-debug split. Existing User preferences sections are never overwritten |
 | `assets/config.toml.template` | Full sanitized config: BYOK model aliases, `[subagents.models]` pins, plugin enable list, marketplace sources, context7 MCP, `[memory]` / `[memory_v2]` enabled=false |
 | `docs/harness-design.md` | The design: model routing, workflow, plugin provenance, security notes |
 | `references/isolated-diagnostics.md` | Safe procedure for config diagnostics and A/B experiments (private `GROK_HOME`, live-config hashing) |
@@ -43,6 +44,8 @@ The skill runs `scripts/install.sh`, which:
    llm-wiki skillwiki marker), only the harness marker block is replaced.
    The English-thinking rule (`assets/reply-in-english.md`) is copied/spliced
    into Grok, Claude, Codex, and Cursor native load paths under `--user-home`.
+   A missing `## User preferences` heading is seeded from
+   `assets/user-preferences-ego-browser.md`; a present heading is left alone.
 3. Renders `config.toml`, carrying over host state the template does not own:
    skill/plugin path and exclusion arrays are merged as a stable, duplicate-free
    union of template defaults and host entries; other host keys the template

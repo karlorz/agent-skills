@@ -116,7 +116,11 @@ enables them via `[plugins].enabled`. `--skip-codex`, `--skip-vault-sync`, and
   (**ADR-1**, 2026-08-09) replaces only that block — everything else in
   AGENTS.md (user sections like `## User preferences`, the skillwiki block)
   survives every re-run. v0.2.0-format files (unmarked contract) get a
-  one-time block-match migration (**ADR-2**).
+  one-time block-match migration (**ADR-2**). Fresh hosts with no
+  `## User preferences` heading yet receive a one-time seed of the live
+  ego-browser / chrome-debug split from
+  `assets/user-preferences-ego-browser.md`; an existing User preferences
+  section is never overwritten.
 
 ## Agent selection, BYOK, and Codex strict mode (v0.4.0)
 
@@ -163,7 +167,9 @@ paths; each is now guarded:
 - **AGENTS.md user content is preserved.** The old merge replaced everything
   except the skillwiki marker with the bundled contract, silently dropping a
   user-authored `## User preferences` section on re-run. Now the contract is
-  a marked block and the splice keeps all non-harness content (ADR-1/2).
+  a marked block and the splice keeps all non-harness content (ADR-1/2). A
+  missing User preferences heading on first create is seeded from
+  `assets/user-preferences-ego-browser.md`; a present heading is left alone.
 - **Host-set config keys are preserved.** The render previously rewrote
   `[plugins].disabled`/`paths` from the template, re-enabling deliberately
   disabled plugins. `generate-config.py --preserve` now carries over any key

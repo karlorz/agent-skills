@@ -19,6 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DEFAULT_PLUGIN_ROOT = HERE.parent
 SSOT_REL = Path("assets") / "reply-in-english.md"
+EGO_PREF_REL = Path("assets") / "user-preferences-ego-browser.md"
 USER_PREF = "## User preferences"
 CURSOR_FRONTMATTER = (
     "---\n"
@@ -101,6 +102,30 @@ def extract_english_bullet(text: str) -> str | None:
         return None
     start, end = rng
     return "\n".join(text.splitlines()[start:end])
+
+
+def has_user_preferences(text: str) -> bool:
+    return any(line.strip() == USER_PREF for line in text.splitlines())
+
+
+def load_ego_pref_seed(plugin_root: Path) -> str:
+    return ensure_nl((plugin_root / EGO_PREF_REL).read_text(encoding="utf-8").strip() + "\n")
+
+
+def seed_ego_browser_pref(text: str, seed: str) -> str:
+    """Append the ego-browser User preferences seed when the heading is absent.
+
+    Fresh hosts that only receive the harness contract never get the live
+    ego-browser / chrome-debug split otherwise. An existing User preferences
+    section is left untouched (ADR-1).
+    """
+    if has_user_preferences(text):
+        return ensure_nl(text) if text else text
+    seed = ensure_nl(seed.strip() + "\n")
+    base = text.rstrip()
+    if base:
+        return base + "\n\n" + seed
+    return seed
 
 
 def upsert_agents_bullet(text: str, bullet: str) -> str:
@@ -306,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         ssot = load_ssot(plugin_root)
         bullet = wrap_bullet(ssot_body(ssot))
         current = path.read_text(encoding="utf-8") if path.is_file() else ""
+        current = seed_ego_browser_pref(current, load_ego_pref_seed(plugin_root))
         path.write_text(upsert_agents_bullet(current, bullet), encoding="utf-8")
         return 0
     if args.apply:

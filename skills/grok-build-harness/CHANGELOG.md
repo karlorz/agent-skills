@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented in this file.
 
+## [0.5.10] - 2026-10-28
+
+- Seed the live ego-browser / chrome-debug User preferences bullet on first AGENTS.md create when `## User preferences` is absent (`assets/user-preferences-ego-browser.md`). Existing User preferences sections are never overwritten (ADR-1).
+
 ## [0.5.9] - 2026-10-20
 
 - Preserve host skill exclusions, disabled skills, discovery paths, and extra shared-table settings across config refreshes with stable, duplicate-free array merges.
