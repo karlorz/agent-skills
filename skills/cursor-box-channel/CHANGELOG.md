@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.20] - 2026-10-28
+
+### Fixed
+- Ego Leaf helper ends the turn with `finish({ keep: [pageLabel] })`. `handOff()` is the "Need your action" wait, not a release. The grok.com/bot tab stays; extra agent tabs are not kept.
+
 ## [0.3.19] - 2026-10-28
 
 ### Fixed

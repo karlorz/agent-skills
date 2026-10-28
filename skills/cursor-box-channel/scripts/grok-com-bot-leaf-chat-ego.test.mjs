@@ -31,7 +31,7 @@ function harness({ states = [], reuse = true, pressFails = false, lostOutput = f
   const task = { spaceId: 7, page(label) { calls.push(["page", label]); return page; },
     async tabs() { return [{ label: "p1", url: reuse ? TARGET_URL : "about:blank" }]; },
     async newPage() { assert.fail("should reuse p1"); },
-    async handOff() { calls.push(["handOff"]); } };
+    async finish(opts) { calls.push(["finish", opts]); } };
   const hooks = {
     spawn(command, args, options) {
       calls.push(["spawn", command, args, options]);
@@ -71,8 +71,11 @@ async function run(options = {}, extra = {}) {
   const result = await runLeafChat({ prompt, timeoutMs: 1, hooks: h.hooks, ...extra });
   assert.ok(!JSON.stringify(result).includes(prompt));
   assert.ok(!JSON.stringify(h.receipts).includes(prompt));
-  assert.ok(!/page\.close|closeTaskSpace|Browser\.close|Target\.closeTarget|playwright-cli close|\.finish\(/.test(h.script || ""));
-  if (h.script) assert.match(h.script, /handOff/);
+  assert.ok(!/page\.close|closeTaskSpace|Browser\.close|Target\.closeTarget|playwright-cli close/.test(h.script || ""));
+  if (h.script) {
+    assert.match(h.script, /task\.finish\(\{ keep/);
+    assert.doesNotMatch(h.script, /handOff/);
+  }
   return { h, result };
 }
 const success = [{}, { draft: normalized }, { matchingCount: 3 }];
@@ -82,7 +85,7 @@ test("reuses Ego TaskSpace and submits exactly one Enter with positive proof", a
   assert.equal(result.status, "ok");
   assert.equal(result.spaceId, 7); assert.equal(result.pageLabel, "p1");
   assert.deepEqual(h.calls.filter(([name]) => name === "press"), [["press", "Enter"]]);
-  assert.equal(h.calls.filter(([name]) => name === "handOff").length, 1);
+  assert.deepEqual(h.calls.filter(([name]) => name === "finish"), [["finish", { keep: ["p1"] }]]);
   assert.equal(h.calls.filter(([name]) => name === "insertText").length, 1);
   assert.ok(h.script.includes(JSON.stringify(prompt)));
   assert.match(h.script, /const inspectExpr = "\(\(\) =>/);

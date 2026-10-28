@@ -87,7 +87,12 @@ async function run() {
 let result;
 try { result = await run(); }
 catch { result = { status: entered ? "submit_unknown" : "skipped", reason: "ego_unavailable" }; }
-try { if (task?.handOff) await task.handOff(); } catch { /* Space may already be user-owned. */ }
+try {
+  if (task?.finish) {
+    const keep = /^p\\d+$/.test(pageLabel) ? [pageLabel] : [];
+    await task.finish({ keep });
+  }
+} catch { /* Space may already be finished. */ }
 emit({ ...result, entered, spaceId, pageLabel });
 `;
 }
