@@ -25,9 +25,18 @@ const clean = (text) => text.replace(/\\s+/g, " ").trim();
 const expectedDraft = clean(prompt);
 const sameTab = (s, base) => !!s?.readable && mapped(s.url) && s.documentId === base.documentId;
 const emit = (result) => process.stdout.write(marker + JSON.stringify(result) + "\\n");
-let entered = false, spaceId, pageLabel;
+let entered = false, spaceId, pageLabel, task;
+async function resume() {
+  try { return await taskSpace("cursor-box-channel-leaf-chat"); }
+  catch {
+    const spaces = await listTaskSpaces();
+    const found = (spaces || []).find((s) => s.name === "cursor-box-channel-leaf-chat");
+    if (found && Number.isSafeInteger(found.id)) return await claimTaskSpace(found.id);
+    throw new Error("ego_unavailable");
+  }
+}
 async function run() {
-  const task = await taskSpace("cursor-box-channel-leaf-chat");
+  task = await resume();
   spaceId = task.spaceId;
   const tabs = await task.tabs();
   const found = tabs.find((tab) => mapped(tab.url));
@@ -78,6 +87,7 @@ async function run() {
 let result;
 try { result = await run(); }
 catch { result = { status: entered ? "submit_unknown" : "skipped", reason: "ego_unavailable" }; }
+try { if (task?.handOff) await task.handOff(); } catch { /* Space may already be user-owned. */ }
 emit({ ...result, entered, spaceId, pageLabel });
 `;
 }

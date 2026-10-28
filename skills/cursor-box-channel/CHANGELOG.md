@@ -2,6 +2,11 @@
 
 All notable changes to this plugin will be documented in this file.
 
+## [0.3.19] - 2026-10-28
+
+### Fixed
+- Ego Leaf helper calls `task.handOff()` after emit so the named TaskSpace leaves Running. The grok.com/bot tab stays; the next run resumes the name or claims that Space. `finish()` / `page.close` stay forbidden.
+
 ## [0.3.18] - 2026-10-28
 
 ### Fixed

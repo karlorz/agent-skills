@@ -30,7 +30,8 @@ function harness({ states = [], reuse = true, pressFails = false, lostOutput = f
     } };
   const task = { spaceId: 7, page(label) { calls.push(["page", label]); return page; },
     async tabs() { return [{ label: "p1", url: reuse ? TARGET_URL : "about:blank" }]; },
-    async newPage() { assert.fail("should reuse p1"); } };
+    async newPage() { assert.fail("should reuse p1"); },
+    async handOff() { calls.push(["handOff"]); } };
   const hooks = {
     spawn(command, args, options) {
       calls.push(["spawn", command, args, options]);
@@ -53,9 +54,9 @@ function harness({ states = [], reuse = true, pressFails = false, lostOutput = f
             return true;
           } },
         };
-        try { await new AsyncFunction("taskSpace", "console", "process", script)(async (name) => {
+        try { await new AsyncFunction("taskSpace", "listTaskSpaces", "claimTaskSpace", "console", "process", script)(async (name) => {
           calls.push(["taskSpace", name]); return task;
-        }, logger, fakeProcess); } catch (error) { child.stderr.write(String(error)); }
+        }, async () => [], async () => task, logger, fakeProcess); } catch (error) { child.stderr.write(String(error)); }
         child.emit("close", 0);
       });
       return child;
@@ -71,6 +72,7 @@ async function run(options = {}, extra = {}) {
   assert.ok(!JSON.stringify(result).includes(prompt));
   assert.ok(!JSON.stringify(h.receipts).includes(prompt));
   assert.ok(!/page\.close|closeTaskSpace|Browser\.close|Target\.closeTarget|playwright-cli close|\.finish\(/.test(h.script || ""));
+  if (h.script) assert.match(h.script, /handOff/);
   return { h, result };
 }
 const success = [{}, { draft: normalized }, { matchingCount: 3 }];
@@ -80,6 +82,7 @@ test("reuses Ego TaskSpace and submits exactly one Enter with positive proof", a
   assert.equal(result.status, "ok");
   assert.equal(result.spaceId, 7); assert.equal(result.pageLabel, "p1");
   assert.deepEqual(h.calls.filter(([name]) => name === "press"), [["press", "Enter"]]);
+  assert.equal(h.calls.filter(([name]) => name === "handOff").length, 1);
   assert.equal(h.calls.filter(([name]) => name === "insertText").length, 1);
   assert.ok(h.script.includes(JSON.stringify(prompt)));
   assert.match(h.script, /const inspectExpr = "\(\(\) =>/);
