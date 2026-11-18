@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Plugin-relative read-only Fleet Board MCP launcher.
+# Never writes files. Fail closed when a backend or Access token is missing.
+set -euo pipefail
+
+fail() {
+  printf 'fleet-board-burn-mcp: %s\n' "$*" >&2
+  exit 1
+}
+
+assert_safe_abs() {
+  local label="$1" path="$2" need_exec="${3:-0}"
+  case "$path" in
+    /*) ;;
+    *) fail "$label must be an absolute path" ;;
+  esac
+  case "$path" in
+    *$'\n'* | *$'\r'*) fail "$label must not contain newlines" ;;
+  esac
+  [[ -e "$path" ]] || fail "$label not found: $path"
+  [[ -f "$path" ]] || fail "$label is not a regular file: $path"
+  if [[ "$need_exec" == 1 ]]; then
+    [[ -x "$path" ]] || fail "$label is not executable: $path"
+  fi
+}
+
+expand_user_path() {
+  local path="$1"
+  # Env values keep a literal tilde; never eval.
+  if [[ "$path" == '~' ]]; then
+    printf '%s\n' "$HOME"
+    return
+  fi
+  if [[ "$path" == '~/'* ]]; then
+    printf '%s\n' "${HOME}/${path#"~/"}"
+    return
+  fi
+  printf '%s\n' "$path"
+}
+
+assert_url_no_userinfo() {
+  local url="${FLEET_BOARD_AGENT_URL:-}"
+  [[ -z "$url" ]] && return 0
+  case "$url" in
+    *$'\n'* | *$'\r'*) fail "FLEET_BOARD_AGENT_URL must not contain newlines" ;;
+    *@*) fail "FLEET_BOARD_AGENT_URL must not include userinfo" ;;
+  esac
+}
+
+is_safe_loopback_url() {
+  local url="$1" rest port path=""
+  case "$url" in
+    *$'\n'* | *$'\r'* | *@* | *\?* | *\#* | *" "*) return 1 ;;
+  esac
+  case "$url" in
+    http://127.0.0.1 | http://127.0.0.1/)
+      return 0
+      ;;
+    http://127.0.0.1:*)
+      rest="${url#http://127.0.0.1:}"
+      [[ -n "$rest" ]] || return 1
+      if [[ "$rest" == */* ]]; then
+        port="${rest%%/*}"
+        path="/${rest#*/}"
+        [[ "$path" == "/" ]] || return 1
+      else
+        port="$rest"
+      fi
+      [[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] || return 1
+      ((port >= 1 && port <= 65535)) || return 1
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+apply_access_token() {
+  local token="${FLEET_BOARD_AGENT_TOKEN_FILE:-}"
+  if [[ -z "$token" ]]; then
+    token="${HOME}/.config/fleet-board/agent-read.env"
+  fi
+  token="$(expand_user_path "$token")"
+  assert_safe_abs "FLEET_BOARD_AGENT_TOKEN_FILE" "$token" 0
+  export FLEET_BOARD_AGENT_TOKEN_FILE="$token"
+  assert_url_no_userinfo
+}
+
+apply_python_env() {
+  local token="${FLEET_BOARD_AGENT_TOKEN_FILE:-}"
+  local url="${FLEET_BOARD_AGENT_URL:-}"
+  assert_url_no_userinfo
+  if [[ -n "$token" ]]; then
+    token="$(expand_user_path "$token")"
+    assert_safe_abs "FLEET_BOARD_AGENT_TOKEN_FILE" "$token" 0
+    export FLEET_BOARD_AGENT_TOKEN_FILE="$token"
+    return 0
+  fi
+  export FLEET_BOARD_AGENT_TOKEN_FILE=""
+  if [[ -z "$url" ]]; then
+    export FLEET_BOARD_AGENT_URL="http://127.0.0.1:18099"
+    return 0
+  fi
+  if is_safe_loopback_url "$url"; then
+    export FLEET_BOARD_AGENT_URL="$url"
+    return 0
+  fi
+  fail "FLEET_BOARD_AGENT_URL must be loopback http://127.0.0.1[:port] when FLEET_BOARD_AGENT_TOKEN_FILE is empty"
+}
+
+resolve_python() {
+  local py="${FLEET_BOARD_PYTHON:-}"
+  if [[ -z "$py" ]]; then
+    py="$(command -v python3 || true)"
+    [[ -n "$py" ]] || fail "python3 not found (set FLEET_BOARD_PYTHON)"
+  fi
+  py="$(expand_user_path "$py")"
+  assert_safe_abs "FLEET_BOARD_PYTHON" "$py" 1
+  printf '%s\n' "$py"
+}
+
+exec_access_launcher() {
+  local bin="$1"
+  local self="${BASH_SOURCE[0]}"
+  shift
+  bin="$(expand_user_path "$bin")"
+  apply_access_token
+  assert_safe_abs "Access launcher" "$bin" 1
+  if [[ -e "$self" && "$bin" -ef "$self" ]]; then
+    fail "Access launcher resolves to this plugin wrapper; install ${HOME}/.local/bin/fleet-board-burn-mcp"
+  fi
+  exec "$bin" "$@"
+}
+
+exec_python_read() {
+  local py="$1" script="$2"
+  shift 2
+  py="$(expand_user_path "$py")"
+  script="$(expand_user_path "$script")"
+  apply_python_env
+  assert_safe_abs "python" "$py" 1
+  assert_safe_abs "agent-read python" "$script" 0
+  exec "$py" "$script" mcp "$@"
+}
+
+BIN="${FLEET_BOARD_BURN_MCP_BIN:-}"
+READ="${FLEET_BOARD_AGENT_READ:-}"
+
+if [[ -n "$BIN" ]]; then
+  exec_access_launcher "$BIN" "$@"
+fi
+
+if [[ -n "$READ" ]]; then
+  exec_python_read "$(resolve_python)" "$READ" "$@"
+fi
+
+os="$(uname -s)"
+case "$os" in
+  Darwin)
+    mac="${HOME}/.local/bin/fleet-board-burn-mcp"
+    [[ -f "$mac" && -x "$mac" ]] || fail "missing Mac Access launcher: $mac"
+    exec_access_launcher "$mac" "$@"
+    ;;
+  Linux)
+    box_py="${FLEET_BOARD_BOX_PY:-/workspace/code/fleet-board/tools/agent-read/burn_read.py}"
+    box_py="$(expand_user_path "$box_py")"
+    [[ -f "$box_py" ]] || fail "missing BOX read-only Python path: $box_py"
+    exec_python_read "$(resolve_python)" "$box_py" "$@"
+    ;;
+  *)
+    fail "unsupported OS '$os' (need Darwin Access launcher or Linux BOX python path)"
+    ;;
+esac

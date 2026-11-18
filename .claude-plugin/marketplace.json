@@ -354,7 +354,7 @@
       "name": "fleet-board-burn",
       "source": "./skills/fleet-board-burn",
       "description": "Thin marketplace plugin for Fleet Board burn/plan MCP via Cloudflare Access (orca.termolo.com). Tools: burn_status, burn_health, board_status, plans.",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "category": "development",
       "keywords": [
         "mcp",

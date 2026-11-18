@@ -1,10 +1,8 @@
 {
   "mcpServers": {
     "fleet-board-burn": {
-      "command": "/Users/karlchow/.local/bin/fleet-board-burn-mcp",
-      "env": {
-        "FLEET_BOARD_AGENT_TOKEN_FILE": "/Users/karlchow/.config/fleet-board/agent-read.env"
-      }
+      "command": "bash",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/fleet-board-burn-mcp"]
     }
   }
 }

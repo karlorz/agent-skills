@@ -5,9 +5,17 @@ description: Read Fleet Board burn loop, goals, and WP plan catalog via Zero Tru
 
 # fleet-board-burn
 
-MCP server `fleet-board-burn` talks to `https://orca.termolo.com` with a Cloudflare Access service token.
+MCP server `fleet-board-burn` is launched via plugin-relative
+`${CLAUDE_PLUGIN_ROOT}/scripts/fleet-board-burn-mcp` (read-only).
 
-Token file: `~/.config/fleet-board/agent-read.env` (`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, chmod 600).
+- macOS: existing Access launcher `$HOME/.local/bin/fleet-board-burn-mcp`.
+  Default token `$HOME/.config/fleet-board/agent-read.env` when env is unset
+  (`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, chmod 600); missing file
+  fails closed. Explicit `FLEET_BOARD_AGENT_TOKEN_FILE` wins (`~/` expanded).
+- Linux/BOX: `python3 …/tools/agent-read/burn_read.py mcp` with empty token
+  and `FLEET_BOARD_AGENT_URL=http://127.0.0.1:18099` (keep a safe loopback).
+  Explicit token/Access is preserved. Userinfo or non-loopback URL without a
+  token fails closed.
 
 Tools (empty arguments):
 
