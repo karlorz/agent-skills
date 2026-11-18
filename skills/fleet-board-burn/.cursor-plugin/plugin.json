@@ -1,0 +1,18 @@
+{
+  "name": "fleet-board-burn",
+  "version": "0.1.2",
+  "description": "Read-only Fleet Board burn/plan MCP via Cloudflare Access at orca.termolo.com.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "fleet-board",
+    "burn-loop",
+    "plans",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json"
+}

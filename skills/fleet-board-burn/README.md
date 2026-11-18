@@ -3,7 +3,8 @@
 Install:
 
 ```
-grok plugin install /Users/karlchow/Desktop/code/fleet-board/tools/agent-read/grok-plugin --trust
+grok plugin install fleet-board-burn@karlorz-agent-skills --trust
+codex plugin add fleet-board-burn@karlorz-agent-skills
 ```
 
 Requires `~/.config/fleet-board/agent-read.env` and Access destinations `/burn-loop.json`, `/healthz`, `/board-status.json`, `/plans.json`.

@@ -221,6 +221,18 @@
       "category": "Development"
     },
     {
+      "name": "fleet-board-burn",
+      "source": {
+        "source": "local",
+        "path": "./skills/fleet-board-burn"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    },
+    {
       "name": "cursor-box-channel",
       "source": {
         "source": "local",

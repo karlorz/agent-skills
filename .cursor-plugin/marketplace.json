@@ -19,6 +19,17 @@
       ]
     },
     {
+      "name": "fleet-board-burn",
+      "source": "skills/fleet-board-burn",
+      "description": "Read-only Fleet Board burn/plan MCP via Cloudflare Access at orca.termolo.com.",
+      "category": "integrations",
+      "tags": [
+        "fleet-board",
+        "burn-loop",
+        "mcp"
+      ]
+    },
+    {
       "name": "deep-research",
       "source": "skills/deep-research",
       "description": "Source-triaged research engine with local-first evidence, grok-search freshness checks, Context7 verification, tiered model pinning, deep-fetch, content refinement, and vault integration.",

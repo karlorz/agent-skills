@@ -1,0 +1,29 @@
+{
+  "name": "fleet-board-burn",
+  "version": "0.1.2",
+  "description": "Read-only Fleet Board burn/plan MCP via Cloudflare Access at orca.termolo.com.",
+  "author": {
+    "name": "karlorz"
+  },
+  "repository": "https://github.com/karlorz/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "fleet-board",
+    "burn-loop",
+    "plans",
+    "mcp",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Fleet Board Burn",
+    "shortDescription": "Burn loop, goals, and WP plan catalog",
+    "longDescription": "Read-only MCP for Fleet Board via Cloudflare Access on https://orca.termolo.com. Tools: burn_status, burn_health, board_status, plans. This Codex overlay omits mcpServers so ChatGPT GitHub import is not Desktop only. Desktop Codex/Grok/Cursor keep .mcp.json and FLEET_BOARD_AGENT_TOKEN_FILE.",
+    "developerName": "karlorz",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": "Call plans and board_status. Report sha, goal count, and open CS cards."
+  }
+}
