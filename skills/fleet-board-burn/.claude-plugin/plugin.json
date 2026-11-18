@@ -1,6 +1,6 @@
 {
   "name": "fleet-board-burn",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Thin marketplace plugin for Fleet Board burn/plan MCP via Cloudflare Access (orca.termolo.com). Tools: burn_status, burn_health, board_status, plans.",
   "author": {
     "name": "karlorz"
