@@ -2,6 +2,12 @@
 
 All notable changes to this skill are documented in this file.
 
+## [2.5.2] - 2026-11-28
+
+- Resolve advertised SkillWiki HTTP MCP before local CLI checks across harnesses; publish with compare-and-swap, verified receipts, and exact-path readback.
+- Capture raw evidence through MCP and preserve proposed follow-up intent; retain unconfirmed drafts after ambiguous mutations.
+- Guard report and scratch destinations against vaults, mirrors, and symlink aliases, with routing and containment regression tests in CI.
+
 ## [2.5.1] - 2026-08-29
 
 - Shorten SKILL.md descriptions to the Codex catalog budget (180-character target, CI fail above 220).

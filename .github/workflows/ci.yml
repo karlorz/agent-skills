@@ -50,6 +50,12 @@ jobs:
       - name: Run dev-loop release tooling checks
         run: bash scripts/test-dev-loop-release-tooling.sh
 
+      - name: Run deep-research routing and report regressions
+        run: |
+          for test in skills/deep-research/scripts/test-*.py; do
+            python3 "$test"
+          done
+
       - name: Run plugin metadata regression fixtures
         run: bash scripts/test-plugin-metadata.sh
 

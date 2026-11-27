@@ -32,8 +32,8 @@ flowchart LR
     B --- B6[Deep-fetch top URLs]
 
     F --- F1[--ephemeral: stdout only]
-    F --- F2[--save: write file]
-    F --- F3[vault: default when available]
+    F --- F2[--save: containment-guarded file]
+    F --- F3[vault: MCP-first route]
 ```
 
 ## Invocation Modes
@@ -43,13 +43,13 @@ deep-research runs in one of two modes. **Unattended is the default for any mode
 | Mode | How detected | Question policy | Output default |
 |------|--------------|-----------------|----------------|
 | `unattended` | Model/skill auto-invocation (parent agent spawned this skill); headless / non-TTY session (`grok -p`, `GROK_AGENT=1`, no TTY); `--unattended` flag; parent prompt says "do not ask" | **Never ask** — pick recommended defaults, state assumptions in the report | **stdout / ephemeral** unless explicit `--vault` or `--save` |
-| `interactive` | User typed `/deep-research …` in an attended TUI (not headless), and did **not** pass `--unattended` / `--ephemeral` / smoke flags | Ask **only** when ambiguity is **blocking** (cannot research without a choice) — at most one focused question | Skill default (vault auto when available) unless user flags |
+| `interactive` | User typed `/deep-research …` in an attended TUI (not headless), and did **not** pass `--unattended` / `--ephemeral` / smoke flags | Ask **only** when ambiguity is **blocking** (cannot research without a choice) — at most one focused question | Skill default (MCP vault route when advertised, else stdout) unless user flags |
 
 **Detection order** (Phase 1, before anything else): flags (`--unattended` or `--ephemeral`) → session (headless, `GROK_AGENT=1`, non-TTY) → invocation origin (spawned by a parent agent/skill = unattended). When in doubt, treat as **unattended**.
 
 **Never under `unattended`:**
 - No `AskUserQuestion`, no option menus, no grill-style multi-question interviews mid-skill
-- No interactive vault-conflict resolution — a vault lock/publish stall hits a hard timeout (120s), then fails closed
+- No interactive vault-conflict resolution — an MCP mutation/publish stall hits a hard timeout (120s), then fails closed
 - No waiting on a human for source-plan or topic confirmation
 - Agent-invoked research is a **batch subroutine**, not a conversation
 
@@ -63,7 +63,7 @@ deep-research runs in one of two modes. **Unattended is the default for any mode
 | Depth | `default` (not `thorough`) unless parent passed `--depth thorough` / `--depth fast` |
 | Missing topic detail | Research the **stated string**; list uncertainties in Coverage |
 | Conflicting sources | Prefer primary source; mark the conflict; do not ask which to trust |
-| Vault lock / publish | Hard **120s** wait, then fail-closed: keep the draft, print the full report to stdout, do not spin on the lock |
+| Vault mutation / publish | Hard **120s** wait, then fail-closed: keep the draft, print the full report to stdout, do not spin on the lock |
 | Refinement | Apply unless `--no-refine` |
 
 ## Model Strategy
@@ -99,8 +99,9 @@ Codex App these map to platform equivalents — `Agent` → `spawn_agent` /
 `~/.codex/config.toml` for the Phase 2 fan-out. The per-agent model pinning is a
 cost optimization ("cheap tier for mechanical gather/refine work"), not a hard
 requirement. See `references/codex-tools.md` for the full tool mapping, the
-multi_agent config gate, the model-tier fallback, and detached-HEAD sandbox
-handling for vault writes. Discovery on Codex is via `~/.agents/skills/`.
+multi_agent config gate, and the model-tier fallback. Vault reads and writes
+follow the same `references/vault-pipeline.md` route on Codex; the Codex
+sandbox is not a vault writer. Discovery on Codex is via `~/.agents/skills/`.
 
 ## When to Use
 
@@ -119,18 +120,18 @@ Do NOT use for:
 
 ## Output Modes
 
-The skill auto-detects the best output mode based on vault availability:
+The skill resolves the output mode from the vault write route, not from a local CLI probe. Resolve that route through `references/vault-pipeline.md` "Route Resolution" before this table:
 
 | Flag | Mode | Behavior |
 |------|------|----------|
-| *(auto, default)* | **vault** when `skillwiki path` succeeds, else **stdout** | Research persists as a query page when a vault exists |
+| *(auto, default)* | **vault** when advertised wiki MCP exists, else **stdout** | Research persists as a query page through the MCP route; local CLI is opt-in only |
 | `--ephemeral` | **stdout** | Explicitly skip vault saving — print to terminal only |
-| `--save <path>` | **file** | Write markdown report to specified path |
-| `--vault` | **vault** | Force vault mode (error if no vault configured) |
+| `--save <path>` | **file** | Write markdown report to a path outside every vault/mirror, after the containment guard |
+| `--vault` | **vault** | Force vault mode; fail closed when no authorized route exists |
 
-> **Unattended override**: under `unattended` invocation (agent-spawned, headless, or `--unattended`), the output default flips to **stdout** — treat as ephemeral unless the parent explicitly passed `--vault` or `--save`. The vault-auto default below applies to interactive slash runs.
+> **Unattended override**: under `unattended` invocation (agent-spawned, headless, or `--unattended`), the output default flips to **stdout** — treat as ephemeral unless the parent explicitly passed `--vault` or `--save`. The MCP vault-route default below applies to interactive slash runs.
 
-**Why vault by default?** Deep research is expensive (multiple web searches, fetches, synthesis rounds). When a user has invested in a skillwiki vault, they've opted into knowledge persistence. Defaulting to vault ensures research survives context compression and becomes queryable by future sessions. The publisher transaction makes that persistence atomic with respect to its page, index, and log updates.
+**Why vault by default?** Deep research is expensive (multiple web searches, fetches, synthesis rounds). When a user has invested in a skillwiki vault, they've opted into knowledge persistence. Defaulting to the MCP vault route ensures research survives context compression and becomes queryable by future sessions. CAS publication makes each page update atomic; receipt and readback verification prove the write landed in the intended vault.
 
 ## Workflow
 
@@ -138,11 +139,11 @@ The skill auto-detects the best output mode based on vault availability:
 
 1. **Detect invocation mode** (see Invocation Modes): `unattended` unless a human typed the slash command in an attended session. Under `unattended`, **never ask questions** — auto-process with documented assumptions.
 2. Parse topic string for keywords, libraries, frameworks
-3. **Auto-detect output mode**: under `unattended`, default to **stdout** unless `--vault` or `--save` is passed. Otherwise run `skillwiki path` — if it returns a valid vault, default to vault mode. If `NO_VAULT_CONFIGURED`, use stdout.
-4. If vault mode active: run `skillwiki lang` for output language, search existing pages for cross-linking
+3. **Resolve the vault write route first** via `references/vault-pipeline.md` "Route Resolution". This step precedes vault detection, `skillwiki path`, and any CLI readiness check. Advertised wiki MCP wins for reads and writes and supplies the `default_vault`; on that route, do not run `skillwiki path`, `skillwiki lang`, or local readiness probes. When the session already knows a protected local vault path, export it as `DEEP_RESEARCH_VAULT_ROOT` for containment; never derive it with a CLI probe. Under `unattended`, default to **stdout** unless `--vault` or `--save` was explicitly passed.
+4. If a vault route is active: read existing related pages through that route's tools (`wiki_query` / `wiki_read_page` / `wiki_context`) for cross-linking, and resolve output language from the user or session (no CLI language probe on the MCP route).
 5. Read applicable workspace instructions such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, or repo policy files. If they define a source matrix, follow it. Otherwise use the default source ordering from Phase 1.5.
 6. **Plan questions**: split the topic into at most 4 independent research questions, each with a distinct evidence target. Use fewer when 1–2 questions cover the topic cleanly. Carry these as `q1..q4` into Phase 2 — each question gets its own agent fan-out slot.
-7. If no vault: proceed with research in user's language
+7. If no vault route: proceed with research in the user's language
 
 ### Phase 1.5: Source Triage
 
@@ -245,35 +246,82 @@ Identify answer-critical claims **before gathering evidence** — during Phase 1
   DEEP_RESEARCH_PLUGIN_ROOT="/absolute/resolved/plugin/root"
   SCRATCH_PARENT="${TMPDIR:-/tmp}/deep-research"
 
-  # Resolve SkillWiki vault safely before writing.
-  # If `skillwiki path --plain` is available, normalize/resolve it;
-  # otherwise use the known active vault root from session context when present.
-  VAULT_ROOT="$(skillwiki path --plain 2>/dev/null || true)"
-
-  # Run Python containment guard to ensure SCRATCH_PARENT is strictly outside the vault.
-  CONTAINMENT_VERDICT="$(python3 - "$SCRATCH_PARENT" "$VAULT_ROOT" <<'PY'
-from pathlib import Path
+  # Protected roots come from session context, never a CLI probe. Export
+  # DEEP_RESEARCH_VAULT_ROOT when the session already knows the vault path, and
+  # DEEP_RESEARCH_PROTECTED_ROOTS for extra mirror/worktree roots. Do not run
+  # `skillwiki path --plain` or any other local CLI probe here.
+  # Scratch containment only; this does not select the vault write route.
+  # The guard is the canonical guard from references/vault-pipeline.md
+  # "Containment boundary"; keep this block identical to that copy.
+  if CONTAINMENT_VERDICT="$(python3 - "$SCRATCH_PARENT" <<'PY'
+# BEGIN deep-research containment guard
+import os
 import sys
-scratch_arg = sys.argv[1] if len(sys.argv) > 1 else ""
-vault_arg = sys.argv[2] if len(sys.argv) > 2 else ""
-if not scratch_arg:
-    raise SystemExit(1)
-scratch = Path(scratch_arg).expanduser().resolve()
-if not vault_arg or vault_arg == "NO_VAULT_CONFIGURED":
+from pathlib import Path
+
+CONVENTIONAL_MIRRORS = ("wiki", "wiki-git")
+
+
+def _resolve(raw, require_absolute=False):
+    if not raw:
+        raise ValueError("unresolved path: empty")
+    expanded = os.path.expanduser(raw)
+    if require_absolute and not os.path.isabs(expanded):
+        raise ValueError(f"unresolved root: {raw!r}")
+    return Path(expanded).resolve(strict=False)
+
+
+def _protected_roots(env):
+    raw_roots = []
+    vault = env.get("DEEP_RESEARCH_VAULT_ROOT", "")
+    if vault:
+        raw_roots.append(vault)
+    raw_roots.extend(
+        part
+        for part in env.get("DEEP_RESEARCH_PROTECTED_ROOTS", "").split(os.pathsep)
+        if part
+    )
+    home = env.get("HOME", "")
+    if home:
+        raw_roots.extend(str(Path(home) / name) for name in CONVENTIONAL_MIRRORS)
+    if not raw_roots:
+        raise ValueError("no protected vault or mirror roots")
+    return [_resolve(root, require_absolute=True) for root in raw_roots]
+
+
+def main(argv):
+    if len(argv) != 2:
+        print("CONTAINMENT_UNRESOLVED: expected exactly one target path", file=sys.stderr)
+        print("error")
+        return 2
+    try:
+        target = _resolve(argv[1])
+        roots = _protected_roots(os.environ)
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"CONTAINMENT_UNRESOLVED: {exc}", file=sys.stderr)
+        print("error")
+        return 2
+    for root in roots:
+        if target == root or root in target.parents:
+            print(
+                f"CONTAINMENT_BLOCKED: {target} resolves inside protected root {root}",
+                file=sys.stderr,
+            )
+            print("inside")
+            return 1
     print("outside")
-    raise SystemExit(0)
-try:
-    vault = Path(vault_arg).expanduser().resolve()
-except Exception:
-    raise SystemExit(1)
-try:
-    scratch.relative_to(vault)
-except ValueError:
-    print("outside")
-else:
-    print("inside")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
+# END deep-research containment guard
 PY
-)" || CONTAINMENT_VERDICT="error"
+)"; then
+    :
+  else
+    [ "$CONTAINMENT_VERDICT" = "inside" ] || CONTAINMENT_VERDICT="error"
+  fi
 
   if [ "$CONTAINMENT_VERDICT" = "outside" ]; then
     mkdir -p "$SCRATCH_PARENT"
@@ -363,24 +411,17 @@ Original report:
 
 ### Phase 5: Output Routing
 
-Route output based on active mode:
+Route output based on the active mode. `references/vault-pipeline.md` is the single routing home for every vault read and write; do not invent a second path.
 
-**`--ephemeral` / stdout (when no vault)**: Print the full structured report directly to terminal.
+**`--ephemeral` / stdout**: Print the full structured report directly to terminal.
 
-**`--save <path>`**: Write the report as a markdown file to the specified path. Create parent directories if needed. Save a checkpoint draft before refinement so the raw synthesis is recoverable if refinement introduces errors.
+**`--save <path>`**: Before creating parent directories or writing, run the canonical containment guard in `references/vault-pipeline.md` "Containment boundary". It uses session-known protected roots plus `$HOME/wiki` and `$HOME/wiki-git`, resolves the destination and roots through symlinks, never invokes the CLI, and fails closed when the boundary inventory is unresolved. If the guard returns `inside` or `error`, print the report to stdout and report the rejected target. Save a checkpoint draft before refinement only to a path that passed the guard.
 
-**Vault (default when vault available)**: Vault mode composes pages as unpublished drafts and delegates taxonomy, final page publication, index, and log updates to `skillwiki page publish` through `references/vault-pipeline.md`. Missing publisher capability is fail-closed; do not fall back to direct vault writes. Also scan vault index for existing related pages and add wikilinks in the Related Notes section. Under `unattended`, vault lock/publish operations get a hard **120s timeout**; on timeout, fail closed: keep the draft and print the full report to stdout — never spin on a lock.
-
-> **IMPORTANT — wiki-add-task routing guard**: Do NOT invoke `wiki-add-task` during Phase 5 for any reason. Any vault-capture intent (e.g., "save this to the vault", "capture this finding", "log this research") must route through `references/vault-pipeline.md` directly. If `wiki-add-task` activates, discard its output and resume with the vault-pipeline workflow.
+**Vault route (MCP first)**: Follow `references/vault-pipeline.md` for raw capture, binary attachments, typed-page publication, receipts, readback, and follow-up work. When the advertised wiki MCP exists, `wiki_capture` and `wiki_page_publish` win over every local path; the route has no local CLI readiness requirement. Also search existing pages through the route's read tools and add wikilinks in the Related Notes section. A frozen or MCP-only leaf that lacks a required MCP mutation fails closed: keep the draft outside the vault, print the full report to stdout, and report the gap. Never fall back to a local CLI, `skillwiki init`, install, git, or a direct vault write from an MCP error. Under `unattended`, an MCP mutation stall gets a hard **120s timeout**, then fails closed the same way — never spin on a lock.
 
 **Vault page type**: Default to `queries/` (research results are filed queries). If the research reveals a generalized, reusable pattern (not specific to one investigation), also create a companion `concepts/` page capturing the transferable knowledge. The query captures the specific investigation; the concept captures the reusable insight.
 
-**Follow-up work**: If the research produces actionable follow-up work, queue
-it only after the typed research page(s) publish successfully. Use the schema-compatible
-follow-up queue in `references/vault-pipeline.md`: proposed work items only
-when `skillwiki validate` accepts that non-executing status, otherwise
-ad-hoc captures under `raw/transcripts/`. Do not turn research ideas directly
-into `planned` work items during Phase 5.
+**Follow-up work**: Queue actionable follow-up work only after the typed research page(s) publish successfully, using `references/vault-pipeline.md`: `wiki_workitem_write` CAS when advertised, otherwise an authorized MCP task capture. Preserve non-executing proposed intent — never promote a work item to `in-progress`, add `started`, or create `status: planned` work during Phase 5. If neither mutation is authorized, retain the draft and report the follow-up gap. The local CLI opt-in covers publication only; raw capture and follow-up work items remain MCP-required or retained as gaps.
 
 ### Phase 6: Report
 
@@ -414,8 +455,8 @@ Warnings: <any>
 | Flag | Effect |
 |------|--------|
 | `--ephemeral` | Skip vault saving — print to terminal only. Use when research is truly one-off. |
-| `--save <path>` | Write markdown report to file |
-| `--vault` | Force vault mode (error if no vault configured) |
+| `--save <path>` | Write markdown report to a file outside every vault/mirror, after the containment guard |
+| `--vault` | Force vault mode; fail closed if no authorized route exists |
 | `--unattended` | Force unattended mode: never ask questions, auto-process with documented assumptions |
 | `--depth <fast\|default\|thorough>` | Research depth (default: `default`). `fast` = minimal tagged source plan, no escalation; `default` = normal escalation rules; `thorough` = broad multi-source fan-out |
 | `--type <concept\|comparison\|query\|entity>` | Force page type (vault mode only, default: query) |
@@ -425,10 +466,11 @@ Warnings: <any>
 ## Stop Conditions
 
 - Every source required by the selected source plan fails and no useful local evidence exists
-- `--vault` flag explicitly set but `skillwiki path` returns NO_VAULT_CONFIGURED
-- Vault mode: publisher capability is unavailable, dry-run fails, or publication fails (retain the draft and operation ID; do not write directly to the vault)
-- `unattended` vault lock or publish stall beyond **120s** → fail-closed: keep the draft, print the full report to stdout, do not spin on the lock
-- `wiki-add-task` skill activates during Phase 5 output routing (abort wiki-add-task, resume vault-pipeline.md directly)
+- `--vault` flag explicitly set but no authorized vault route exists (advertised MCP absent and no explicit operator-opted local authoring route)
+- Frozen or MCP-only leaf missing a required MCP mutation (`wiki_capture`, `wiki_page_publish`, `wiki_workitem_write`) → fail closed with the draft outside the vault
+- MCP mutation result is ambiguous and no exact target or returned path exists → stop, do not resend, report the mutation as unverified
+- MCP publisher capability is unavailable or publication fails (retain the draft; do not fall back to a local CLI, install, init, git, or direct vault write)
+- `unattended` MCP mutation or publish stall beyond **120s** → fail-closed: keep the draft, print the full report to stdout, do not spin on the lock
 
 ## Failure Handling
 
@@ -441,10 +483,13 @@ Warnings: <any>
 | DeepWiki fails | Continue; omit DeepWiki section |
 | Selected source plan fails | STOP only when no useful local evidence exists; otherwise report degraded verification |
 | Refinement fails | Keep pre-refinement version; warn in report |
-| Vault not configured (auto mode) | Fall back to stdout; note in report |
-| Vault not configured (`--vault` flag) | Abort with advisory to run `skillwiki init` |
-| Vault lock/publish stalls under `unattended` | Hard **120s** timeout, then fail-closed: keep the draft, print the full report to stdout, do not spin |
-| Vault publisher capability or publication fails | STOP; retain the draft and operation ID; do not write directly to the vault |
+| No authorized vault route (auto mode) | Fall back to stdout; note in report |
+| No authorized vault route (`--vault` flag) | Fail closed: keep the draft outside the vault, print the report to stdout, report the missing route. Do not run `skillwiki init`, install, clone, or git |
+| Frozen or MCP-only leaf missing required MCP mutation | Fail closed: draft outside the vault, no local fallback, no init/install/git |
+| MCP mutation result ambiguous (timeout/transport) | Do not resend; one reconcile `wiki_read_page` only when the exact target or a returned path is known; otherwise stop and report unverified; retain the draft if unconfirmed |
+| MCP lock/publish stalls under `unattended` | Hard **120s** timeout, then fail-closed: keep the draft, print the full report to stdout, do not spin |
+| MCP publisher capability or publication fails | STOP; retain the draft outside the vault; do not fall back to local CLI or direct vault writes |
+| `--save` target resolves inside a vault or mirror | Guard blocks the write; print the report to stdout and report the rejected path |
 
 ## Tool Usage
 
@@ -455,12 +500,13 @@ Warnings: <any>
 - **Web fetch**: Deep-fetch top sources for richer content extraction (used inside deep-fetch agents)
 - **Context7 MCP**: Library/framework documentation (used inside Context7 agent)
 - **DeepWiki MCP**: GitHub repository insights (used inside DeepWiki agent)
-- **skillwiki CLI**: `skillwiki path` (auto-detect vault), `skillwiki lang` (output language), `skillwiki hash`, `skillwiki validate`, `skillwiki page publish`. **Enum note**: raw articles produced by this skill use `ingested_by: "deep-research"` per the vault-pipeline contract. This value requires skillwiki CLI v0.10.35+ (enum extended in `packages/shared/src/schemas.ts`). If `skillwiki validate` rejects the value, upgrade the CLI rather than downgrading to `manual` - the provenance value distinguishes agent-captured evidence from human-imported material.
+- **SkillWiki HTTP MCP**: advertised `wiki_query` / `wiki_read_page` / `wiki_context` for reads and `wiki_capture` / `wiki_page_publish` / `wiki_workitem_write` / `wiki_log_append` for writes. This is the default vault route and wins over local paths.
+- **skillwiki CLI** (local authoring hosts only): `skillwiki page publish --write` only under the explicit operator opt-in in `references/vault-pipeline.md`; `skillwiki hash` / `skillwiki validate` for that opted-in local route. There is no local CLI readiness requirement on the MCP route, no `skillwiki path` / `skillwiki lang` probe before route resolution, and never a CLI probe to discover a containment boundary.
 
 ## Related Reference
 
-- **references/vault-pipeline.md**: Vault-mode raw capture, validation, transactional page publication, and follow-up queue workflow
-- **references/codex-tools.md**: Codex CLI/App tool mapping (`Agent` → `spawn_agent`/`wait_agent`), `multi_agent` config gate, model-tier fallback, and detached-HEAD sandbox handling
+- **references/vault-pipeline.md**: Single routing home for MCP-first vault reads/writes, raw capture, CAS publication with receipt/readback verification, follow-up work, the local CLI opt-in scope, and the canonical containment boundary shared by scratch and `--save`
+- **references/codex-tools.md**: Codex CLI/App tool mapping (`Agent` → `spawn_agent`/`wait_agent`), `multi_agent` config gate, and model-tier fallback; vault routing stays in `references/vault-pipeline.md`
 - **scripts/repair-report-structure.py**: Structure-only identity/ledger-token repair before re-lint
 - **scripts/build-fallback-report.py**: Deterministic pre-synthesis fallback report builder
 - **scripts/select-report-candidate.py**: Report candidate selector (normal, repaired, prebuilt fallback)

@@ -9,7 +9,7 @@ Source-triaged research engine with local-first evidence, grok-search freshness 
 - User requests comprehensive, source-triaged research on a topic across local files, documentation, repositories, and current web sources.
 - Topic involves libraries, frameworks, GitHub repositories, technology comparisons, literature reviews, or architectural patterns.
 - Topic involves externally mutable facts: latest versions, releases, changelogs, marketplace state, package metadata, GitHub issues/PRs, or current behavior.
-- Caller requires a deterministic Status/ledger/Coverage report, multi-claim comparison, or atomic SkillWiki vault persistence.
+- Caller requires a deterministic Status/ledger/Coverage report, multi-claim comparison, or CAS-guarded SkillWiki vault persistence.
 - Periodic coverage sweeps across project repositories, announcements, and non-English ecosystems.
 
 ## When NOT to use
@@ -25,15 +25,15 @@ deep-research operates in two modes:
 | Mode | How detected | Question policy | Output default |
 |------|--------------|-----------------|----------------|
 | `unattended` | Model/skill auto-invocation (spawned by parent agent/skill), headless / non-TTY sessions, `--unattended` flag, or prompt instruction "do not ask" | **Never asks questions** — picks recommended defaults and states assumptions in the report | **stdout / ephemeral** unless explicit `--vault` or `--save` |
-| `interactive` | Attended interactive TUI session with slash command `/deep-research ...` without `--unattended` or `--ephemeral` | Asks **only** when ambiguity is strictly blocking | Vault auto-detection (vault if available, else stdout) |
+| `interactive` | Attended interactive TUI session with slash command `/deep-research ...` without `--unattended` or `--ephemeral` | Asks **only** when ambiguity is strictly blocking | MCP vault route when advertised, else stdout |
 
 ### Flags
 
 | Flag | Effect |
 |------|--------|
 | `--ephemeral` | Skip vault saving — print structured report to stdout only |
-| `--save <path>` | Write markdown report to the specified file path |
-| `--vault` | Force vault mode (errors if no vault is configured) |
+| `--save <path>` | Write markdown report to a path outside every vault/mirror, after the containment guard |
+| `--vault` | Force vault mode; fails closed when no authorized route exists |
 | `--unattended` | Force unattended mode: zero prompts, automatic defaults, stdout default |
 | `--depth <fast\|default\|thorough>` | Source plan depth (default: `default`). `fast` = minimal tagged source plan, no escalation; `default` = normal escalation; `thorough` = broad multi-source fan-out |
 | `--type <concept\|comparison\|query\|entity>` | Force vault page taxonomy (vault mode only, default: `query`) |
@@ -42,9 +42,11 @@ deep-research operates in two modes:
 
 ### Output routing and vault behavior
 
-- **Interactive default:** auto-detects vault via `skillwiki path`. If a vault exists, composes an unpublished draft and delegates transactional publication, taxonomy, index, and log updates to `skillwiki page publish` (see `references/vault-pipeline.md`). If no vault exists, prints to stdout.
+- **Route resolution first:** resolve the vault write route through `references/vault-pipeline.md` "Route Resolution". Advertised SkillWiki HTTP MCP tools win for every read and write and supply the `default_vault`; on that route there is no `skillwiki path` / `skillwiki lang` probe or local readiness check.
+- **Interactive default:** MCP vault route when advertised, else stdout. A local `skillwiki page publish --write` route is available only under explicit operator opt-in, for typed-page publication with already-verified provenance; raw capture and follow-up work items require MCP mutations or remain recorded gaps.
 - **Unattended default:** outputs directly to **stdout / ephemeral** unless `--vault` or `--save` is explicitly passed by the caller.
-- **Unattended vault lock timeout:** vault lock or publication stalls hit a hard **120s timeout** and fail closed: the draft is retained and the full report is printed to stdout without spinning on the lock. Direct vault writes bypassing the publisher are never performed.
+- **Unattended MCP mutation timeout:** an MCP mutation or publish stall hits a hard **120s timeout** and fails closed: the draft is retained and the full report is printed to stdout without spinning on the lock. Direct vault writes and local CLI fallback are never performed.
+- **`--save` containment:** run the canonical guard in `references/vault-pipeline.md` "Containment boundary" before creating parent directories. It uses session-known protected roots plus `$HOME/wiki` and `$HOME/wiki-git`, resolves symlinks, never invokes the CLI, and fails closed when the boundary inventory is unresolved. A blocked target is not a save: print to stdout and report the rejected path.
 
 ## Report contract
 

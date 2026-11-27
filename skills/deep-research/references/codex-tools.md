@@ -17,7 +17,8 @@ This file is the deep-research analogue of Superpowers'
 | Web search (inside search agents) | native web search tool |
 | Web fetch / deep-fetch | native fetch tool |
 | Context7 / DeepWiki (MCP) | same MCP tools (host-exposed) |
-| `skillwiki` CLI (`path`/`lang`/`hash`/`validate`) | native shell |
+| `wiki_*` MCP reads/writes (vault route) | same host-exposed MCP tools |
+| `skillwiki` CLI (local authoring opt-in only) | native shell, only under `references/vault-pipeline.md` opt-in |
 
 ## Subagent dispatch requires multi-agent support
 
@@ -56,27 +57,15 @@ On Codex:
 - Read the intent as "cheap tier for mechanical gather/refine work," not a
   literal requirement to run Anthropic Sonnet.
 
-## Environment Detection (vault writes / `--save`)
+## Vault routing on Codex
 
-deep-research output is filesystem work — writing a query page, `--save <path>`,
-raw captures. That is safe inside a Codex sandbox. deep-research does NOT push
-git itself; vault commit/push is delegated to the host (the vault's own sync,
-or dev-loop's SAVE step).
-
-If a run does finish a vault by committing, detect the environment first with
-read-only git checks:
-
-```bash
-GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
-GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
-BRANCH=$(git branch --show-current)
-```
-
-- `GIT_DIR != GIT_COMMON` → linked worktree (typical Codex App sandbox).
-  Confirm you are not in a submodule: `git rev-parse --show-superproject-working-tree`.
-- `BRANCH` empty → detached HEAD: do NOT push/branch/PR. Write the page, commit
-  in place if possible, and let the user finish via the Codex App controls
-  ("Create branch" / "Hand off to local").
-
-The dev-loop `references/codex-tools.md` carries the full sandbox-finishing
-contract shared across these plugins.
+Vault reads and writes are platform-neutral: follow `references/vault-pipeline.md`
+as the single routing home. Advertised SkillWiki MCP tools win for reads and
+writes and supply the `default_vault`; do not use the Codex sandbox filesystem
+as a vault writer, do not commit or push the vault, and do not fall back to a
+local CLI when an MCP mutation is missing or fails. `--save` and the Phase 3
+scratch parent use the same containment guard as every other host: session-known
+`DEEP_RESEARCH_VAULT_ROOT` / `DEEP_RESEARCH_PROTECTED_ROOTS` plus `$HOME/wiki`
+and `$HOME/wiki-git`, symlink-resolved, fail closed when the boundary inventory
+is unresolved. The guard never invokes `skillwiki`; the CLI is reachable only
+through the explicit local authoring opt-in.
